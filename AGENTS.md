@@ -23,7 +23,7 @@ This file is the canonical reference for AI coding agents working on **Jynko**, 
    - Strictly light-mode palette: `#f8fafc` (`bg-slate-50`) / `#f4f5f7` recessed canvas, `#ffffff` (`bg-white`) elevated cards/headers, `1px` hairline borders (`#e2e8f0` / `border-slate-200`), compact `11px` pill badges, and `#0284c7` (`bg-sky-600`) primary accents.
    - **Two Primary Sections (`Work` and `Wiki`)**:
      - Left Icon Rail (`68px`) has 3 buttons: **Work**, **Wiki**, and **Settings**.
-     - **Work section**: Secondary panel (`w-64`) shows `Work` header, `+ New work item`, `Home`, `My Work`, `Stickies`, and the `Projects` tree (`+` button at root of `Projects` to create a project; `hodo` -> `Overview`, `Work items`, `Cycles`, `Epics`, `Modules`, `Views`, `Pages`). Right side shows the active Work view (**List**, **Board**, **Calendar**, **Timeline**, **Spreadsheet**, **Epics**, **Cycles**, **Modules**, **Views**, **Stickies**).
+     - **Work section**: Secondary panel (`w-64`) shows `Work` header, `+ New work item`, `Home`, `My Work`, `Stickies`, and the `Projects` tree (`+` button at root of `Projects` to create a project; `hodo` -> `Overview`, `Work items`, `Cycles`, `Epics`, `Modules`, `Pages`). Right side shows the active Work view (**List**, **Board**, **Calendar**, **Timeline**, **Spreadsheet**, **Epics**, **Cycles**, **Modules**, **Stickies**).
      - **Wiki section**: Secondary panel (`w-64`) switches to `Wiki` header, `+ New page`, `Home`, and `Collections` tree (each collection expands to show its nested **Pages tree**, plus `Shared`, `Private`, `Archives`). Right side shows ONLY the **Page View & Editor** (breadcrumb header, formatting toolbar, and centered Markdown block editor/viewer).
 6. **End-to-End UI Testing (`github.com/go-rod/rod`) — Always Update E2E Tests**:
    - Jynko's automated E2E browser test suite is stored in the repository under `backend/internal/e2e/` (`validator.go` and `ui_e2e_test.go`), exposed via `go test` (`./scripts/run-e2e.sh`), CLI (`backend/cmd/ui-validator/main.go`), and GitHub Actions CI (`.github/workflows/e2e.yml`).
@@ -55,7 +55,7 @@ This file is the canonical reference for AI coding agents working on **Jynko**, 
   - `src/app/core/`: `guards/`, `interceptors/`, `models/`, `services/` (`api`, `auth`, `project`, `work-item`, `page`, `sticky`, `settings`)
   - `src/app/features/work-items/`: `work-items-shell`, `work-item-list`, `work-item-board`, `work-item-calendar`, `work-item-timeline`, `work-item-spreadsheet`, `work-item-detail-drawer`
   - `src/app/features/wiki/`: `page-tree`, `collection-list`, `page-detail`, `page-editor` (Markdown block editor with `/` slash menu), `version-history`
-  - `src/app/features/{projects,cycles,epics,modules,views,stickies,settings}/`
+  - `src/app/features/{projects,cycles,epics,modules,stickies,settings}/`
   - `src/app/shared/`: Reusable badges, avatars, modals, and pipes
 
 ---

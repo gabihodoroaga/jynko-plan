@@ -23,9 +23,11 @@ func IsValidRole(r ProjectRole) bool {
 
 // UserContext represents the authenticated user identity extracted from Google Cloud IAP headers.
 type UserContext struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	AvatarURL   string `json:"avatar_url,omitempty"`
+	AvatarColor string `json:"avatar_color,omitempty"`
 }
 
 // ProjectMember defines a user's role assignment in a project.

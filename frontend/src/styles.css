@@ -165,3 +165,41 @@ input[type='checkbox'][switch].jynko-switch:checked {
 input[type='checkbox'][switch].jynko-switch:checked::after {
   transform: translateX(1rem);
 }
+
+/* Modern Web Guidance: Form Fields Automatically Fit Contents (field-sizing: content) */
+textarea.auto-grow-description {
+  field-sizing: content;
+  height: auto;
+  width: 100%;
+  min-block-size: 8lh;
+  max-block-size: 200vh;
+  overflow-y: auto;
+}
+
+@supports not (field-sizing: content) {
+  .growable-textarea {
+    display: grid;
+    max-block-size: 200vh;
+    overflow-y: auto;
+  }
+
+  .growable-textarea::after,
+  .growable-textarea > textarea.auto-grow-description {
+    grid-area: 1 / 1 / 2 / 2;
+    font: inherit;
+    padding: 0.75rem;
+    min-block-size: 8lh;
+  }
+
+  .growable-textarea::after {
+    content: attr(data-replicated-value) " ";
+    white-space: pre-wrap;
+    visibility: hidden;
+    word-break: break-word;
+  }
+
+  .growable-textarea > textarea.auto-grow-description {
+    resize: none;
+    overflow: hidden;
+  }
+}

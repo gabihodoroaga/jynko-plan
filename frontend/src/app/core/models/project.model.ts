@@ -23,6 +23,8 @@ export interface UserContext {
   user_id: string;
   email: string;
   name: string;
+  avatar_url?: string;
+  avatar_color?: string;
 }
 
 export interface Project {

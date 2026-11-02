@@ -129,8 +129,9 @@ func SetupRouter(
 	api := r.Group("/api/v1")
 	api.Use(middleware.IAPAuthMiddleware(cfg))
 
-	// Auth identity endpoint
+	// Auth identity & profile endpoints
 	api.GET("/auth/me", authHandler.GetMe)
+	api.PATCH("/auth/me", authHandler.UpdateMe)
 
 	// Top-level Projects
 	api.GET("/projects", projectHandler.ListProjects)

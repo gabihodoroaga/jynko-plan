@@ -35,18 +35,18 @@ type CreateWorkItemInput struct {
 }
 
 type UpdateWorkItemInput struct {
-	Title       *string    `json:"title"`
-	Description *string    `json:"description"`
-	Status      *string    `json:"status"`
-	Priority    *string    `json:"priority"`
-	ModuleID    *string    `json:"module_id"`
-	EpicID      *string    `json:"epic_id"`
-	CycleID     *string    `json:"cycle_id"`
-	AssigneeID  *string    `json:"assignee_id"`
-	LabelIDs    *[]string  `json:"label_ids"`
-	Estimate    *int       `json:"estimate"`
-	StartDate   *time.Time `json:"start_date"`
-	DueDate     *time.Time `json:"due_date"`
+	Title       *string   `json:"title"`
+	Description *string   `json:"description"`
+	Status      *string   `json:"status"`
+	Priority    *string   `json:"priority"`
+	ModuleID    *string   `json:"module_id"`
+	EpicID      *string   `json:"epic_id"`
+	CycleID     *string   `json:"cycle_id"`
+	AssigneeID  *string   `json:"assignee_id"`
+	LabelIDs    *[]string `json:"label_ids"`
+	Estimate    *int      `json:"estimate"`
+	StartDate   *string   `json:"start_date"`
+	DueDate     *string   `json:"due_date"`
 }
 
 type CreateSubItemInput struct {
@@ -151,10 +151,18 @@ func (s *ItemService) Update(ctx context.Context, projectID, itemID string, inpu
 		item.Estimate = input.Estimate
 	}
 	if input.StartDate != nil {
-		item.StartDate = input.StartDate
+		parsed, err := parseOptionalDate(*input.StartDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		item.StartDate = parsed
 	}
 	if input.DueDate != nil {
-		item.DueDate = input.DueDate
+		parsed, err := parseOptionalDate(*input.DueDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		item.DueDate = parsed
 	}
 
 	if err := s.repo.Update(ctx, item); err != nil {
@@ -275,4 +283,18 @@ func normalizePriority(raw string) string {
 	default:
 		return model.PriorityMedium
 	}
+}
+
+func parseOptionalDate(raw string) (*time.Time, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	for _, layout := range []string{time.RFC3339, time.RFC3339Nano, "2006-01-02"} {
+		if t, err := time.Parse(layout, trimmed); err == nil {
+			utc := t.UTC()
+			return &utc, nil
+		}
+	}
+	return nil, ErrInvalidInput
 }

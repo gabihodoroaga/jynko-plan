@@ -12,13 +12,14 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 | `/my-work` | `MyWorkComponent` | `Work` | Cross-project list of work items assigned to the current user (`HODO-1..4`, `CLD-1..3`). Supports toggling between `Group by Project` and `Group by Status`, plus styled `<app-dropdown>` filters for Status, Priority, and Project. |
 | `/projects/:projectId` (and bare `/projects` redirect) | `ProjectsComponent` | `Work` | Active project (`hodo` / `proj-jynko-core`, `cloud-infra` / `proj-cloud-infra`) overview, stats, and project members table. Must **not** contain a `+ New Project` button in the page header (project creation lives in the left sidebar `+` button). |
 | `/projects/:projectId/work-items` (and bare `/work-items` redirect) | `WorkItemsShellComponent` | `Work` | Work items shell with 5 view tabs (`List`, `Board`, `Calendar`, `Timeline`, `Spreadsheet`), search input, styled Status & Priority `<app-dropdown>` filters, and `+ New Work Item` button. |
+| `/projects/:projectId/work-items/:itemId` | `WorkItemDetailPageComponent` | `Work` | Full-page single-column Work Item detail view with editable Title, Markdown Description, Status, Priority, Assignee, Module, Epic, Cycle, Start Date, Due Date, Estimate, Sub-Work Items checklist, and Discussion Comments. |
 | `/projects/:projectId/cycles` (and bare `/cycles` redirect) | `CyclesComponent` | `Work` | Sprint cycles with progress bars and status badges. |
 | `/projects/:projectId/epics` (and bare `/epics` redirect) | `EpicsComponent` | `Work` | High-level Epics tracker with completion progress bars. |
 | `/projects/:projectId/modules` (and bare `/modules` redirect) | `ModulesComponent` | `Work` | Feature/system Modules grid. |
-| `/projects/:projectId/views` (and bare `/views` redirect) | `ViewsComponent` | `Work` | Saved custom query filter views. |
 | `/stickies` | `StickiesComponent` | `Work` | Quick colorful sticky notes grid (`BANANA`, `FLAMINGO`, `MINT`, `LAGOON`, `LAVENDER`, `PEACH`) with color picker and instant filtering. |
 | `/wiki` | `PageDetailComponent` | `Wiki` | Dedicated Wiki workspace. Left secondary panel shows `+ New page`, `Home`, `Collections -> General / <project> -> Pages tree`, `Shared`, `Private`, `Archives`. Right main pane shows only the Page View & Editor (`Welcome to Company's Wiki`, formatting toolbar). |
 | `/settings` | `SettingsComponent` | `Settings` | Dedicated Settings section with **General App Settings** (Appearance & Defaults, Notifications, IAP Identity) and **Per-Project Settings** (`hodo`, `cloud-infra`, etc. — Metadata, Work Item & Cycle Defaults, Wiki Collection Policy, Per-Project RBAC Members). |
+| `/profile` | `ProfileComponent` | `Work` | User Profile page with Photo/Avatar uploader & URL/color picker, editable Display Name, and read-only Google Cloud IAP Email (`input[aria-label="Profile email"][readonly]`). |
 
 ---
 
@@ -78,8 +79,8 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - My Work project filter: `button[aria-label="Filter My Work by Project"]`
     - Work Items status filter: `button[aria-label="Filter by Status"]`
     - Work Items priority filter: `button[aria-label="Filter by Priority"]`
-    - New Work Item modal selectors: `button[aria-label="New work item status"]`, `button[aria-label="New work item priority"]`
-    - Work Item detail drawer selectors: `button[aria-label="Work item status"]`, `button[aria-label="Work item priority"]`
+    - New Work Item modal selectors: `button[aria-label="New work item status"]`, `button[aria-label="New work item priority"]`, `textarea[aria-label="New work item description"]`, `input[aria-label="New work item start date"]`, `input[aria-label="New work item due date"]`
+    - Work Item detail drawer & full page selectors: `button[aria-label="Open work item full page"]`, `a[aria-label="Back to Work Items"]`, `input[aria-label="Work item start date"]`, `input[aria-label="Work item due date"]`, `input[aria-label="Work item estimate"]`
     - Project member role selector: `button[aria-label="Select member role"]`
     - Wiki toolbar selectors: `button[aria-label="Text block style"]`, `button[aria-label="Text color"]`
   - Open floating menu container: `[role="listbox"]`

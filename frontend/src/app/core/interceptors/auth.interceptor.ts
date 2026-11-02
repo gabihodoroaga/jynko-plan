@@ -5,18 +5,17 @@ import { environment } from '../../../environments/environment';
 
 /**
  * In production behind Google Cloud IAP, authentication headers are injected at the edge proxy.
- * In local development (environment.devMode), this interceptor attaches X-Dev-User-* headers
- * so developers can test RBAC roles (ADMIN, MEMBER, VIEWER) seamlessly.
+ * In local development (environment.devMode), this interceptor attaches X-Dev-User-* headers.
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
   if (environment.devMode) {
-    const devUser = authService.devUserOverride();
+    const user = authService.currentUser();
     const cloned = req.clone({
       setHeaders: {
-        'X-Dev-User-Id': devUser.user_id,
-        'X-Dev-User-Email': devUser.email,
-        'X-Dev-User-Name': devUser.name,
+        'X-Dev-User-Id': user.user_id,
+        'X-Dev-User-Email': user.email,
+        'X-Dev-User-Name': user.name,
       },
     });
     return next(cloned);

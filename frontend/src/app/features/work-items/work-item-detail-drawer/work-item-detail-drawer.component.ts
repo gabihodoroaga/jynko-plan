@@ -1,12 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { WorkItemService } from '../../../core/services/work-item.service';
 import { ProjectService } from '../../../core/services/project.service';
 import {
   ALL_PRIORITIES,
   ALL_STATUSES,
   SubWorkItem,
+  WorkItem,
   WorkItemPriority,
   WorkItemStatus,
 } from '../../../core/models/project.model';
@@ -44,15 +46,16 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
             </div>
 
             <div class="flex items-center gap-2">
-              @if (projectService.canEdit()) {
-                <button
-                  type="button"
-                  (click)="workItemService.deleteItem(item.id)"
-                  class="px-2 py-1 rounded-md border border-rose-200 bg-rose-50 hover:bg-rose-100 text-[11px] font-medium text-rose-700"
-                >
-                  Delete
-                </button>
-              }
+              <button
+                type="button"
+                (click)="openFullPage(item)"
+                aria-label="Open work item full page"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-[11px] font-medium text-slate-700"
+                title="Open as full page"
+              >
+                <span>⤢</span>
+                <span>Full view</span>
+              </button>
               <button
                 type="button"
                 (click)="workItemService.closeItemDetail()"
@@ -70,7 +73,9 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
               <input
                 type="text"
                 [ngModel]="item.title"
+                [ngModelOptions]="{ updateOn: 'blur' }"
                 (ngModelChange)="workItemService.updateItem(item.id, { title: $event })"
+                (keydown.enter)="$any($event.target).blur()"
                 [disabled]="!projectService.canEdit()"
                 class="w-full text-base font-semibold text-slate-900 bg-transparent border-b border-transparent focus:border-slate-300 focus:outline-none pb-1"
               />
@@ -90,22 +95,29 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 
               @if (previewDesc()) {
                 <div
-                  class="p-3 rounded-md bg-slate-50 border border-slate-200 min-h-[84px]"
+                  class="p-3 rounded-md bg-slate-50 border border-slate-200 min-h-[120px] max-h-[200vh] overflow-y-auto"
                   [innerHTML]="item.description | markdown"
                 ></div>
               } @else {
-                <textarea
-                  rows="4"
-                  [ngModel]="item.description"
-                  (ngModelChange)="workItemService.updateItem(item.id, { description: $event })"
-                  [disabled]="!projectService.canEdit()"
-                  placeholder="Add a detailed Markdown description..."
-                  class="w-full p-2.5 text-xs font-mono text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300"
-                ></textarea>
+                <div
+                  class="growable-textarea text-xs font-mono leading-relaxed"
+                  [attr.data-replicated-value]="item.description || ''"
+                >
+                  <textarea
+                    [ngModel]="item.description"
+                    [ngModelOptions]="{ updateOn: 'blur' }"
+                    (ngModelChange)="workItemService.updateItem(item.id, { description: $event })"
+                    (input)="syncGrowableTextarea($event)"
+                    [disabled]="!projectService.canEdit()"
+                    aria-label="Work item description"
+                    placeholder="Add a detailed Markdown description..."
+                    class="auto-grow-description w-full min-h-[140px] max-h-[200vh] p-2.5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
+                  ></textarea>
+                </div>
               }
             </div>
 
-            <!-- Metadata Attributes Grid (Styled Dropdowns) -->
+            <!-- Metadata Attributes Grid (Styled Dropdowns & Dates) -->
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-md bg-slate-50 border border-slate-200">
               <div>
                 <label class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Status</label>
@@ -177,6 +189,68 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
                   [fullWidth]="true"
                   size="sm"
                 ></app-dropdown>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-[10px] font-semibold uppercase text-slate-400">Start Date</label>
+                  @if (item.start_date && projectService.canEdit()) {
+                    <button
+                      type="button"
+                      (click)="onDateChange(item.id, 'start_date', '')"
+                      class="text-[10px] text-slate-400 hover:text-slate-600"
+                    >
+                      Clear
+                    </button>
+                  }
+                </div>
+                <input
+                  type="date"
+                  [ngModel]="formatDateInput(item.start_date)"
+                  (ngModelChange)="onDateChange(item.id, 'start_date', $event)"
+                  [disabled]="!projectService.canEdit()"
+                  aria-label="Work item start date"
+                  class="w-full h-7 px-2 rounded-md border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-slate-300 disabled:opacity-60"
+                />
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-[10px] font-semibold uppercase text-slate-400">Due Date</label>
+                  @if (item.due_date && projectService.canEdit()) {
+                    <button
+                      type="button"
+                      (click)="onDateChange(item.id, 'due_date', '')"
+                      class="text-[10px] text-slate-400 hover:text-slate-600"
+                    >
+                      Clear
+                    </button>
+                  }
+                </div>
+                <input
+                  type="date"
+                  [ngModel]="formatDateInput(item.due_date)"
+                  (ngModelChange)="onDateChange(item.id, 'due_date', $event)"
+                  [disabled]="!projectService.canEdit()"
+                  aria-label="Work item due date"
+                  class="w-full h-7 px-2 rounded-md border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-slate-300 disabled:opacity-60"
+                />
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Estimate (pts)</label>
+                <input
+                  type="number"
+                  min="0"
+                  [ngModel]="item.estimate ?? null"
+                  [ngModelOptions]="{ updateOn: 'blur' }"
+                  (ngModelChange)="workItemService.updateItem(item.id, { estimate: $event !== null ? +$event : undefined })"
+                  (keydown.enter)="$any($event.target).blur()"
+                  [disabled]="!projectService.canEdit()"
+                  aria-label="Work item estimate"
+                  placeholder="—"
+                  class="w-full h-7 px-2 rounded-md border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-slate-300 disabled:opacity-60"
+                />
               </div>
             </div>
 
@@ -289,6 +363,7 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 export class WorkItemDetailDrawerComponent {
   readonly workItemService = inject(WorkItemService);
   readonly projectService = inject(ProjectService);
+  private readonly router = inject(Router);
 
   readonly statuses = ALL_STATUSES;
   readonly priorities = ALL_PRIORITIES;
@@ -340,6 +415,29 @@ export class WorkItemDetailDrawerComponent {
 
   onPriorityChange(itemId: string, priority: string): void {
     this.workItemService.updateItem(itemId, { priority: priority as WorkItemPriority });
+  }
+
+  formatDateInput(iso?: string): string {
+    if (!iso) return '';
+    return iso.slice(0, 10);
+  }
+
+  onDateChange(itemId: string, field: 'start_date' | 'due_date', value: string): void {
+    this.workItemService.updateItem(itemId, { [field]: value || '' });
+  }
+
+  openFullPage(item: WorkItem): void {
+    this.workItemService.closeItemDetail();
+    this.router.navigate(['/projects', item.project_id, 'work-items', item.id]);
+  }
+
+  syncGrowableTextarea(event: Event): void {
+    if (typeof CSS !== 'undefined' && !CSS.supports('field-sizing', 'content')) {
+      const el = event.target as HTMLTextAreaElement;
+      if (el?.parentElement) {
+        el.parentElement.dataset['replicatedValue'] = el.value;
+      }
+    }
   }
 
   addSubItem(itemId: string): void {

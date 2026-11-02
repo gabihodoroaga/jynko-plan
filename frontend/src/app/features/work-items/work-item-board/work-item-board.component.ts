@@ -49,6 +49,7 @@ import { PriorityBadgeComponent } from '../../../shared/components/priority-badg
                 cdkDrag
                 [cdkDragData]="item"
                 [cdkDragDisabled]="!projectService.canEdit()"
+                [attr.data-item-key]="item.key"
                 (click)="workItemService.openItemDetail(item.id)"
                 class="bg-white border border-slate-200 rounded-md p-3 shadow-card hover:border-slate-300 transition-colors cursor-pointer select-none"
               >

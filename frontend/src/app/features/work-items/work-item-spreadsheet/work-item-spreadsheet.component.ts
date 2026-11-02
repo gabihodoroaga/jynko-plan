@@ -62,7 +62,9 @@ import {
                   <input
                     type="text"
                     [ngModel]="item.title"
+                    [ngModelOptions]="{ updateOn: 'blur' }"
                     (ngModelChange)="updateField(item, { title: $event })"
+                    (keydown.enter)="$any($event.target).blur()"
                     [disabled]="!projectService.canEdit()"
                     class="w-full px-1.5 py-1 text-xs text-slate-900 bg-transparent rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
                   />
@@ -118,7 +120,9 @@ import {
                     min="0"
                     max="100"
                     [ngModel]="item.estimate ?? null"
+                    [ngModelOptions]="{ updateOn: 'blur' }"
                     (ngModelChange)="updateEstimate(item, $event)"
+                    (keydown.enter)="$any($event.target).blur()"
                     [disabled]="!projectService.canEdit()"
                     class="w-full px-1.5 py-1 font-mono text-[11px] text-slate-700 bg-transparent rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
                   />

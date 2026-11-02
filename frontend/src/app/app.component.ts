@@ -14,7 +14,6 @@ import {
   ALL_PRIORITIES,
   ALL_STATUSES,
   Project,
-  UserContext,
   WorkItemPriority,
   WorkItemStatus,
 } from './core/models/project.model';
@@ -88,14 +87,89 @@ import {
           </div>
         </div>
 
-        <!-- Right: User Avatar -->
-        <div class="flex items-center gap-2.5">
-          <span
-            class="w-6 h-6 rounded-full bg-orange-600 text-white text-[11px] font-bold flex items-center justify-center"
+        <!-- Right: User Avatar & Account Popover Card -->
+        <div class="relative flex items-center gap-2.5">
+          <button
+            type="button"
+            (click)="toggleUserMenu($event)"
+            aria-label="Open user menu"
             [title]="authService.currentUser().name"
+            class="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center overflow-hidden ring-2 ring-transparent hover:ring-slate-300 focus:outline-none focus:ring-sky-500 transition-all shadow-sm"
+            [style.backgroundColor]="authService.avatarColor()"
           >
-            G
-          </span>
+            @if (authService.currentUser().avatar_url) {
+              <img
+                [src]="authService.currentUser().avatar_url"
+                [alt]="authService.currentUser().name"
+                class="w-full h-full object-cover"
+              />
+            } @else {
+              <span>{{ authService.userInitial() }}</span>
+            }
+          </button>
+
+          @if (isUserMenuOpen()) {
+            <!-- Backdrop to dismiss on outside click -->
+            <div
+              class="fixed inset-0 z-40"
+              (click)="isUserMenuOpen.set(false)"
+            ></div>
+
+            <!-- Google-Style Account Card Dropdown -->
+            <div
+              data-testid="user-dropdown-card"
+              (click)="$event.stopPropagation()"
+              class="absolute right-0 top-9 z-50 w-80 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_rgba(15,23,42,0.14)] overflow-hidden"
+            >
+              <!-- Upper Account Identity & Profile Action -->
+              <div class="p-5 flex items-start gap-4">
+                <div
+                  class="w-16 h-16 rounded-full text-white text-2xl font-medium flex items-center justify-center shrink-0 overflow-hidden shadow-sm"
+                  [style.backgroundColor]="authService.avatarColor()"
+                >
+                  @if (authService.currentUser().avatar_url) {
+                    <img
+                      [src]="authService.currentUser().avatar_url"
+                      [alt]="authService.currentUser().name"
+                      class="w-full h-full object-cover"
+                    />
+                  } @else {
+                    <span>{{ authService.userInitial() }}</span>
+                  }
+                </div>
+
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-slate-900 truncate">
+                    {{ authService.currentUser().name }}
+                  </div>
+                  <div class="text-xs text-slate-500 truncate mt-0.5">
+                    {{ authService.currentUser().email }}
+                  </div>
+
+                  <button
+                    type="button"
+                    (click)="openProfilePage()"
+                    aria-label="Open user profile"
+                    class="mt-3 inline-flex items-center px-4 py-1.5 rounded-full bg-[#1a73e8] hover:bg-[#1557b0] text-white text-xs font-medium transition-colors shadow-sm"
+                  >
+                    Profile
+                  </button>
+                </div>
+              </div>
+
+              <!-- Bottom Action Bar: Sign out -->
+              <div class="px-5 py-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-end">
+                <button
+                  type="button"
+                  (click)="signOut()"
+                  aria-label="Sign out"
+                  class="px-4 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          }
         </div>
       </header>
 
@@ -641,7 +715,7 @@ import {
                             <span class="truncate">{{ proj.name }}</span>
                           </button>
 
-                          <!-- Indented Project Child Links: Overview, Work items, Cycles, Epics, Modules, Views, Pages -->
+                          <!-- Indented Project Child Links: Overview, Work items, Cycles, Epics, Modules, Pages -->
                           @if (isProjectExpanded(proj.id)) {
                             <div class="ml-4 pl-3 border-l border-slate-200 space-y-0.5">
                               <a
@@ -715,20 +789,6 @@ import {
                               </a>
 
                               <a
-                                [routerLink]="['/projects', proj.id, 'views']"
-                                routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
-                                (click)="selectProjectOnly(proj.id)"
-                                class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
-                              >
-                                <svg class="w-4 h-4 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                  <path d="m12 3 9 5-9 5-9-5 9-5Z" />
-                                  <path d="m3 12 9 5 9-5" />
-                                  <path d="m3 16 9 5 9-5" />
-                                </svg>
-                                <span>Views</span>
-                              </a>
-
-                              <a
                                 routerLink="/wiki"
                                 (click)="openProjectPagesInWiki(proj)"
                                 [attr.aria-label]="'Open ' + proj.name + ' pages in Wiki'"
@@ -749,19 +809,6 @@ import {
                 </div>
               </div>
             }
-
-            <!-- Compact IAP Dev Identity Footer (Styled Dropdown) -->
-            <div class="px-3 py-2 border-t border-slate-200 bg-slate-50/70">
-              <app-dropdown
-                [options]="devIdentityOptions"
-                [value]="authService.currentUser().user_id"
-                (valueChange)="switchDevIdentity($event)"
-                [fullWidth]="true"
-                size="sm"
-                [dropUp]="true"
-                ariaLabel="Switch IAP Test Identity"
-              ></app-dropdown>
-            </div>
           </aside>
         } @else {
           <!-- Collapsed Secondary Panel Strip with Expand Button -->
@@ -798,9 +845,10 @@ import {
       <app-modal
         [isOpen]="workItemService.isQuickCreateOpen()"
         title="Create New Work Item"
+        maxWidth="max-w-2xl"
         (closed)="workItemService.isQuickCreateOpen.set(false)"
       >
-        <form (ngSubmit)="submitQuickCreate()" class="space-y-3">
+        <form (ngSubmit)="submitQuickCreate()" class="space-y-3.5">
           <div>
             <label class="block text-xs font-medium text-slate-700 mb-1">Title</label>
             <input
@@ -815,13 +863,19 @@ import {
 
           <div>
             <label class="block text-xs font-medium text-slate-700 mb-1">Description (Markdown)</label>
-            <textarea
-              rows="3"
-              name="description"
-              [(ngModel)]="newDescription"
-              placeholder="Describe acceptance criteria and technical details..."
-              class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
+            <div
+              class="growable-textarea text-xs font-mono leading-relaxed"
+              [attr.data-replicated-value]="newDescription || ''"
+            >
+              <textarea
+                name="description"
+                [(ngModel)]="newDescription"
+                (input)="syncGrowableTextarea($event)"
+                aria-label="New work item description"
+                placeholder="Describe acceptance criteria and technical details..."
+                class="auto-grow-description w-full min-h-[160px] max-h-[200vh] px-3 py-2 text-xs font-mono leading-relaxed border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 resize-y"
+              ></textarea>
+            </div>
           </div>
 
           <div class="grid grid-cols-3 gap-2.5">
@@ -859,20 +913,48 @@ import {
 
           <div class="grid grid-cols-2 gap-2.5">
             <div>
-              <label class="block text-[11px] font-medium text-slate-600 mb-1">Start Date</label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px] font-medium text-slate-600">
+                  Start Date <span class="font-normal text-slate-400">(optional)</span>
+                </label>
+                @if (newStartDate) {
+                  <button
+                    type="button"
+                    (click)="newStartDate = ''"
+                    class="text-[10px] text-slate-400 hover:text-slate-600"
+                  >
+                    Clear
+                  </button>
+                }
+              </div>
               <input
                 type="date"
                 name="startDate"
                 [(ngModel)]="newStartDate"
+                aria-label="New work item start date"
                 class="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5"
               />
             </div>
             <div>
-              <label class="block text-[11px] font-medium text-slate-600 mb-1">Due Date</label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px] font-medium text-slate-600">
+                  Due Date <span class="font-normal text-slate-400">(optional)</span>
+                </label>
+                @if (newDueDate) {
+                  <button
+                    type="button"
+                    (click)="newDueDate = ''"
+                    class="text-[10px] text-slate-400 hover:text-slate-600"
+                  >
+                    Clear
+                  </button>
+                }
+              </div>
               <input
                 type="date"
                 name="dueDate"
                 [(ngModel)]="newDueDate"
+                aria-label="New work item due date"
                 class="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5"
               />
             </div>
@@ -1064,34 +1146,10 @@ export class AppComponent implements OnInit {
   newStatus: WorkItemStatus = 'TODO';
   newPriority: WorkItemPriority = 'MEDIUM';
   newEstimate = 3;
-  newStartDate = '2026-10-28';
-  newDueDate = '2026-11-02';
+  newStartDate = '';
+  newDueDate = '';
 
-  readonly devIdentities: (UserContext & { roleLabel: string })[] = [
-    {
-      user_id: 'dev-user-1',
-      email: 'dev@jynko.local',
-      name: 'Local Developer',
-      roleLabel: 'ADMIN',
-    },
-    {
-      user_id: 'user-2',
-      email: 'alex.rivera@jynko.local',
-      name: 'Alex Rivera',
-      roleLabel: 'MEMBER',
-    },
-    {
-      user_id: 'user-3',
-      email: 'sam.chen@jynko.local',
-      name: 'Sam Chen',
-      roleLabel: 'VIEWER',
-    },
-  ];
-
-  readonly devIdentityOptions: DropdownOption[] = this.devIdentities.map((u) => ({
-    value: u.user_id,
-    label: `${u.name} (${u.roleLabel})`,
-  }));
+  readonly isUserMenuOpen = signal<boolean>(false);
 
   ngOnInit(): void {
     this.authService.loadCurrentUser();
@@ -1148,7 +1206,7 @@ export class AppComponent implements OnInit {
 
       // Keep the browser URL in sync when switching projects while on a project-scoped route
       const urlPath = this.router.url.split('?')[0];
-      const match = urlPath.match(/^\/projects\/[^/]+(?:\/(work-items|cycles|epics|modules|views))?$/);
+      const match = urlPath.match(/^\/projects\/[^/]+(?:\/(work-items|cycles|epics|modules)(?:\/.*)?)?$/);
       if (match) {
         const sub = match[1];
         if (sub) {
@@ -1228,7 +1286,7 @@ export class AppComponent implements OnInit {
       this.expandedProjects.update((m) => ({ ...m, [created.id]: true }));
       this.expandedCollections.update((m) => ({ ...m, [`col-${created.id}`]: true }));
       const urlPath = this.router.url.split('?')[0];
-      const match = urlPath.match(/^\/projects\/[^/]+(?:\/(work-items|cycles|epics|modules|views))?$/);
+      const match = urlPath.match(/^\/projects\/[^/]+(?:\/(work-items|cycles|epics|modules))?$/);
       if (match) {
         const sub = match[1];
         this.router.navigate(sub ? ['/projects', created.id, sub] : ['/projects', created.id]);
@@ -1262,17 +1320,33 @@ export class AppComponent implements OnInit {
     });
     this.newTitle = '';
     this.newDescription = '';
+    this.newStartDate = '';
+    this.newDueDate = '';
     this.workItemService.isQuickCreateOpen.set(false);
   }
 
-  switchDevIdentity(userId: string): void {
-    const found = this.devIdentities.find((u) => u.user_id === userId);
-    if (found) {
-      this.authService.setDevIdentity({
-        user_id: found.user_id,
-        email: found.email,
-        name: found.name,
-      });
+  syncGrowableTextarea(event: Event): void {
+    if (typeof CSS !== 'undefined' && !CSS.supports('field-sizing', 'content')) {
+      const el = event.target as HTMLTextAreaElement;
+      if (el?.parentElement) {
+        el.parentElement.dataset['replicatedValue'] = el.value;
+      }
     }
+  }
+
+  toggleUserMenu(event: Event): void {
+    event.stopPropagation();
+    this.isUserMenuOpen.set(!this.isUserMenuOpen());
+  }
+
+  openProfilePage(): void {
+    this.isUserMenuOpen.set(false);
+    this.router.navigate(['/profile']);
+  }
+
+  signOut(): void {
+    this.isUserMenuOpen.set(false);
+    this.authService.signOut();
+    this.router.navigate(['/home']);
   }
 }

@@ -39,6 +39,7 @@ export class WorkItemService {
   readonly items = signal<WorkItem[]>([]);
   readonly subItemsByItem = signal<Record<string, SubWorkItem[]>>({});
   readonly commentsByItem = signal<Record<string, Comment[]>>({});
+  private readonly updateSeqByItem = new Map<string, number>();
 
   constructor() {
     effect(() => {
@@ -133,6 +134,11 @@ export class WorkItemService {
     this.selectedItemId.set(itemId);
     const projectId = this.resolveProjectIdForItem(itemId);
     if (!projectId) return;
+    this.loadItemRelations(projectId, itemId);
+  }
+
+  loadItemRelations(projectId: string, itemId: string): void {
+    if (!projectId || !itemId) return;
     this.api.get<SubWorkItem[]>(`/projects/${projectId}/items/${itemId}/sub-items`).subscribe({
       next: (subs) => {
         this.subItemsByItem.update((m) => ({ ...m, [itemId]: subs ?? [] }));
@@ -189,16 +195,61 @@ export class WorkItemService {
   updateItem(itemId: string, patch: Partial<WorkItem>): void {
     const projectId = this.resolveProjectIdForItem(itemId);
     if (!projectId) return;
+
+    const current = this.items().find((i) => i.id === itemId);
+    const apiPatch: Record<string, unknown> = { ...patch };
+    const optimisticPatch: Partial<WorkItem> = { ...patch };
+
+    if ('start_date' in patch) {
+      if (!patch.start_date) {
+        apiPatch['start_date'] = '';
+        optimisticPatch.start_date = undefined;
+      } else {
+        const iso = patch.start_date.includes('T')
+          ? patch.start_date
+          : new Date(patch.start_date).toISOString();
+        apiPatch['start_date'] = iso;
+        optimisticPatch.start_date = iso;
+      }
+    }
+
+    if ('due_date' in patch) {
+      if (!patch.due_date) {
+        apiPatch['due_date'] = '';
+        optimisticPatch.due_date = undefined;
+      } else {
+        const iso = patch.due_date.includes('T')
+          ? patch.due_date
+          : new Date(patch.due_date).toISOString();
+        apiPatch['due_date'] = iso;
+        optimisticPatch.due_date = iso;
+      }
+    }
+
+    if (current) {
+      const hasChanges = (Object.keys(optimisticPatch) as (keyof WorkItem)[]).some(
+        (key) => current[key] !== optimisticPatch[key]
+      );
+      if (!hasChanges) return;
+    }
+
+    const seq = (this.updateSeqByItem.get(itemId) ?? 0) + 1;
+    this.updateSeqByItem.set(itemId, seq);
+
     // Optimistic update for responsive 60fps UI, confirmed by backend PATCH response
     this.items.update((list) =>
       list.map((it) =>
-        it.id === itemId ? { ...it, ...patch, updated_at: new Date().toISOString() } : it
+        it.id === itemId
+          ? { ...it, ...optimisticPatch, updated_at: new Date().toISOString() }
+          : it
       )
     );
 
-    this.api.patch<WorkItem>(`/projects/${projectId}/items/${itemId}`, patch).subscribe({
+    this.api.patch<WorkItem>(`/projects/${projectId}/items/${itemId}`, apiPatch).subscribe({
       next: (updated) => {
-        this.items.update((list) => list.map((it) => (it.id === itemId ? updated : it)));
+        if (this.updateSeqByItem.get(itemId) === seq) {
+          this.items.update((list) => list.map((it) => (it.id === itemId ? updated : it)));
+        }
       },
     });
   }

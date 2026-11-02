@@ -8,10 +8,9 @@ import { WorkItemPriority } from '../../core/models/project.model';
   imports: [CommonModule],
   template: `
     <span
-      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium leading-4"
+      class="inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-medium leading-4"
       [ngClass]="badgeClasses"
     >
-      <span class="font-mono text-[10px]">{{ icon }}</span>
       <span>{{ label }}</span>
     </span>
   `,
@@ -33,23 +32,6 @@ export class PriorityBadgeComponent {
         return 'None';
       default:
         return this.priority;
-    }
-  }
-
-  get icon(): string {
-    switch (this.priority) {
-      case 'URGENT':
-        return '!';
-      case 'HIGH':
-        return 'lll';
-      case 'MEDIUM':
-        return 'll';
-      case 'LOW':
-        return 'l';
-      case 'NONE':
-        return '—';
-      default:
-        return '—';
     }
   }
 

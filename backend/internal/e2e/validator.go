@@ -238,14 +238,17 @@ func CheckHomeAndSidebar(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, fmt.Sprintf("Expected top header to show 'Jynko' without '⌄', got: %q", headerText))
 	}
 
-	if !strings.Contains(asideText, "Drafts") &&
+	hasLeftUserDropdown, _, _ := page.Has(`button[aria-label="Switch IAP Test Identity"]`)
+	if !hasLeftUserDropdown &&
+		!strings.Contains(asideText, "Drafts") &&
+		!strings.Contains(asideText, "Views") &&
 		strings.Contains(asideText, "Home") &&
 		strings.Contains(asideText, "My Work") &&
 		strings.Contains(asideText, "Stickies") {
-		res.Assertions = append(res.Assertions, "Work secondary panel displays Home, My Work, Stickies and omits Drafts")
+		res.Assertions = append(res.Assertions, "Work secondary panel displays Home, My Work, Stickies and omits Drafts, Views, and left-panel user dropdown")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Work secondary panel either still contains 'Drafts' or is missing Home/My Work/Stickies")
+		res.Errors = append(res.Errors, "Work secondary panel either still contains 'Drafts'/'Views'/user dropdown or is missing Home/My Work/Stickies")
 	}
 
 	if has, _, _ := page.Has(`button[aria-label="Create new project"]`); has {
@@ -482,6 +485,14 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing styled Status filter dropdown in Work Items toolbar")
 	}
 
+	// Verify priority badges show only the label ('High', 'Medium', 'Urgent') without 'lll' or 'll' prefix
+	if !strings.Contains(mainText, "lll High") && !strings.Contains(mainText, "ll Medium") && !strings.Contains(mainText, "\nlll\n") {
+		res.Assertions = append(res.Assertions, "Priority badges display clean label names ('High', 'Medium', 'Urgent') without 'll'/'lll' prefixes")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Priority badges still contain 'll' or 'lll' prefixes")
+	}
+
 	// Verify 'Cancelled' column is hidden by default on the Kanban board while 'Backlog'/'Todo'/'In Progress'/'In Review'/'Done' are visible, and no 'Hidden Columns' card is shown on the board
 	hasCancelledCol, _, _ := page.Has(`[data-board-column="CANCELLED"]`)
 	hasTodoCol, _, _ := page.Has(`[data-board-column="TODO"]`)
@@ -508,6 +519,42 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 	}
 
 	page.MustScreenshot(res.Screenshot)
+
+	// Open Work Item side panel on the board and verify Start Date, Due Date, Full view button, and no Delete button
+	if hasCard, cardEl, _ := page.Has(`[data-item-key="HODO-1"]`); hasCard && cardEl != nil {
+		cardEl.MustClick()
+		time.Sleep(300 * time.Millisecond)
+		if hasDrawer, drawerEl, _ := page.Has(`app-work-item-detail-drawer aside`); hasDrawer && drawerEl != nil {
+			drawerText := drawerEl.MustText()
+			hasFullViewBtn, _, _ := drawerEl.Has(`button[aria-label="Open work item full page"]`)
+			hasStartInput, _, _ := drawerEl.Has(`input[aria-label="Work item start date"]`)
+			hasDueInput, _, _ := drawerEl.Has(`input[aria-label="Work item due date"]`)
+			if hasFullViewBtn && hasStartInput && hasDueInput && !strings.Contains(drawerText, "Delete") {
+				res.Assertions = append(res.Assertions, "Work Item side panel renders Start Date, Due Date, and 'Full view' button without a Delete button")
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side panel failed assertions: hasFullView=%v, hasStart=%v, hasDue=%v", hasFullViewBtn, hasStartInput, hasDueInput))
+			}
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Clicking work item card did not open app-work-item-detail-drawer")
+		}
+	}
+
+	// Verify the dedicated full-page Work Item route (/projects/proj-jynko-core/work-items/item-1)
+	detailPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/work-items/item-1")
+	defer detailPage.MustClose()
+	detailMain := detailPage.MustElement("main").MustText()
+	hasStartDateInput, _, _ := detailPage.Has(`input[aria-label="Work item start date"]`)
+	hasDueDateInput, _, _ := detailPage.Has(`input[aria-label="Work item due date"]`)
+	hasAutoGrowDesc, _, _ := detailPage.Has(`textarea.auto-grow-description[aria-label="Work item description"]`)
+	if strings.Contains(detailMain, "HODO-1") && hasStartDateInput && hasDueDateInput && hasAutoGrowDesc && strings.Contains(detailMain, "Sub-Work Items") {
+		res.Assertions = append(res.Assertions, "Full-page Work Item view (/projects/:projectId/work-items/:itemId) renders auto-growing Description, Start Date, Due Date, Sub-Items, and Comments")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions; hasStartDate=%v, hasDueDate=%v, hasAutoGrowDesc=%v", hasStartDateInput, hasDueDateInput, hasAutoGrowDesc))
+	}
+
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
@@ -824,6 +871,49 @@ func CheckSettingsGeneralAndPerProject(browser *rod.Browser, baseURL, outDir str
 	assertFullWidthPageContainer(page, &res, "Settings")
 
 	page.MustScreenshot(res.Screenshot)
+
+	// Verify Top-Right User Avatar Dropdown Card & User Profile Page (/profile)
+	if hasUserBtn, userBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasUserBtn && userBtn != nil {
+		userBtn.MustClick()
+		time.Sleep(250 * time.Millisecond)
+
+		if hasCard, cardEl, _ := page.Has(`[data-testid="user-dropdown-card"]`); hasCard && cardEl != nil {
+			cardText := cardEl.MustText()
+			hasProfileBtn, profileBtn, _ := cardEl.Has(`button[aria-label="Open user profile"]`)
+			hasSignOutBtn, _, _ := cardEl.Has(`button[aria-label="Sign out"]`)
+			if hasProfileBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
+				res.Assertions = append(res.Assertions, "Top-right user button opens account dropdown card with Name, Email, Profile button, and Sign out button")
+				profileBtn.MustClick()
+				time.Sleep(300 * time.Millisecond)
+
+				profileURL := page.MustInfo().URL
+				profileMain := page.MustElement("main").MustText()
+				hasNameInput, _, _ := page.Has(`input[aria-label="Profile display name"]`)
+				hasReadonlyEmail, _, _ := page.Has(`input[aria-label="Profile email"][readonly]`)
+				hasAvatarInput, _, _ := page.Has(`input[aria-label="Profile avatar URL"]`)
+				if strings.Contains(profileURL, "/profile") &&
+					strings.Contains(profileMain, "User Profile") &&
+					hasNameInput &&
+					hasReadonlyEmail &&
+					hasAvatarInput {
+					res.Assertions = append(res.Assertions, "Clicking 'Profile' in user dropdown navigates to /profile with Name, read-only IAP Email, and Photo/Avatar controls")
+				} else {
+					res.Passed = false
+					res.Errors = append(res.Errors, fmt.Sprintf("User Profile page (/profile) failed assertions: url=%q, hasName=%v, hasReadonlyEmail=%v, hasAvatar=%v", profileURL, hasNameInput, hasReadonlyEmail, hasAvatarInput))
+				}
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, "User dropdown card missing expected Name/Email, Profile button, or Sign out button")
+			}
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Clicking top-right user button did not open [data-testid='user-dropdown-card']")
+		}
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing top-right user button button[aria-label='Open user menu']")
+	}
+
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }

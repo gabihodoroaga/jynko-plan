@@ -21,7 +21,8 @@ import { CommonModule } from '@angular/common';
       [attr.closedby]="'any'"
       [attr.aria-labelledby]="titleId"
       (close)="onNativeClose()"
-      class="w-full max-w-lg rounded-lg bg-white border border-slate-200 shadow-lg p-0 text-slate-900"
+      class="w-full rounded-lg bg-white border border-slate-200 shadow-lg p-0 text-slate-900"
+      [ngClass]="maxWidth"
     >
       <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">
         <h2 [id]="titleId" class="text-sm font-semibold text-slate-900">{{ title }}</h2>
@@ -43,6 +44,7 @@ import { CommonModule } from '@angular/common';
 export class ModalComponent implements AfterViewInit, OnChanges {
   @Input() isOpen = false;
   @Input() title = 'Dialog';
+  @Input() maxWidth = 'max-w-lg';
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild('dialogEl') dialogRef?: ElementRef<HTMLDialogElement>;

@@ -530,8 +530,8 @@ Jynko's application shell is organized around **two primary top-level sections (
    * **When `Work` is active (`Work` Panel)**:
      * Header (`Work` + filter reset & collapse icons) and `+ New work item` button.
      * Personal & global work links: `Home`, `My Work`, `Stickies`.
-     * Collapsible `Projects` tree (with `+` button at root to create a new project; `👇 hodo` -> `Overview`, `Work items`, `Cycles`, `Epics`, `Modules`, `Views`, `Pages`).
-     * **Right Main Area**: Renders the active Work view (**List**, **Board**, **Calendar**, **Timeline**, **Spreadsheet**, **Cycles**, **Epics**, **Modules**, **Views**, **Stickies**, etc.).
+     * Collapsible `Projects` tree (with `+` button at root to create a new project; `👇 hodo` -> `Overview`, `Work items`, `Cycles`, `Epics`, `Modules`, `Pages`).
+     * **Right Main Area**: Renders the active Work view (**List**, **Board**, **Calendar**, **Timeline**, **Spreadsheet**, **Cycles**, **Epics**, **Modules**, **Stickies**, etc.).
    * **When `Wiki` is active (`Wiki` Panel)**:
      * Header (`Wiki` + collapse icon) and `+ New page` button.
      * `Home` link (Wiki Home).
@@ -700,4 +700,4 @@ This sequential execution plan structures the full implementation of Jynko acros
    * `WorkItemTimelineComponent` (Timeline / Gantt)
    * `WorkItemSpreadsheetComponent` (Spreadsheet inline editor)
    * `WorkItemDetailDrawerComponent` (Item details, Sub-items, Comments)
-5. Implement Planning views (`EpicsComponent`, `CyclesComponent`, `ModulesComponent`, `ViewsComponent`, `StickiesComponent`) and the Wiki module (`PageTreeComponent`, `CollectionListComponent`, `PageEditorComponent` with Markdown block `/` slash commands, and `VersionHistoryComponent`).
+5. Implement Planning views (`EpicsComponent`, `CyclesComponent`, `ModulesComponent`, `StickiesComponent`) and the Wiki module (`PageTreeComponent`, `CollectionListComponent`, `PageEditorComponent` with Markdown block `/` slash commands, and `VersionHistoryComponent`).
