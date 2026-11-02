@@ -254,6 +254,16 @@ export class WorkItemService {
     });
   }
 
+  toggleItemLabel(itemId: string, labelId: string): void {
+    const current = this.items().find((i) => i.id === itemId);
+    if (!current) return;
+    const existing = current.label_ids ?? [];
+    const nextIds = existing.includes(labelId)
+      ? existing.filter((id) => id !== labelId)
+      : [...existing, labelId];
+    this.updateItem(itemId, { label_ids: nextIds });
+  }
+
   deleteItem(itemId: string): void {
     const projectId = this.resolveProjectIdForItem(itemId);
     if (!projectId) return;

@@ -206,13 +206,13 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
       </div>
 
       <!-- Active View Canvas (bg-slate-50) -->
-      <div class="flex-1 p-4 bg-slate-50 overflow-auto">
+      <div class="flex-1 min-h-0 p-4 bg-slate-50 overflow-auto flex flex-col">
         @switch (workItemService.activeView()) {
           @case ('LIST') {
             <app-work-item-list></app-work-item-list>
           }
           @case ('BOARD') {
-            <app-work-item-board></app-work-item-board>
+            <app-work-item-board class="flex-1 min-h-0"></app-work-item-board>
           }
           @case ('CALENDAR') {
             <app-work-item-calendar></app-work-item-calendar>

@@ -19,18 +19,21 @@ import { PriorityBadgeComponent } from '../../../shared/components/priority-badg
   selector: 'app-work-item-board',
   standalone: true,
   imports: [CommonModule, DragDropModule, StatusBadgeComponent, PriorityBadgeComponent],
+  host: {
+    class: 'block h-full',
+  },
   template: `
     <div
       cdkDropListGroup
-      class="flex gap-3.5 overflow-x-auto pb-4 items-start min-h-[calc(100vh-11rem)]"
+      class="flex gap-3.5 overflow-x-auto pb-2 items-stretch h-full min-h-[calc(100vh-10rem)]"
     >
       @for (col of columns(); track col.status) {
         <div
           [attr.data-board-column]="col.status"
-          class="board-column w-72 shrink-0 bg-slate-50 border border-slate-200 rounded-md flex flex-col max-h-[calc(100vh-11rem)]"
+          class="board-column w-72 shrink-0 h-full bg-slate-50 border border-slate-200 rounded-md flex flex-col"
         >
           <!-- Column Header -->
-          <div class="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 bg-white rounded-t-md">
+          <div class="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 bg-white rounded-t-md shrink-0">
             <div class="flex items-center gap-2">
               <app-status-badge [status]="col.status"></app-status-badge>
               <span class="text-[11px] font-mono text-slate-400">{{ col.items.length }}</span>
@@ -42,7 +45,7 @@ import { PriorityBadgeComponent } from '../../../shared/components/priority-badg
             cdkDropList
             [cdkDropListData]="col.status"
             (cdkDropListDropped)="onDrop($event, col.status)"
-            class="p-2.5 space-y-2.5 overflow-y-auto flex-1 min-h-[160px]"
+            class="p-2.5 space-y-2.5 overflow-y-auto flex-1 min-h-0"
           >
             @for (item of col.items; track item.id) {
               <div

@@ -18,6 +18,7 @@ export class PageService {
   readonly activeCollectionId = signal<string>('col-general');
   readonly activePageId = signal<string>('page-welcome');
   readonly versionsByPage = signal<Record<string, PageVersion[]>>({});
+  private readonly updateSeqByPage = new Map<string, number>();
 
   constructor() {
     effect(() => {
@@ -219,6 +220,17 @@ export class PageService {
     const current = this.pages().find((p) => p.id === pageId);
     if (!current || current.is_locked) return;
 
+    const noTitleChange = patch.title === undefined || patch.title === current.title;
+    const noContentChange = patch.content === undefined || patch.content === current.content;
+    const noParentChange =
+      patch.parent_page_id === undefined || patch.parent_page_id === current.parent_page_id;
+    if (noTitleChange && noContentChange && noParentChange) {
+      return;
+    }
+
+    const seq = (this.updateSeqByPage.get(pageId) ?? 0) + 1;
+    this.updateSeqByPage.set(pageId, seq);
+
     const now = new Date().toISOString();
     const updatedLocal: Page = {
       ...current,
@@ -230,11 +242,17 @@ export class PageService {
 
     this.api.put<Page>(`/projects/${current.project_id}/pages/${pageId}`, patch).subscribe({
       next: (saved) => {
+        if (this.updateSeqByPage.get(pageId) !== seq) {
+          return;
+        }
         this.pages.update((list) => list.map((p) => (p.id === pageId ? saved : p)));
         this.api
           .get<PageVersion[]>(`/projects/${current.project_id}/pages/${pageId}/versions`)
           .subscribe({
             next: (vers) => {
+              if (this.updateSeqByPage.get(pageId) !== seq) {
+                return;
+              }
               this.versionsByPage.update((m) => ({ ...m, [pageId]: vers ?? [] }));
             },
           });

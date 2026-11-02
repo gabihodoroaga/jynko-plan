@@ -253,4 +253,38 @@ export class ProjectService {
       next: (lbl) => this.labels.update((prev) => [...prev, lbl]),
     });
   }
+
+  updateLabel(labelId: string, patch: { name?: string; color?: string }): void {
+    const projectId = this.activeProjectId();
+    if (!projectId) return;
+    const current = this.labels().find((l) => l.id === labelId);
+    if (!current) return;
+
+    const nextName = patch.name !== undefined ? patch.name.trim() : current.name;
+    const nextColor = patch.color !== undefined ? patch.color.trim() : current.color;
+    if (!nextName || (nextName === current.name && nextColor === current.color)) {
+      return;
+    }
+
+    const updatedLocal: Label = { ...current, name: nextName, color: nextColor };
+    this.labels.update((prev) => prev.map((l) => (l.id === labelId ? updatedLocal : l)));
+
+    this.api
+      .patch<Label>(`/projects/${projectId}/labels/${labelId}`, {
+        name: nextName,
+        color: nextColor,
+      })
+      .subscribe({
+        next: (saved) => {
+          this.labels.update((prev) => prev.map((l) => (l.id === labelId ? saved : l)));
+        },
+      });
+  }
+
+  deleteLabel(labelId: string): void {
+    const projectId = this.activeProjectId();
+    if (!projectId) return;
+    this.labels.update((prev) => prev.filter((l) => l.id !== labelId));
+    this.api.delete(`/projects/${projectId}/labels/${labelId}`).subscribe();
+  }
 }

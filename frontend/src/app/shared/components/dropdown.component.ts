@@ -37,11 +37,14 @@ export interface DropdownOption {
         ]"
       >
         <span class="flex items-center gap-1.5 truncate">
-          @if (selectedOption()?.dotColor; as dot) {
+          @if (!isShowingEmptyLabel() && selectedOption()?.dotColor; as dot) {
             <span class="w-2 h-2 rounded-full shrink-0" [style.backgroundColor]="dot"></span>
           }
-          <span class="truncate font-medium text-slate-700">
-            {{ selectedOption()?.label ?? placeholder }}
+          <span
+            class="truncate"
+            [ngClass]="isShowingEmptyLabel() ? 'text-slate-400 font-normal' : 'font-medium text-slate-700'"
+          >
+            {{ triggerDisplayLabel() }}
           </span>
         </span>
 
@@ -119,6 +122,8 @@ export class DropdownComponent {
   @Input() options: DropdownOption[] = [];
   @Input() value = '';
   @Input() placeholder = 'Select...';
+  @Input() emptyLabel = '';
+  @Input() emptyValues: string[] = [''];
   @Input() ariaLabel = '';
   @Input() disabled = false;
   @Input() fullWidth = false;
@@ -132,6 +137,18 @@ export class DropdownComponent {
 
   selectedOption(): DropdownOption | undefined {
     return this.options.find((o) => o.value === this.value);
+  }
+
+  isShowingEmptyLabel(): boolean {
+    if (!this.emptyLabel) return false;
+    return this.emptyValues.includes(this.value) || !this.selectedOption();
+  }
+
+  triggerDisplayLabel(): string {
+    if (this.isShowingEmptyLabel()) {
+      return this.emptyLabel;
+    }
+    return this.selectedOption()?.label ?? (this.emptyLabel || this.placeholder);
   }
 
   toggleOpen(event: MouseEvent): void {

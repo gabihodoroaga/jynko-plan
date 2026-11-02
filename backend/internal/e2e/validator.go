@@ -402,6 +402,15 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 		res.Errors = append(res.Errors, "Project Overview page still contains '+ New Project' button or failed to load")
 	}
 
+	hasEditLabelInput, _, _ := page.Has(`input[aria-label^="Edit label name "]`)
+	hasRemoveLabelBtn, _, _ := page.Has(`button[aria-label^="Remove label "]`)
+	if hasEditLabelInput && hasRemoveLabelBtn {
+		res.Assertions = append(res.Assertions, "Project Labels section renders inline editable label name/color inputs and remove ('×') buttons")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Project Labels section missing editable/removable controls: hasEdit=%v, hasRemove=%v", hasEditLabelInput, hasRemoveLabelBtn))
+	}
+
 	assertFullWidthPageContainer(page, &res, "Projects")
 
 	if has, plusBtn, _ := page.Has(`button[aria-label="Create new project"]`); has && plusBtn != nil {
@@ -496,11 +505,12 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 	// Verify 'Cancelled' column is hidden by default on the Kanban board while 'Backlog'/'Todo'/'In Progress'/'In Review'/'Done' are visible, and no 'Hidden Columns' card is shown on the board
 	hasCancelledCol, _, _ := page.Has(`[data-board-column="CANCELLED"]`)
 	hasTodoCol, _, _ := page.Has(`[data-board-column="TODO"]`)
-	if !hasCancelledCol && hasTodoCol && strings.Contains(mainText, "Columns (5/6)") && !strings.Contains(mainText, "Hidden Columns") {
-		res.Assertions = append(res.Assertions, "Kanban board hides 'Cancelled' column by default (Columns 5/6) without a 'Hidden Columns' rail on the board")
+	hasFullHeightCol, _, _ := page.Has(`.board-column.h-full`)
+	if !hasCancelledCol && hasTodoCol && hasFullHeightCol && strings.Contains(mainText, "Columns (5/6)") && !strings.Contains(mainText, "Hidden Columns") {
+		res.Assertions = append(res.Assertions, "Kanban board columns stretch to fill full page height (.board-column.h-full) and hide 'Cancelled' column by default (Columns 5/6)")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected Cancelled board column hidden by default, Columns (5/6), and no Hidden Columns rail; hasCancelledCol=%v", hasCancelledCol))
+		res.Errors = append(res.Errors, fmt.Sprintf("Expected full-height Kanban columns, Cancelled hidden by default, Columns (5/6), and no Hidden Columns rail; hasCancelledCol=%v, hasFullHeightCol=%v", hasCancelledCol, hasFullHeightCol))
 	}
 
 	// Open "Columns (5/6)" popover and verify configurable column toggles
@@ -527,13 +537,22 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		if hasDrawer, drawerEl, _ := page.Has(`app-work-item-detail-drawer aside`); hasDrawer && drawerEl != nil {
 			drawerText := drawerEl.MustText()
 			hasFullViewBtn, _, _ := drawerEl.Has(`button[aria-label="Open work item full page"]`)
-			hasStartInput, _, _ := drawerEl.Has(`input[aria-label="Work item start date"]`)
-			hasDueInput, _, _ := drawerEl.Has(`input[aria-label="Work item due date"]`)
-			if hasFullViewBtn && hasStartInput && hasDueInput && !strings.Contains(drawerText, "Delete") {
-				res.Assertions = append(res.Assertions, "Work Item side panel renders Start Date, Due Date, and 'Full view' button without a Delete button")
+			hasTopProps, _, _ := drawerEl.Has(`[data-testid="work-item-top-properties"]`)
+			hasStartBtn, _, _ := drawerEl.Has(`button[aria-label="Work item start date"]`)
+			hasDueBtn, _, _ := drawerEl.Has(`button[aria-label="Work item due date"]`)
+			hasEstBtn, _, _ := drawerEl.Has(`button[aria-label="Work item estimate"]`)
+			hasDrawerLabelBtn, labelDropBtn, _ := drawerEl.Has(`button[aria-label="Toggle work item label dropdown"]`)
+			hasDrawerLabelOption := false
+			if hasDrawerLabelBtn && labelDropBtn != nil {
+				labelDropBtn.MustClick()
+				time.Sleep(150 * time.Millisecond)
+				hasDrawerLabelOption, _, _ = drawerEl.Has(`button[aria-label^="Toggle work item label "]`)
+			}
+			if hasFullViewBtn && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete") {
+				res.Assertions = append(res.Assertions, "Work Item side panel renders top value-only property dropdown pills (Status, Priority, Assignee, Module, Epic, Cycle, Start Date, Due Date, Estimate) and separate 'Labels:' line with multi-select dropdown")
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side panel failed assertions: hasFullView=%v, hasStart=%v, hasDue=%v", hasFullViewBtn, hasStartInput, hasDueInput))
+				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side panel failed assertions: hasFullView=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v", hasFullViewBtn, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption))
 			}
 		} else {
 			res.Passed = false
@@ -545,14 +564,23 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 	detailPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/work-items/item-1")
 	defer detailPage.MustClose()
 	detailMain := detailPage.MustElement("main").MustText()
-	hasStartDateInput, _, _ := detailPage.Has(`input[aria-label="Work item start date"]`)
-	hasDueDateInput, _, _ := detailPage.Has(`input[aria-label="Work item due date"]`)
+	hasTopPropsPage, _, _ := detailPage.Has(`[data-testid="work-item-top-properties"]`)
+	hasStartDateBtn, _, _ := detailPage.Has(`button[aria-label="Work item start date"]`)
+	hasDueDateBtn, _, _ := detailPage.Has(`button[aria-label="Work item due date"]`)
+	hasEstimateBtn, _, _ := detailPage.Has(`button[aria-label="Work item estimate"]`)
 	hasAutoGrowDesc, _, _ := detailPage.Has(`textarea.auto-grow-description[aria-label="Work item description"]`)
-	if strings.Contains(detailMain, "HODO-1") && hasStartDateInput && hasDueDateInput && hasAutoGrowDesc && strings.Contains(detailMain, "Sub-Work Items") {
-		res.Assertions = append(res.Assertions, "Full-page Work Item view (/projects/:projectId/work-items/:itemId) renders auto-growing Description, Start Date, Due Date, Sub-Items, and Comments")
+	hasPageLabelBtn, pageLabelBtn, _ := detailPage.Has(`button[aria-label="Toggle work item label dropdown"]`)
+	hasPageLabelOption := false
+	if hasPageLabelBtn && pageLabelBtn != nil {
+		pageLabelBtn.MustClick()
+		time.Sleep(150 * time.Millisecond)
+		hasPageLabelOption, _, _ = detailPage.Has(`button[aria-label^="Toggle work item label "]`)
+	}
+	if strings.Contains(detailMain, "HODO-1") && hasTopPropsPage && hasStartDateBtn && hasDueDateBtn && hasEstimateBtn && hasAutoGrowDesc && hasPageLabelOption && strings.Contains(detailMain, "Sub-Work Items") {
+		res.Assertions = append(res.Assertions, "Full-page Work Item view (/projects/:projectId/work-items/:itemId) renders top value-only property dropdown pills, separate 'Labels:' line with multi-select dropdown, and auto-growing Description")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions; hasStartDate=%v, hasDueDate=%v, hasAutoGrowDesc=%v", hasStartDateInput, hasDueDateInput, hasAutoGrowDesc))
+		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions; hasTopProps=%v, hasStartDate=%v, hasDueDate=%v, hasEstimate=%v, hasAutoGrowDesc=%v, hasPageLabelOption=%v", hasTopPropsPage, hasStartDateBtn, hasDueDateBtn, hasEstimateBtn, hasAutoGrowDesc, hasPageLabelOption))
 	}
 
 	res.DurationMs = time.Since(start).Milliseconds()
@@ -595,12 +623,17 @@ func CheckWikiSectionLayout(browser *rod.Browser, baseURL, outDir string) Valida
 		res.Errors = append(res.Errors, "Secondary panel did not switch to Wiki Collections/Pages tree")
 	}
 
+	hasWikiTitleInput, _, _ := page.Has(`input[aria-label="Wiki page title"]`)
+	hasWikiSaveBtn, _, _ := page.Has(`button[aria-label="Save wiki page"]`)
 	if strings.Contains(mainText, "Welcome to Company's Wiki") &&
+		hasWikiTitleInput &&
+		hasWikiSaveBtn &&
+		!strings.Contains(mainText, "Publish") &&
 		!strings.Contains(mainText, "AI summary") {
-		res.Assertions = append(res.Assertions, "Right workspace renders Page breadcrumb bar, formatting toolbar, and document canvas without AI summary button")
+		res.Assertions = append(res.Assertions, "Right workspace renders Page breadcrumb bar, 'Save' button (replacing 'Publish'), formatting toolbar, and blur-updated document canvas")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Right workspace did not render expected Wiki page view & formatting toolbar")
+		res.Errors = append(res.Errors, fmt.Sprintf("Right workspace failed Wiki assertions; hasTitle=%v, hasSave=%v", hasWikiTitleInput, hasWikiSaveBtn))
 	}
 
 	assertFullWidthPageContainer(page, &res, "Wiki")

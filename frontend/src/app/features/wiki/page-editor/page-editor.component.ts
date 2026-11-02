@@ -45,7 +45,7 @@ interface SlashBlockCommand {
             }
           </div>
 
-          <!-- Right: Author Avatar, Publish, Mode Toggle, Lock, History, Delete -->
+          <!-- Right: Author Avatar, Save, Mode Toggle, Lock, History, Delete -->
           <div class="flex items-center gap-2 shrink-0">
             <span
               class="w-5 h-5 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center"
@@ -54,12 +54,17 @@ interface SlashBlockCommand {
               G
             </span>
 
-            <button
-              type="button"
-              class="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700"
-            >
-              Publish
-            </button>
+            @if (projectService.canEdit()) {
+              <button
+                type="button"
+                aria-label="Save wiki page"
+                (click)="savePage(page.id)"
+                [disabled]="page.is_locked"
+                class="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 disabled:opacity-40"
+              >
+                {{ justSaved() ? 'Saved ✓' : 'Save' }}
+              </button>
+            }
 
             <!-- Reader / Markdown Editor Switcher -->
             <div class="inline-flex bg-slate-100 p-0.5 rounded-md border border-slate-200">
@@ -275,8 +280,12 @@ interface SlashBlockCommand {
             <div class="w-full px-8 py-8 flex flex-col min-h-full">
               <input
                 type="text"
+                aria-label="Wiki page title"
                 [ngModel]="page.title"
+                [ngModelOptions]="{ updateOn: 'blur' }"
+                (input)="onTitleInput($any($event.target).value)"
                 (ngModelChange)="onTitleChange(page.id, $event)"
+                (keydown.enter)="$any($event.target).blur()"
                 [disabled]="page.is_locked || !projectService.canEdit()"
                 placeholder="Page title..."
                 class="w-full text-3xl font-bold text-slate-900 bg-transparent focus:outline-none mb-4 disabled:opacity-80"
@@ -301,12 +310,15 @@ interface SlashBlockCommand {
 
               <div class="relative flex-1 flex flex-col">
                 <textarea
+                  aria-label="Wiki page markdown content"
                   [ngModel]="page.content"
+                  [ngModelOptions]="{ updateOn: 'blur' }"
                   (ngModelChange)="onContentChange(page.id, $event)"
+                  (input)="onContentInput($any($event.target).value)"
                   [disabled]="page.is_locked || !projectService.canEdit()"
                   rows="22"
                   placeholder="Write Markdown blocks here or type /h1, /h2, /todo, /code, /quote..."
-                  class="flex-1 w-full p-4 rounded-lg border border-slate-200 font-mono text-xs leading-relaxed text-slate-800 bg-slate-50/40 focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
+                  class="auto-grow-description flex-1 w-full p-4 rounded-lg border border-slate-200 font-mono text-xs leading-relaxed text-slate-800 bg-slate-50/40 focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
                 ></textarea>
 
                 @if (showSlashMenu() && !page.is_locked && projectService.canEdit()) {
@@ -336,8 +348,12 @@ interface SlashBlockCommand {
               <!-- Editable Page Title -->
               <input
                 type="text"
+                aria-label="Wiki page title"
                 [ngModel]="page.title"
+                [ngModelOptions]="{ updateOn: 'blur' }"
+                (input)="onTitleInput($any($event.target).value)"
                 (ngModelChange)="onTitleChange(page.id, $event)"
+                (keydown.enter)="$any($event.target).blur()"
                 [disabled]="page.is_locked || !projectService.canEdit()"
                 placeholder="Page title..."
                 class="w-full text-[30px] leading-tight font-bold text-slate-900 bg-transparent focus:outline-none mb-5 disabled:opacity-90"
@@ -365,7 +381,10 @@ export class PageEditorComponent {
 
   readonly editorMode = signal<'SPLIT' | 'EDIT' | 'PREVIEW'>('PREVIEW');
   readonly showSlashMenu = signal<boolean>(false);
+  readonly justSaved = signal<boolean>(false);
   readonly codeBlockSnippet = '\n```\n// code block\n```\n';
+  private draftTitle: string | null = null;
+  private draftContent: string | null = null;
 
   readonly slashCommands: SlashBlockCommand[] = [
     { cmd: '/h1', label: 'Heading 1', description: 'Large section heading', snippet: '\n# Heading 1\n' },
@@ -378,14 +397,42 @@ export class PageEditorComponent {
     { cmd: '/divider', label: 'Divider Line', description: 'Horizontal section rule', snippet: '\n---\n' },
   ];
 
+  onTitleInput(title: string): void {
+    this.draftTitle = title;
+  }
+
   onTitleChange(pageId: string, title: string): void {
+    this.draftTitle = null;
     this.pageService.updatePage(pageId, { title });
   }
 
-  onContentChange(pageId: string, content: string): void {
+  onContentInput(content: string): void {
+    this.draftContent = content;
     const trimmedEnd = content.trimEnd();
     this.showSlashMenu.set(trimmedEnd.endsWith('\n/') || trimmedEnd === '/');
+  }
+
+  onContentChange(pageId: string, content: string): void {
+    this.draftContent = null;
+    this.showSlashMenu.set(false);
     this.pageService.updatePage(pageId, { content });
+  }
+
+  savePage(pageId: string): void {
+    const patch: { title?: string; content?: string } = {};
+    if (this.draftTitle !== null) {
+      patch.title = this.draftTitle;
+      this.draftTitle = null;
+    }
+    if (this.draftContent !== null) {
+      patch.content = this.draftContent;
+      this.draftContent = null;
+    }
+    if (patch.title !== undefined || patch.content !== undefined) {
+      this.pageService.updatePage(pageId, patch);
+    }
+    this.justSaved.set(true);
+    setTimeout(() => this.justSaved.set(false), 1500);
   }
 
   insertBlockSnippet(pageId: string, currentContent: string, snippet: string): void {
