@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -31,19 +31,22 @@ import {
     DropdownComponent,
   ],
   template: `
-    <div class="flex flex-col h-screen w-screen overflow-hidden bg-[#f4f5f7] text-slate-900">
+    <div class="flex flex-col h-screen w-screen overflow-hidden bg-[#f0f4f9] text-slate-900">
       <!-- Global Top Application Bar (Jynko App Icon on left, Search in center, User on right) -->
-      <header class="h-11 px-3.5 bg-[#f4f5f7] flex items-center justify-between gap-4 shrink-0 select-none">
+      <header class="h-11 px-3.5 bg-[#f0f4f9] flex items-center justify-between gap-4 shrink-0 select-none">
         <!-- Left: Simple Application Brand Icon (no dropdown caret) -->
         <div class="flex items-center gap-2 min-w-[180px]">
           <a
             routerLink="/home"
             (click)="activeRailSection.set('WORK')"
-            class="inline-flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-slate-200/60 transition-colors"
+            class="inline-flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-[#e1e9f4] transition-colors"
             title="Jynko Home"
           >
-            <!-- Custom Jynko Geometric Prism / Spark Application Icon -->
-            <span class="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shadow-sm">
+            <!-- Custom Jynko Geometric Prism / Gemini Spark Application Icon -->
+            <span
+              class="w-6 h-6 rounded-lg text-white flex items-center justify-center shadow-sm"
+              style="background: linear-gradient(135deg, #1a73e8 0%, #6366f1 52%, #a855f7 100%)"
+            >
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
                 <path
                   d="M12 2.5 20.5 7.5v9L12 21.5 3.5 16.5v-9L12 2.5Z"
@@ -68,7 +71,7 @@ import {
         <div class="flex-1 max-w-md">
           <div class="relative flex items-center">
             <svg
-              class="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none"
+              class="w-3.5 h-3.5 text-slate-500 absolute left-3 pointer-events-none"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -82,7 +85,7 @@ import {
               [ngModel]="workItemService.filter().search"
               (ngModelChange)="workItemService.updateFilter({ search: $event })"
               placeholder="Search"
-              class="w-full h-7 pl-8 pr-3 rounded-md bg-white border border-slate-200/90 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-300 shadow-[0_1px_1px_rgba(0,0,0,0.02)]"
+              class="w-full h-7 pl-8 pr-3 rounded-full bg-[#e3e9f2] hover:bg-[#dce3ee] focus:bg-white border border-transparent focus:border-[#a8c7fa] text-xs text-slate-800 placeholder-slate-500 focus:outline-none transition-colors"
             />
           </div>
         </div>
@@ -178,7 +181,7 @@ import {
         <!-- 1. Left Icon Navigation Rail (w-[68px]) with ONLY 3 buttons: Work, Wiki, Settings -->
         <nav
           aria-label="Primary rail"
-          class="w-[68px] bg-[#f4f5f7] flex flex-col items-center pt-2 pb-4 shrink-0 select-none"
+          class="w-[68px] bg-[#f0f4f9] flex flex-col items-center pt-2 pb-4 shrink-0 select-none"
         >
           <div class="flex flex-col items-center gap-3.5 w-full">
             <!-- Button 1: Work -->
@@ -188,11 +191,11 @@ import {
               class="group flex flex-col items-center gap-1 text-center cursor-pointer"
             >
               <div
-                class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
+                class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
                 [ngClass]="
                   activeRailSection() === 'WORK'
-                    ? 'bg-[#e2e4e9] text-slate-900'
-                    : 'text-slate-700 group-hover:bg-slate-200/60'
+                    ? 'bg-[#d3e3fd] text-[#041e49]'
+                    : 'text-slate-700 group-hover:bg-[#e1e9f4]'
                 "
               >
                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -203,7 +206,7 @@ import {
                     width="11"
                     height="11"
                     rx="2.5"
-                    fill="#f4f5f7"
+                    [attr.fill]="activeRailSection() === 'WORK' ? '#d3e3fd' : '#f0f4f9'"
                     stroke="currentColor"
                     stroke-width="2"
                   />
@@ -219,11 +222,11 @@ import {
               class="group flex flex-col items-center gap-1 text-center cursor-pointer"
             >
               <div
-                class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
+                class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
                 [ngClass]="
                   activeRailSection() === 'WIKI'
-                    ? 'bg-[#e2e4e9] text-slate-900'
-                    : 'text-slate-600 group-hover:bg-slate-200/60'
+                    ? 'bg-[#d3e3fd] text-[#041e49]'
+                    : 'text-slate-600 group-hover:bg-[#e1e9f4]'
                 "
               >
                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -231,7 +234,7 @@ import {
                     d="M10.586 3.586a2 2 0 0 1 2.828 0l7 7a2 2 0 0 1 0 2.828l-7 7a2 2 0 0 1-2.828 0l-7-7a2 2 0 0 1 0-2.828l7-7Z"
                     fill="currentColor"
                   />
-                  <circle cx="12" cy="12" r="3.2" fill="#f4f5f7" />
+                  <circle cx="12" cy="12" r="3.2" [attr.fill]="activeRailSection() === 'WIKI' ? '#d3e3fd' : '#f0f4f9'" />
                 </svg>
               </div>
               <span class="text-[11px] font-medium text-slate-700 leading-tight">Wiki</span>
@@ -248,11 +251,11 @@ import {
               class="group flex flex-col items-center gap-1 text-center cursor-pointer"
             >
               <div
-                class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
+                class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
                 [ngClass]="
                   activeRailSection() === 'SETTINGS'
-                    ? 'bg-[#e2e4e9] text-slate-900'
-                    : 'text-slate-600 group-hover:bg-slate-200/60'
+                    ? 'bg-[#d3e3fd] text-[#041e49]'
+                    : 'text-slate-600 group-hover:bg-[#e1e9f4]'
                 "
               >
                 <svg
@@ -278,7 +281,7 @@ import {
         <!-- 2. Contextual Secondary Panel (w-64 / 256px): Switches between WORK panel and WIKI panel -->
         @if (!sidebarCollapsed()) {
           <aside
-            class="w-64 bg-white border-r border-t border-slate-200/90 rounded-tl-xl flex flex-col justify-between shrink-0 select-none overflow-hidden"
+            class="w-64 bg-[#f8fafd] border-r border-t border-slate-200/90 rounded-tl-2xl flex flex-col justify-between shrink-0 select-none overflow-hidden"
           >
             @if (activeRailSection() === 'WIKI') {
               <!-- ==================== SECTION 2: WIKI SECONDARY PANEL ==================== -->
@@ -405,7 +408,7 @@ import {
                                   class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors text-left"
                                   [ngClass]="
                                     pageService.activePage()?.id === node.page.id
-                                      ? 'bg-[#eef0f3] text-slate-900 font-medium'
+                                      ? 'bg-[#d3e3fd] text-[#041e49] font-medium'
                                       : 'text-slate-700 hover:bg-slate-100'
                                   "
                                 >
@@ -426,7 +429,7 @@ import {
                                         class="w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors text-left"
                                         [ngClass]="
                                           pageService.activePage()?.id === child.page.id
-                                            ? 'bg-[#eef0f3] text-slate-900 font-medium'
+                                            ? 'bg-[#d3e3fd] text-[#041e49] font-medium'
                                             : 'text-slate-600 hover:bg-slate-100'
                                         "
                                       >
@@ -538,7 +541,7 @@ import {
                     class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-colors text-left"
                     [ngClass]="
                       settingsService.activeScope() === 'GENERAL'
-                        ? 'bg-[#eef0f3] text-slate-900 font-medium'
+                        ? 'bg-[#d3e3fd] text-[#041e49] font-medium'
                         : 'text-slate-700 hover:bg-slate-100'
                     "
                   >
@@ -563,7 +566,7 @@ import {
                         [ngClass]="
                           settingsService.activeScope() === 'PROJECT' &&
                           projectService.activeProjectId() === proj.id
-                            ? 'bg-[#eef0f3] text-slate-900 font-medium'
+                            ? 'bg-[#d3e3fd] text-[#041e49] font-medium'
                             : 'text-slate-700 hover:bg-slate-100'
                         "
                       >
@@ -633,7 +636,7 @@ import {
                 <div class="space-y-0.5">
                   <a
                     routerLink="/home"
-                    routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                    routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                     class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -644,7 +647,7 @@ import {
 
                   <a
                     routerLink="/my-work"
-                    routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                    routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                     class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -656,7 +659,7 @@ import {
 
                   <a
                     routerLink="/stickies"
-                    routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                    routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                     class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -690,7 +693,7 @@ import {
 
                     <button
                       type="button"
-                      (click)="isCreateProjectOpen.set(true)"
+                      (click)="projectService.openCreateProjectModal()"
                       class="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
                       title="Create new project"
                       aria-label="Create new project"
@@ -720,7 +723,7 @@ import {
                             <div class="ml-4 pl-3 border-l border-slate-200 space-y-0.5">
                               <a
                                 [routerLink]="['/projects', proj.id]"
-                                routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                                routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                                 [routerLinkActiveOptions]="{ exact: true }"
                                 (click)="selectProjectOnly(proj.id)"
                                 [attr.aria-label]="'Open ' + proj.name + ' overview'"
@@ -735,7 +738,7 @@ import {
 
                               <a
                                 [routerLink]="['/projects', proj.id, 'work-items']"
-                                routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                                routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                                 (click)="selectProjectOnly(proj.id); workItemService.resetFilters()"
                                 [attr.aria-label]="'Open ' + proj.name + ' work items'"
                                 class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
@@ -749,7 +752,7 @@ import {
 
                               <a
                                 [routerLink]="['/projects', proj.id, 'cycles']"
-                                routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                                routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                                 (click)="selectProjectOnly(proj.id)"
                                 class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
                               >
@@ -762,7 +765,7 @@ import {
 
                               <a
                                 [routerLink]="['/projects', proj.id, 'epics']"
-                                routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                                routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                                 (click)="selectProjectOnly(proj.id)"
                                 class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
                               >
@@ -774,7 +777,7 @@ import {
 
                               <a
                                 [routerLink]="['/projects', proj.id, 'modules']"
-                                routerLinkActive="bg-[#eef0f3] text-slate-900 font-medium"
+                                routerLinkActive="bg-[#d3e3fd] text-[#041e49] font-medium"
                                 (click)="selectProjectOnly(proj.id)"
                                 class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors"
                               >
@@ -813,7 +816,7 @@ import {
         } @else {
           <!-- Collapsed Secondary Panel Strip with Expand Button -->
           <aside
-            class="w-11 bg-white border-r border-t border-slate-200/90 rounded-tl-xl flex flex-col items-center pt-3.5 pb-4 shrink-0 select-none"
+            class="w-11 bg-[#f8fafd] border-r border-t border-slate-200/90 rounded-tl-2xl flex flex-col items-center pt-3.5 pb-4 shrink-0 select-none"
           >
             <button
               type="button"
@@ -1025,11 +1028,11 @@ import {
         </form>
       </app-modal>
 
-      <!-- Global Create New Project Modal (triggered from "+" button at root of Projects list in left panel) -->
+      <!-- Global Create / Edit Project Modal (triggered from "+" button at root of Projects list in left panel or "Edit" button in Project Overview) -->
       <app-modal
-        [isOpen]="isCreateProjectOpen()"
-        title="Create New Project"
-        (closed)="isCreateProjectOpen.set(false)"
+        [isOpen]="projectService.isProjectModalOpen()"
+        [title]="projectService.editingProject() ? 'Edit Project' : 'Create New Project'"
+        (closed)="projectService.closeProjectModal()"
       >
         <form (ngSubmit)="submitCreateProject()" class="space-y-3">
           <div>
@@ -1071,7 +1074,7 @@ import {
           <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
             <button
               type="button"
-              (click)="isCreateProjectOpen.set(false)"
+              (click)="projectService.closeProjectModal()"
               class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-100"
             >
               Cancel
@@ -1081,7 +1084,7 @@ import {
               aria-label="Submit create project"
               class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
             >
-              Create Project
+              {{ projectService.editingProject() ? 'Save Changes' : 'Create Project' }}
             </button>
           </div>
         </form>
@@ -1120,11 +1123,27 @@ export class AppComponent implements OnInit {
   newPageTitle = '';
   newPageCollectionId = 'col-general';
 
-  // Create Project modal state (triggered from "+" button at root of Projects list)
-  readonly isCreateProjectOpen = signal<boolean>(false);
+  // Create / Edit Project modal state (triggered from "+" button at root of Projects list or "Edit" in Project Overview)
   newProjectName = '';
   newProjectPrefix = '';
   newProjectDesc = '';
+
+  constructor() {
+    effect(() => {
+      if (this.projectService.isProjectModalOpen()) {
+        const editing = this.projectService.editingProject();
+        if (editing) {
+          this.newProjectName = editing.name;
+          this.newProjectPrefix = editing.key_prefix;
+          this.newProjectDesc = editing.description || '';
+        } else {
+          this.newProjectName = '';
+          this.newProjectPrefix = '';
+          this.newProjectDesc = '';
+        }
+      }
+    });
+  }
 
   readonly statuses = ALL_STATUSES;
   readonly priorities = ALL_PRIORITIES;
@@ -1281,21 +1300,30 @@ export class AppComponent implements OnInit {
     if (!name) return;
     const prefix = this.newProjectPrefix.trim().toUpperCase() || name.slice(0, 4).toUpperCase();
     const desc = this.newProjectDesc.trim();
-    this.projectService.createProject(name, prefix, desc, (created) => {
-      this.pageService.loadWiki(created.id);
-      this.expandedProjects.update((m) => ({ ...m, [created.id]: true }));
-      this.expandedCollections.update((m) => ({ ...m, [`col-${created.id}`]: true }));
-      const urlPath = this.router.url.split('?')[0];
-      const match = urlPath.match(/^\/projects\/[^/]+(?:\/(work-items|cycles|epics|modules))?$/);
-      if (match) {
-        const sub = match[1];
-        this.router.navigate(sub ? ['/projects', created.id, sub] : ['/projects', created.id]);
-      }
-    });
+    const editing = this.projectService.editingProject();
+    if (editing) {
+      this.projectService.updateProject(editing.id, {
+        name,
+        key_prefix: prefix,
+        description: desc,
+      });
+    } else {
+      this.projectService.createProject(name, prefix, desc, (created) => {
+        this.pageService.loadWiki(created.id);
+        this.expandedProjects.update((m) => ({ ...m, [created.id]: true }));
+        this.expandedCollections.update((m) => ({ ...m, [`col-${created.id}`]: true }));
+        const urlPath = this.router.url.split('?')[0];
+        const match = urlPath.match(/^\/projects\/[^/]+(?:\/(work-items|cycles|epics|modules))?$/);
+        if (match) {
+          const sub = match[1];
+          this.router.navigate(sub ? ['/projects', created.id, sub] : ['/projects', created.id]);
+        }
+      });
+    }
     this.newProjectName = '';
     this.newProjectPrefix = '';
     this.newProjectDesc = '';
-    this.isCreateProjectOpen.set(false);
+    this.projectService.closeProjectModal();
   }
 
   onNewStatusChange(val: string): void {

@@ -47,8 +47,8 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
     <div class="flex flex-col h-full bg-white" (click)="openPopover.set(null)">
       @if (currentItem(); as item) {
         <!-- Top Page Header / Breadcrumb Bar: Work Item Key + Status, Priority, Assignee, Cycle on the left; Delete on the right -->
-        <div class="flex flex-wrap items-center justify-between gap-2 px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-          <div class="flex flex-wrap items-center gap-1.5">
+        <div class="flex items-start justify-between gap-2 px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+          <div class="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
             <a
               [routerLink]="['/projects', item.project_id, 'work-items']"
               aria-label="Back to Work Items"
@@ -107,7 +107,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
             ></app-dropdown>
           </div>
 
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="flex items-center gap-2 shrink-0 ml-auto">
             @if (projectService.canEdit()) {
               <button
                 type="button"

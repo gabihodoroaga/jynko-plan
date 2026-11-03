@@ -28,11 +28,11 @@ type CreateEpicInput struct {
 }
 
 type UpdateEpicInput struct {
-	Name        *string    `json:"name"`
-	Description *string    `json:"description"`
-	Status      *string    `json:"status"`
-	StartDate   *time.Time `json:"start_date"`
-	TargetDate  *time.Time `json:"target_date"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Status      *string `json:"status"`
+	StartDate   *string `json:"start_date"`
+	TargetDate  *string `json:"target_date"`
 }
 
 func (s *EpicService) List(ctx context.Context, projectID string) ([]model.Epic, error) {
@@ -86,10 +86,18 @@ func (s *EpicService) Update(ctx context.Context, projectID, epicID string, inpu
 		epic.Status = strings.ToUpper(strings.TrimSpace(*input.Status))
 	}
 	if input.StartDate != nil {
-		epic.StartDate = input.StartDate
+		parsed, err := parseOptionalDate(*input.StartDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		epic.StartDate = parsed
 	}
 	if input.TargetDate != nil {
-		epic.TargetDate = input.TargetDate
+		parsed, err := parseOptionalDate(*input.TargetDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		epic.TargetDate = parsed
 	}
 	if err := s.repo.Update(ctx, epic); err != nil {
 		return nil, err

@@ -389,17 +389,49 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 		}
 		if hasHodoOverview, hodoLink, _ := page.Has(`a[aria-label="Open hodo overview"]`); hasHodoOverview && hodoLink != nil {
 			hodoLink.MustClick()
-			time.Sleep(250 * time.Millisecond)
+			labelDeadline := time.Now().Add(3 * time.Second)
+			for time.Now().Before(labelDeadline) {
+				if hasLbl, _, _ := page.Has(`input[aria-label^="Edit label name "]`); hasLbl {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}
 
 	mainText := page.MustElement("main").MustText()
-	if strings.Contains(mainText, "Project Overview & Per-Project RBAC") &&
-		!strings.Contains(mainText, "+ New Project") {
-		res.Assertions = append(res.Assertions, "Project Overview header omits '+ New Project' button")
+	hasEditProjBtn, editProjBtn, _ := page.Has(`button[aria-label="Edit project"]`)
+	if !strings.Contains(mainText, "Project Overview & Per-Project RBAC") &&
+		!strings.Contains(mainText, "Projects are the top-level tenant boundary in Jynko") &&
+		!strings.Contains(mainText, "+ New Project") &&
+		hasEditProjBtn {
+		res.Assertions = append(res.Assertions, "Project Overview omits legacy header text and '+ New Project' button, and renders 'Edit' button on active project card")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Project Overview page still contains '+ New Project' button or failed to load")
+		res.Errors = append(res.Errors, fmt.Sprintf("Project Overview failed header/edit button assertions: hasEditProjBtn=%v", hasEditProjBtn))
+	}
+
+	if hasEditProjBtn && editProjBtn != nil {
+		editProjBtn.MustClick()
+		time.Sleep(250 * time.Millisecond)
+		bodyText := page.MustElement("body").MustText()
+		hasProjNameInput, nameEl, _ := page.Has(`input[aria-label="New project name"]`)
+		hasProjPrefixInput, _, _ := page.Has(`input[aria-label="New project key prefix"]`)
+		hasProjDescInput, _, _ := page.Has(`textarea[aria-label="New project description"]`)
+		nameVal := ""
+		if hasProjNameInput && nameEl != nil {
+			nameVal = nameEl.MustProperty("value").String()
+		}
+		if strings.Contains(bodyText, "Edit Project") && hasProjNameInput && hasProjPrefixInput && hasProjDescInput && nameVal == "hodo" {
+			res.Assertions = append(res.Assertions, "Clicking 'Edit' on Project Overview opens the Project dialog pre-populated with project name, key prefix, and description")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, fmt.Sprintf("Edit Project dialog failed assertions: nameVal=%q", nameVal))
+		}
+		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+			closeBtn.MustClick()
+			time.Sleep(150 * time.Millisecond)
+		}
 	}
 
 	hasEditLabelInput, _, _ := page.Has(`input[aria-label^="Edit label name "]`)
@@ -429,6 +461,67 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 	}
 
 	page.MustScreenshot(res.Screenshot)
+
+	// Verify Cycles CRUD UI (/projects/proj-jynko-core/cycles): + New Cycle, Edit modal, Active toggle, and Delete confirmation
+	cyclesPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/cycles")
+	hasCreateCycleBtn, _, _ := cyclesPage.Has(`button[aria-label="Create new cycle"]`)
+	hasEditCycleBtn, editCycleBtn, _ := cyclesPage.Has(`button[aria-label^="Edit cycle "]`)
+	hasDeleteCycleBtn, _, _ := cyclesPage.Has(`button[aria-label^="Delete cycle "]`)
+	hasToggleActiveBtn, _, _ := cyclesPage.Has(`button[aria-label^="Toggle active status for "]`)
+	hasEditCycleModal := false
+	if hasEditCycleBtn && editCycleBtn != nil {
+		editCycleBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasEditCycleModal, _, _ = cyclesPage.Has(`input[aria-label="Edit cycle name"]`)
+	}
+	cyclesPage.MustClose()
+	if hasCreateCycleBtn && hasEditCycleBtn && hasDeleteCycleBtn && hasToggleActiveBtn && hasEditCycleModal {
+		res.Assertions = append(res.Assertions, "Cycles page (/projects/:projectId/cycles) renders '+ New Cycle', clickable Active status badge, 'Delete' confirmation, and 'Edit Sprint Cycle' modal")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Cycles page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasToggle=%v, hasEditModal=%v", hasCreateCycleBtn, hasEditCycleBtn, hasDeleteCycleBtn, hasToggleActiveBtn, hasEditCycleModal))
+	}
+
+	// Verify Epics CRUD UI (/projects/proj-jynko-core/epics): + New Epic, inline status dropdown, Edit modal, and Delete confirmation
+	epicsPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/epics")
+	hasCreateEpicBtn, _, _ := epicsPage.Has(`button[aria-label="Create new epic"]`)
+	hasEditEpicBtn, editEpicBtn, _ := epicsPage.Has(`button[aria-label^="Edit epic "]`)
+	hasDeleteEpicBtn, _, _ := epicsPage.Has(`button[aria-label^="Delete epic "]`)
+	hasEpicStatusDrop, _, _ := epicsPage.Has(`button[aria-label^="Epic status for "]`)
+	hasEditEpicModal := false
+	if hasEditEpicBtn && editEpicBtn != nil {
+		editEpicBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasEditEpicModal, _, _ = epicsPage.Has(`input[aria-label="Edit epic name"]`)
+	}
+	epicsPage.MustClose()
+	if hasCreateEpicBtn && hasEditEpicBtn && hasDeleteEpicBtn && hasEpicStatusDrop && hasEditEpicModal {
+		res.Assertions = append(res.Assertions, "Epics page (/projects/:projectId/epics) renders '+ New Epic', inline status dropdown, 'Delete' confirmation, and 'Edit Strategic Epic' modal")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Epics page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasStatusDrop=%v, hasEditModal=%v", hasCreateEpicBtn, hasEditEpicBtn, hasDeleteEpicBtn, hasEpicStatusDrop, hasEditEpicModal))
+	}
+
+	// Verify Modules CRUD UI (/projects/proj-jynko-core/modules): + New Module, inline lead dropdown, Edit modal, and Delete confirmation
+	modulesPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/modules")
+	hasCreateModuleBtn, _, _ := modulesPage.Has(`button[aria-label="Create new module"]`)
+	hasEditModuleBtn, editModuleBtn, _ := modulesPage.Has(`button[aria-label^="Edit module "]`)
+	hasDeleteModuleBtn, _, _ := modulesPage.Has(`button[aria-label^="Delete module "]`)
+	hasModuleLeadDrop, _, _ := modulesPage.Has(`button[aria-label^="Module lead for "]`)
+	hasEditModuleModal := false
+	if hasEditModuleBtn && editModuleBtn != nil {
+		editModuleBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasEditModuleModal, _, _ = modulesPage.Has(`input[aria-label="Edit module name"]`)
+	}
+	modulesPage.MustClose()
+	if hasCreateModuleBtn && hasEditModuleBtn && hasDeleteModuleBtn && hasModuleLeadDrop && hasEditModuleModal {
+		res.Assertions = append(res.Assertions, "Modules page (/projects/:projectId/modules) renders '+ New Module', inline lead dropdown, 'Delete' confirmation, and 'Edit Feature Module' modal")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Modules page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasLeadDrop=%v, hasEditModal=%v", hasCreateModuleBtn, hasEditModuleBtn, hasDeleteModuleBtn, hasModuleLeadDrop, hasEditModuleModal))
+	}
+
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
@@ -537,6 +630,15 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		if hasDrawer, drawerEl, _ := page.Has(`app-work-item-detail-drawer aside`); hasDrawer && drawerEl != nil {
 			drawerText := drawerEl.MustText()
 			hasFullViewBtn, _, _ := drawerEl.Has(`button[aria-label="Open work item full page"]`)
+			hasCloseDrawerBtn, _, _ := drawerEl.Has(`button[aria-label="Close work item drawer"]`)
+			rightAlignedControls := drawerEl.MustEval(`() => {
+				const drawerRect = this.getBoundingClientRect();
+				const fullBtn = this.querySelector('button[aria-label="Open work item full page"]');
+				const closeBtn = this.querySelector('button[aria-label="Close work item drawer"]');
+				if (!fullBtn || !closeBtn) return false;
+				const midX = drawerRect.left + drawerRect.width / 2;
+				return fullBtn.getBoundingClientRect().left > midX && closeBtn.getBoundingClientRect().left > midX;
+			}`).Bool()
 			hasTopProps, _, _ := drawerEl.Has(`[data-testid="work-item-top-properties"]`)
 			hasStartBtn, _, _ := drawerEl.Has(`button[aria-label="Work item start date"]`)
 			hasDueBtn, _, _ := drawerEl.Has(`button[aria-label="Work item due date"]`)
@@ -548,11 +650,11 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 				time.Sleep(150 * time.Millisecond)
 				hasDrawerLabelOption, _, _ = drawerEl.Has(`button[aria-label^="Toggle work item label "]`)
 			}
-			if hasFullViewBtn && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete") {
-				res.Assertions = append(res.Assertions, "Work Item side panel renders top value-only property dropdown pills (Status, Priority, Assignee, Module, Epic, Cycle, Start Date, Due Date, Estimate) and separate 'Labels:' line with multi-select dropdown")
+			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete") {
+				res.Assertions = append(res.Assertions, "Work Item side panel renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, plus separate 'Labels:' line with multi-select dropdown")
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side panel failed assertions: hasFullView=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v", hasFullViewBtn, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption))
+				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side panel failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption))
 			}
 		} else {
 			res.Passed = false

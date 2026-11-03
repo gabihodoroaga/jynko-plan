@@ -16,31 +16,31 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
   imports: [CommonModule, FormsModule, DropdownComponent],
   template: `
     <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
-      <!-- Header (New Project button removed; project creation is triggered via "+" in the left Projects tree) -->
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-base font-semibold text-slate-900">
-            Project Overview & Per-Project RBAC
-          </h2>
-          <p class="text-xs text-slate-500">
-            Projects are the top-level tenant boundary in Jynko (no workspaces). Use the <code class="font-mono">+</code> button next to <strong>Projects</strong> in the left panel to create a project.
-          </p>
-        </div>
-      </div>
-
       <!-- Active Project Card -->
       @if (projectService.activeProject(); as proj) {
         <div class="bg-white border border-slate-200 rounded-md p-4 shadow-card space-y-3">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2.5">
               <span class="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-xs font-semibold text-slate-700">
                 {{ proj.key_prefix }}
               </span>
               <h3 class="text-sm font-semibold text-slate-900">{{ proj.name }}</h3>
             </div>
-            <span class="px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[11px] font-medium">
-              Your Role: {{ projectService.currentUserRole() }}
-            </span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[11px] font-medium">
+                Your Role: {{ projectService.currentUserRole() }}
+              </span>
+              @if (projectService.isAdmin()) {
+                <button
+                  type="button"
+                  (click)="projectService.openEditProjectModal(proj)"
+                  aria-label="Edit project"
+                  class="px-2.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-600 transition-colors"
+                >
+                  Edit
+                </button>
+              }
+            </div>
           </div>
           <p class="text-xs text-slate-600">{{ proj.description }}</p>
           <div class="flex flex-wrap items-center justify-between gap-2 pt-1">

@@ -83,6 +83,9 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - Work Item detail drawer & full page selectors: `button[aria-label="Open work item full page"]`, `a[aria-label="Back to Work Items"]`, `input[aria-label="Work item start date"]`, `input[aria-label="Work item due date"]`, `input[aria-label="Work item estimate"]`
     - Project member role selector: `button[aria-label="Select member role"]`
     - Wiki toolbar selectors: `button[aria-label="Text block style"]`, `button[aria-label="Text color"]`
+    - Cycles CRUD selectors (`/projects/:projectId/cycles`): `button[aria-label="Create new cycle"]`, `button[aria-label^="Edit cycle "]`, `button[aria-label^="Delete cycle "]`, `button[aria-label^="Toggle active status for "]`, `input[aria-label="Edit cycle name"]`
+    - Epics CRUD selectors (`/projects/:projectId/epics`): `button[aria-label="Create new epic"]`, `button[aria-label^="Edit epic "]`, `button[aria-label^="Delete epic "]`, `button[aria-label^="Epic status for "]`, `input[aria-label="Edit epic name"]`
+    - Modules CRUD selectors (`/projects/:projectId/modules`): `button[aria-label="Create new module"]`, `button[aria-label^="Edit module "]`, `button[aria-label^="Delete module "]`, `button[aria-label^="Module lead for "]`, `input[aria-label="Edit module name"]`
   - Open floating menu container: `[role="listbox"]`
   - Menu options: `[role="option"]`
 

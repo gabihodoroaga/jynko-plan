@@ -81,6 +81,24 @@ export class ProjectService {
 
   readonly isAdmin = computed<boolean>(() => this.currentUserRole() === 'ADMIN');
 
+  readonly isProjectModalOpen = signal<boolean>(false);
+  readonly editingProject = signal<Project | null>(null);
+
+  openCreateProjectModal(): void {
+    this.editingProject.set(null);
+    this.isProjectModalOpen.set(true);
+  }
+
+  openEditProjectModal(project: Project): void {
+    this.editingProject.set(project);
+    this.isProjectModalOpen.set(true);
+  }
+
+  closeProjectModal(): void {
+    this.isProjectModalOpen.set(false);
+    this.editingProject.set(null);
+  }
+
   loadProjects(): void {
     this.api.get<Project[]>('/projects').subscribe({
       next: (list) => {
@@ -142,6 +160,51 @@ export class ProjectService {
     });
   }
 
+  updateProject(
+    projectId: string,
+    patch: { name?: string; key_prefix?: string; description?: string },
+    onUpdated?: (project: Project) => void
+  ): void {
+    if (!projectId) return;
+    const current = this.projects().find((p) => p.id === projectId);
+    if (!current) return;
+
+    const payload: Record<string, unknown> = {};
+    const optimistic: Partial<Project> = {};
+
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      if (!trimmed) return;
+      payload['name'] = trimmed;
+      optimistic.name = trimmed;
+    }
+    if (patch.key_prefix !== undefined) {
+      const cleanPrefix = patch.key_prefix.trim().toUpperCase();
+      if (cleanPrefix) {
+        payload['key_prefix'] = cleanPrefix;
+        optimistic.key_prefix = cleanPrefix;
+      }
+    }
+    if (patch.description !== undefined) {
+      const trimmed = patch.description.trim();
+      payload['description'] = trimmed;
+      optimistic.description = trimmed;
+    }
+
+    this.projects.update((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, ...optimistic } : p))
+    );
+
+    this.api.patch<Project>(`/projects/${projectId}`, payload).subscribe({
+      next: (saved) => {
+        this.projects.update((prev) => prev.map((p) => (p.id === projectId ? saved : p)));
+        if (onUpdated) {
+          onUpdated(saved);
+        }
+      },
+    });
+  }
+
   upsertMember(email: string, name: string, role: ProjectRole): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
@@ -180,12 +243,51 @@ export class ProjectService {
       });
   }
 
+  updateModule(
+    moduleId: string,
+    patch: { name?: string; description?: string; lead_user_id?: string }
+  ): void {
+    const projectId = this.activeProjectId();
+    if (!projectId) return;
+    const current = this.modules().find((m) => m.id === moduleId);
+    if (!current) return;
+
+    const payload: Record<string, unknown> = {};
+    const optimistic: Partial<Module> = {};
+
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      if (!trimmed) return;
+      payload['name'] = trimmed;
+      optimistic.name = trimmed;
+    }
+    if (patch.description !== undefined) {
+      const trimmed = patch.description.trim();
+      payload['description'] = trimmed;
+      optimistic.description = trimmed;
+    }
+    if (patch.lead_user_id !== undefined) {
+      const trimmed = patch.lead_user_id.trim();
+      payload['lead_user_id'] = trimmed;
+      optimistic.lead_user_id = trimmed;
+    }
+
+    this.modules.update((prev) =>
+      prev.map((m) => (m.id === moduleId ? { ...m, ...optimistic } : m))
+    );
+
+    this.api.patch<Module>(`/projects/${projectId}/modules/${moduleId}`, payload).subscribe({
+      next: (saved) => {
+        this.modules.update((prev) => prev.map((m) => (m.id === moduleId ? saved : m)));
+      },
+    });
+  }
+
   deleteModule(moduleId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
-    this.api.delete(`/projects/${projectId}/modules/${moduleId}`).subscribe({
-      next: () => this.modules.update((prev) => prev.filter((m) => m.id !== moduleId)),
-    });
+    this.modules.update((prev) => prev.filter((m) => m.id !== moduleId));
+    this.api.delete(`/projects/${projectId}/modules/${moduleId}`).subscribe();
   }
 
   createEpic(
@@ -209,12 +311,80 @@ export class ProjectService {
     });
   }
 
+  updateEpic(
+    epicId: string,
+    patch: {
+      name?: string;
+      description?: string;
+      status?: Epic['status'];
+      start_date?: string;
+      target_date?: string;
+    }
+  ): void {
+    const projectId = this.activeProjectId();
+    if (!projectId) return;
+    const current = this.epics().find((e) => e.id === epicId);
+    if (!current) return;
+
+    const payload: Record<string, unknown> = {};
+    const optimistic: Partial<Epic> = {};
+
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      if (!trimmed) return;
+      payload['name'] = trimmed;
+      optimistic.name = trimmed;
+    }
+    if (patch.description !== undefined) {
+      const trimmed = patch.description.trim();
+      payload['description'] = trimmed;
+      optimistic.description = trimmed;
+    }
+    if (patch.status !== undefined) {
+      payload['status'] = patch.status;
+      optimistic.status = patch.status;
+    }
+    if (patch.start_date !== undefined) {
+      if (!patch.start_date) {
+        payload['start_date'] = '';
+        optimistic.start_date = undefined;
+      } else {
+        const iso = patch.start_date.includes('T')
+          ? patch.start_date
+          : new Date(patch.start_date).toISOString();
+        payload['start_date'] = iso;
+        optimistic.start_date = iso;
+      }
+    }
+    if (patch.target_date !== undefined) {
+      if (!patch.target_date) {
+        payload['target_date'] = '';
+        optimistic.target_date = undefined;
+      } else {
+        const iso = patch.target_date.includes('T')
+          ? patch.target_date
+          : new Date(patch.target_date).toISOString();
+        payload['target_date'] = iso;
+        optimistic.target_date = iso;
+      }
+    }
+
+    this.epics.update((prev) =>
+      prev.map((e) => (e.id === epicId ? { ...e, ...optimistic } : e))
+    );
+
+    this.api.patch<Epic>(`/projects/${projectId}/epics/${epicId}`, payload).subscribe({
+      next: (saved) => {
+        this.epics.update((prev) => prev.map((e) => (e.id === epicId ? saved : e)));
+      },
+    });
+  }
+
   deleteEpic(epicId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
-    this.api.delete(`/projects/${projectId}/epics/${epicId}`).subscribe({
-      next: () => this.epics.update((prev) => prev.filter((e) => e.id !== epicId)),
-    });
+    this.epics.update((prev) => prev.filter((e) => e.id !== epicId));
+    this.api.delete(`/projects/${projectId}/epics/${epicId}`).subscribe();
   }
 
   createCycle(
@@ -238,12 +408,70 @@ export class ProjectService {
     });
   }
 
+  updateCycle(
+    cycleId: string,
+    patch: {
+      name?: string;
+      description?: string;
+      start_date?: string;
+      end_date?: string;
+      is_active?: boolean;
+    }
+  ): void {
+    const projectId = this.activeProjectId();
+    if (!projectId) return;
+    const current = this.cycles().find((c) => c.id === cycleId);
+    if (!current) return;
+
+    const payload: Record<string, unknown> = {};
+    const optimistic: Partial<Cycle> = {};
+
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      if (!trimmed) return;
+      payload['name'] = trimmed;
+      optimistic.name = trimmed;
+    }
+    if (patch.description !== undefined) {
+      const trimmed = patch.description.trim();
+      payload['description'] = trimmed;
+      optimistic.description = trimmed;
+    }
+    if (patch.start_date !== undefined && patch.start_date) {
+      const iso = patch.start_date.includes('T')
+        ? patch.start_date
+        : new Date(patch.start_date).toISOString();
+      payload['start_date'] = iso;
+      optimistic.start_date = iso;
+    }
+    if (patch.end_date !== undefined && patch.end_date) {
+      const iso = patch.end_date.includes('T')
+        ? patch.end_date
+        : new Date(patch.end_date).toISOString();
+      payload['end_date'] = iso;
+      optimistic.end_date = iso;
+    }
+    if (patch.is_active !== undefined) {
+      payload['is_active'] = patch.is_active;
+      optimistic.is_active = patch.is_active;
+    }
+
+    this.cycles.update((prev) =>
+      prev.map((c) => (c.id === cycleId ? { ...c, ...optimistic } : c))
+    );
+
+    this.api.patch<Cycle>(`/projects/${projectId}/cycles/${cycleId}`, payload).subscribe({
+      next: (saved) => {
+        this.cycles.update((prev) => prev.map((c) => (c.id === cycleId ? saved : c)));
+      },
+    });
+  }
+
   deleteCycle(cycleId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
-    this.api.delete(`/projects/${projectId}/cycles/${cycleId}`).subscribe({
-      next: () => this.cycles.update((prev) => prev.filter((c) => c.id !== cycleId)),
-    });
+    this.cycles.update((prev) => prev.filter((c) => c.id !== cycleId));
+    this.api.delete(`/projects/${projectId}/cycles/${cycleId}`).subscribe();
   }
 
   createLabel(name: string, color: string): void {
