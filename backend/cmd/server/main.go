@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -217,6 +219,36 @@ func SetupRouter(
 		projGroup.POST("/stickies", member, stickyHandler.CreateSticky)
 		projGroup.PATCH("/stickies/:stickyId", member, stickyHandler.UpdateSticky)
 		projGroup.DELETE("/stickies/:stickyId", member, stickyHandler.DeleteSticky)
+	}
+
+	// Static SPA asset serving & HTML5 history routing fallback (when STATIC_DIR is configured)
+	if cfg.StaticDir != "" {
+		cleanStaticDir := filepath.Clean(cfg.StaticDir)
+		indexFile := filepath.Join(cleanStaticDir, "index.html")
+
+		r.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			// Don't intercept unmatched API routes; return standard 404 JSON
+			if strings.HasPrefix(path, "/api/") {
+				c.JSON(http.StatusNotFound, gin.H{"error": "route not found"})
+				return
+			}
+
+			// If the requested static file exists on disk, serve it directly
+			candidate := filepath.Join(cleanStaticDir, filepath.Clean(path))
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				c.File(candidate)
+				return
+			}
+
+			// Otherwise, fall back to index.html for Angular client-side push-state routing
+			if _, err := os.Stat(indexFile); err == nil {
+				c.File(indexFile)
+				return
+			}
+
+			c.JSON(http.StatusNotFound, gin.H{"error": "static frontend not found"})
+		})
 	}
 
 	return r

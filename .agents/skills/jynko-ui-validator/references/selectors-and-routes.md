@@ -82,7 +82,10 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - New Work Item modal selectors: `button[aria-label="New work item status"]`, `button[aria-label="New work item priority"]`, `textarea[aria-label="New work item description"]`, `input[aria-label="New work item start date"]`, `input[aria-label="New work item due date"]`
     - Work Item detail drawer & full page selectors: `button[aria-label="Open work item full page"]`, `a[aria-label="Back to Work Items"]`, `input[aria-label="Work item start date"]`, `input[aria-label="Work item due date"]`, `input[aria-label="Work item estimate"]`
     - Project member role selector: `button[aria-label="Select member role"]`
-    - Wiki toolbar selectors: `button[aria-label="Text block style"]`, `button[aria-label="Text color"]`
+    - User account card & profile selectors: `button[aria-label="Open user menu"]`, `[data-testid="user-dropdown-card"]`, `button[aria-label="Open user profile"]`, `button[aria-label="Sign out"]`, `input[aria-label="Profile display name"]`, `input[aria-label="Profile email"][readonly]`, `input[aria-label="Profile avatar URL"]`
+    - Project Overview edit selector: `button[aria-label="Edit project"]`
+    - Project Labels CRUD selectors: `input[aria-label^="Edit label name "]`, `input[aria-label^="Edit label color "]`, `button[aria-label^="Remove label "]`, `input[aria-label="New label name"]`
+    - Wiki toolbar selectors: `button[aria-label="Text block style"]`, `button[aria-label="Text color"]`, `button[aria-label="Save wiki page"]`
     - Cycles CRUD selectors (`/projects/:projectId/cycles`): `button[aria-label="Create new cycle"]`, `button[aria-label^="Edit cycle "]`, `button[aria-label^="Delete cycle "]`, `button[aria-label^="Toggle active status for "]`, `input[aria-label="Edit cycle name"]`
     - Epics CRUD selectors (`/projects/:projectId/epics`): `button[aria-label="Create new epic"]`, `button[aria-label^="Edit epic "]`, `button[aria-label^="Delete epic "]`, `button[aria-label^="Epic status for "]`, `input[aria-label="Edit epic name"]`
     - Modules CRUD selectors (`/projects/:projectId/modules`): `button[aria-label="Create new module"]`, `button[aria-label^="Edit module "]`, `button[aria-label^="Delete module "]`, `button[aria-label^="Module lead for "]`, `input[aria-label="Edit module name"]`

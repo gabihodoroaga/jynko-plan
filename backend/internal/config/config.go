@@ -17,6 +17,7 @@ type Config struct {
 	DevUserEmail        string
 	DevUserName         string
 	CORSAllowedOrigins  []string
+	StaticDir           string
 }
 
 // Load reads an optional .env file and populates Config from environment variables.
@@ -43,6 +44,7 @@ func Load() *Config {
 		DevUserEmail:        getEnv("DEV_USER_EMAIL", "dev@jynko.local"),
 		DevUserName:         getEnv("DEV_USER_NAME", "Local Developer"),
 		CORSAllowedOrigins:  origins,
+		StaticDir:           getEnv("STATIC_DIR", ""),
 	}
 }
 

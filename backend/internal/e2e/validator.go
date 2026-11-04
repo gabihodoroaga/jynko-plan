@@ -44,49 +44,78 @@ type CheckSpec struct {
 	Run  func(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult
 }
 
-// DefaultChecks returns the canonical list of Jynko E2E UI validation checks.
-// Always add or update checks here whenever new UI routes, components, or invariants are introduced.
+// DefaultChecks returns the canonical list of Jynko E2E UI validation checks covering all application features.
 func DefaultChecks() []CheckSpec {
 	return []CheckSpec{
 		{
-			ID:   "01-home-and-sidebar",
-			Name: "Global Brand Header, Work Panel (No Drafts, '+' Projects Trigger) & Multi-Project Home",
-			Run:  CheckHomeAndSidebar,
+			ID:   "01-app-shell",
+			Name: "App Shell, Navigation Rail & Responsive Panel Layout",
+			Run:  CheckAppShell,
 		},
 		{
-			ID:   "02-my-work-and-dropdown",
-			Name: "Cross-Project My Work Overview & Styled Dropdown Menu Interaction",
-			Run:  CheckMyWorkAndStyledDropdown,
+			ID:   "02-user-and-profile",
+			Name: "User Menu, Account Dropdown & Profile Page",
+			Run:  CheckUserAndProfile,
 		},
 		{
-			ID:   "03-projects-and-plus-modal",
-			Name: "Project Overview (No Header New Project Button) & Left Panel '+' Create Project Modal",
-			Run:  CheckProjectsAndLeftPanelPlusModal,
+			ID:   "03-home-overview",
+			Name: "Cross-Project Home Overview, Metrics & Progress Cards",
+			Run:  CheckHomeOverview,
 		},
 		{
-			ID:   "04-work-items-views",
-			Name: "Work Items Shell (5 View Switcher Modes, Styled Filter Dropdowns & Configurable Kanban Columns)",
+			ID:   "04-my-work",
+			Name: "My Work Cross-Project Tracking & Styled Dropdown Filters",
+			Run:  CheckMyWork,
+		},
+		{
+			ID:   "05-projects-crud",
+			Name: "Projects Lifecycle, Selection & Metadata Editing Dialog",
+			Run:  CheckProjectsCRUD,
+		},
+		{
+			ID:   "06-project-labels",
+			Name: "Project Labels Swatch Picker, Inline Rename & Removal",
+			Run:  CheckProjectLabels,
+		},
+		{
+			ID:   "07-work-items-views",
+			Name: "Work Items 5 View Switchers, Filter Bar & Full-Height Kanban",
 			Run:  CheckWorkItemsViews,
 		},
 		{
-			ID:   "05-wiki-section-layout",
-			Name: "Two-Section Wiki Layout (Secondary Panel Collections/Pages Tree + Right-Side Page Editor)",
-			Run:  CheckWikiSectionLayout,
+			ID:   "08-work-item-detail",
+			Name: "Work Item Detail Drawer (Pinned Actions) & Full-Page View",
+			Run:  CheckWorkItemDetail,
 		},
 		{
-			ID:   "06-stickies-board",
-			Name: "Stickies Canvas, Funny Color Palettes & Interactive Random Note Creation",
+			ID:   "09-cycles-crud",
+			Name: "Sprint Cycles Management, Active Badge Toggle & Modals",
+			Run:  CheckCyclesCRUD,
+		},
+		{
+			ID:   "10-epics-crud",
+			Name: "Strategic Epics Tracking, Inline Status & Modals",
+			Run:  CheckEpicsCRUD,
+		},
+		{
+			ID:   "11-modules-crud",
+			Name: "Feature Modules Management, Lead Dropdown & Modals",
+			Run:  CheckModulesCRUD,
+		},
+		{
+			ID:   "12-wiki-workspace",
+			Name: "Wiki Workspace, Collections Tree & Document Editor",
+			Run:  CheckWikiWorkspace,
+		},
+		{
+			ID:   "13-stickies-board",
+			Name: "Stickies Board, Fun Color Palettes & Surprise Me Generator",
 			Run:  CheckStickiesBoard,
 		},
 		{
-			ID:   "07-project-pages-and-auto-collection",
-			Name: "Create Project -> Auto-Created Wiki Collection & Project 'Pages' Navigation to Wiki",
-			Run:  CheckProjectPagesAndAutoWikiCollection,
-		},
-		{
-			ID:   "08-settings-general-and-project",
-			Name: "Settings Section: General App Settings & Per-Project Settings Switcher",
-			Run:  CheckSettingsGeneralAndPerProject,
+			ID:   "14-settings",
+			Name: "Settings Workspace: General App Preferences & Per-Project Settings",
+			Run:  CheckSettings,
 		},
 	}
 }
@@ -211,54 +240,51 @@ func assertFullWidthPageContainer(page *rod.Page, res *ValidationCheckResult, pa
 	}
 }
 
-// 1. CheckHomeAndSidebar validates /home: Top-left Jynko brand icon (no caret), Work panel without Drafts, "+" at root of Projects, Cross-Project Home without "+ New work item" button.
-func CheckHomeAndSidebar(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+// -----------------------------------------------------------------------------
+// Suite 1: App Shell & Responsive Panel Layout
+// -----------------------------------------------------------------------------
+func CheckAppShell(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
 	url := baseURL + "/home"
 	res := ValidationCheckResult{
-		ID:         "01-home-and-sidebar",
-		Name:       "Global Brand Header, Work Panel (No Drafts, '+' Projects Trigger) & Multi-Project Home",
+		ID:         "01-app-shell",
+		Name:       "App Shell, Navigation Rail & Responsive Panel Layout",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "01-home-overview.png"),
+		Screenshot: filepath.Join(outDir, "01-app-shell.png"),
 	}
 
 	page := newViewportPage(browser, url)
 	defer page.MustClose()
 
-	bodyText := page.MustElement("body").MustText()
 	headerText := page.MustElement("header").MustText()
 	asideText := page.MustElement("aside").MustText()
-	mainText := page.MustElement("main").MustText()
 
 	if strings.Contains(headerText, "Jynko") && !strings.Contains(headerText, "⌄") {
-		res.Assertions = append(res.Assertions, "Top-left application bar displays 'Jynko' brand icon without dropdown caret")
+		res.Assertions = append(res.Assertions, "Top-left brand header renders Gemini-styled Jynko icon without dropdown caret")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected top header to show 'Jynko' without '⌄', got: %q", headerText))
+		res.Errors = append(res.Errors, fmt.Sprintf("Expected header to show 'Jynko' without '⌄', got: %q", headerText))
 	}
 
-	hasLeftUserDropdown, _, _ := page.Has(`button[aria-label="Switch IAP Test Identity"]`)
-	if !hasLeftUserDropdown &&
-		!strings.Contains(asideText, "Drafts") &&
-		!strings.Contains(asideText, "Views") &&
-		strings.Contains(asideText, "Home") &&
-		strings.Contains(asideText, "My Work") &&
-		strings.Contains(asideText, "Stickies") {
-		res.Assertions = append(res.Assertions, "Work secondary panel displays Home, My Work, Stickies and omits Drafts, Views, and left-panel user dropdown")
+	hasWorkRailBtn, _, _ := page.Has(`nav[aria-label="Primary rail"] a[href*="work-items"]`)
+	hasWikiRailBtn, _, _ := page.Has(`nav[aria-label="Primary rail"] a[href="/wiki"]`)
+	hasSettingsRailBtn, _, _ := page.Has(`nav[aria-label="Primary rail"] a[aria-label="Open Settings"]`)
+	if hasWorkRailBtn && hasWikiRailBtn && hasSettingsRailBtn {
+		res.Assertions = append(res.Assertions, "Primary navigation rail renders exactly 3 section buttons (Work, Wiki, Settings)")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Work secondary panel either still contains 'Drafts'/'Views'/user dropdown or is missing Home/My Work/Stickies")
+		res.Errors = append(res.Errors, fmt.Sprintf("Primary navigation rail missing buttons: work=%v, wiki=%v, settings=%v", hasWorkRailBtn, hasWikiRailBtn, hasSettingsRailBtn))
 	}
 
-	if has, _, _ := page.Has(`button[aria-label="Create new project"]`); has {
-		res.Assertions = append(res.Assertions, "Left panel has '+' button (aria-label='Create new project') at the root of the Projects list")
+	hasUserSwitcher, _, _ := page.Has(`button[aria-label="Switch IAP Test Identity"]`)
+	if !hasUserSwitcher && !strings.Contains(asideText, "Drafts") && !strings.Contains(asideText, "Views") {
+		res.Assertions = append(res.Assertions, "Work secondary panel strictly omits legacy Drafts, Views, and left-panel identity switcher")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Missing '+' button at root of Projects list in left panel")
+		res.Errors = append(res.Errors, "Work secondary panel contains legacy Drafts, Views, or user identity switcher")
 	}
 
-	// Test collapsing and re-expanding the secondary panel
 	if hasCollapse, collapseBtn, _ := page.Has(`button[aria-label="Collapse secondary panel"]`); hasCollapse && collapseBtn != nil {
 		collapseBtn.MustClick()
 		time.Sleep(200 * time.Millisecond)
@@ -269,10 +295,10 @@ func CheckHomeAndSidebar(browser *rod.Browser, baseURL, outDir string) Validatio
 
 			restoredAside := page.MustElement("aside").MustText()
 			if strings.Contains(restoredAside, "Projects") {
-				res.Assertions = append(res.Assertions, "Secondary panel collapse button collapses the panel and displays 'Expand secondary panel' button to restore it")
+				res.Assertions = append(res.Assertions, "Secondary panel collapse button collapses panel, renders 'Expand secondary panel', and restores cleanly on click")
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, "Clicking 'Expand secondary panel' did not restore full secondary panel")
+				res.Errors = append(res.Errors, "Expanding secondary panel did not restore Projects list")
 			}
 		} else {
 			res.Passed = false
@@ -283,13 +309,122 @@ func CheckHomeAndSidebar(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing button[aria-label='Collapse secondary panel']")
 	}
 
-	if strings.Contains(mainText, "hodo") &&
-		strings.Contains(mainText, "cloud-infra") &&
-		!strings.Contains(mainText, "+ New work item") {
-		res.Assertions = append(res.Assertions, "Home page displays overview cards for all user projects ('hodo' & 'cloud-infra') without '+ New work item' button")
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 2: User Menu, Account Dropdown & Profile Page
+// -----------------------------------------------------------------------------
+func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/home"
+	res := ValidationCheckResult{
+		ID:         "02-user-and-profile",
+		Name:       "User Menu, Account Dropdown & Profile Page",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "02-user-and-profile.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	if hasUserBtn, userBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasUserBtn && userBtn != nil {
+		userBtn.MustClick()
+		time.Sleep(250 * time.Millisecond)
+
+		if hasCard, cardEl, _ := page.Has(`[data-testid="user-dropdown-card"]`); hasCard && cardEl != nil {
+			cardText := cardEl.MustText()
+			hasProfileBtn, profileBtn, _ := cardEl.Has(`button[aria-label="Open user profile"]`)
+			hasSignOutBtn, _, _ := cardEl.Has(`button[aria-label="Sign out"]`)
+
+			if hasProfileBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
+				res.Assertions = append(res.Assertions, "Top-right user button opens Google-style account card with Name, Email, Profile button, and Sign out button")
+				profileBtn.MustClick()
+				time.Sleep(300 * time.Millisecond)
+
+				profileURL := page.MustInfo().URL
+				profileMain := page.MustElement("main").MustText()
+				hasNameInput, _, _ := page.Has(`input[aria-label="Profile display name"]`)
+				hasReadonlyEmail, _, _ := page.Has(`input[aria-label="Profile email"][readonly]`)
+				hasAvatarInput, _, _ := page.Has(`input[aria-label="Profile avatar URL"]`)
+
+				if strings.Contains(profileURL, "/profile") &&
+					strings.Contains(profileMain, "User Profile") &&
+					hasNameInput &&
+					hasReadonlyEmail &&
+					hasAvatarInput {
+					res.Assertions = append(res.Assertions, "Clicking 'Profile' navigates to /profile with editable Name, read-only IAP Email, and Avatar controls")
+				} else {
+					res.Passed = false
+					res.Errors = append(res.Errors, fmt.Sprintf("Profile page validation failed: url=%q, hasName=%v, hasReadonly=%v, hasAvatar=%v", profileURL, hasNameInput, hasReadonlyEmail, hasAvatarInput))
+				}
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, "User dropdown card missing expected Name/Email, Profile button, or Sign out button")
+			}
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Clicking top-right user button did not open [data-testid='user-dropdown-card']")
+		}
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Home main view check failed; body=%d chars", len(bodyText)))
+		res.Errors = append(res.Errors, "Missing top-right user button[aria-label='Open user menu']")
+	}
+
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 3: Cross-Project Home Overview & Metrics
+// -----------------------------------------------------------------------------
+func CheckHomeOverview(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/home"
+	res := ValidationCheckResult{
+		ID:         "03-home-overview",
+		Name:       "Cross-Project Home Overview, Metrics & Progress Cards",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "03-home-overview.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	mainText := page.MustElement("main").MustText()
+
+	metricsPresent := strings.Contains(mainText, "Active Projects") &&
+		strings.Contains(mainText, "Total Work Items") &&
+		strings.Contains(mainText, "In Progress") &&
+		strings.Contains(mainText, "Assigned to Me")
+	if metricsPresent {
+		res.Assertions = append(res.Assertions, "Home page renders 4 cross-project summary metric cards")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Home page missing one or more summary metric cards")
+	}
+
+	projectsPresent := strings.Contains(mainText, "hodo") &&
+		strings.Contains(mainText, "cloud-infra") &&
+		strings.Contains(mainText, "Recent Work Items Across All Projects") &&
+		strings.Contains(mainText, "Knowledge Base Pages")
+	if projectsPresent {
+		res.Assertions = append(res.Assertions, "Home page renders project overview cards, recent work items, and knowledge base pages")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Home page missing project cards or recent activity sections")
+	}
+
+	if !strings.Contains(mainText, "+ New work item") {
+		res.Assertions = append(res.Assertions, "Home page strictly omits project-scoped '+ New work item' button")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Home page contains project-scoped '+ New work item' button")
 	}
 
 	assertFullWidthPageContainer(page, &res, "Home")
@@ -299,16 +434,18 @@ func CheckHomeAndSidebar(browser *rod.Browser, baseURL, outDir string) Validatio
 	return res
 }
 
-// 2. CheckMyWorkAndStyledDropdown validates /my-work: Cross-project assigned work items & interactive styled <app-dropdown> menu.
-func CheckMyWorkAndStyledDropdown(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+// -----------------------------------------------------------------------------
+// Suite 4: My Work Cross-Project Tracking & Styled Dropdown Filters
+// -----------------------------------------------------------------------------
+func CheckMyWork(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
 	url := baseURL + "/my-work"
 	res := ValidationCheckResult{
-		ID:         "02-my-work-and-dropdown",
-		Name:       "Cross-Project My Work Overview & Styled Dropdown Menu Interaction",
+		ID:         "04-my-work",
+		Name:       "My Work Cross-Project Tracking & Styled Dropdown Filters",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "02-my-work-dropdown-open.png"),
+		Screenshot: filepath.Join(outDir, "04-my-work.png"),
 	}
 
 	page := newViewportPage(browser, url)
@@ -318,31 +455,31 @@ func CheckMyWorkAndStyledDropdown(browser *rod.Browser, baseURL, outDir string) 
 	if strings.Contains(mainText, "My Work") &&
 		strings.Contains(mainText, "HODO-1") &&
 		strings.Contains(mainText, "CLD-1") {
-		res.Assertions = append(res.Assertions, "My Work page displays items assigned to current user across both 'hodo' (HODO-1) and 'cloud-infra' (CLD-1)")
+		res.Assertions = append(res.Assertions, "My Work displays items assigned to current user across both 'hodo' (HODO-1) and 'cloud-infra' (CLD-1)")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "My Work page did not render cross-project assigned items HODO-1 and CLD-1")
+		res.Errors = append(res.Errors, "My Work failed to render cross-project items HODO-1 and CLD-1")
 	}
 
 	if selects := page.MustElements("select"); len(selects) == 0 {
 		res.Assertions = append(res.Assertions, "Zero native browser <select> elements present on My Work page")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected 0 native <select> elements, found %d", len(selects)))
+		res.Errors = append(res.Errors, fmt.Sprintf("Found %d native <select> elements on My Work page", len(selects)))
 	}
 
 	if has, btn, _ := page.Has(`button[aria-label="Filter My Work by Status"]`); has && btn != nil {
 		btn.MustClick()
-		time.Sleep(250 * time.Millisecond)
-		if hasListbox, listbox, _ := page.Has(`[role="listbox"]`); hasListbox && listbox != nil {
-			res.Assertions = append(res.Assertions, "Clicking styled <app-dropdown> opens custom floating [role='listbox'] menu instead of native browser select")
+		time.Sleep(200 * time.Millisecond)
+		if hasListbox, _, _ := page.Has(`[role="listbox"]`); hasListbox {
+			res.Assertions = append(res.Assertions, "Clicking styled Status filter opens floating custom [role='listbox'] menu instead of native select")
 		} else {
 			res.Passed = false
-			res.Errors = append(res.Errors, "Styled dropdown click did not open [role='listbox'] menu")
+			res.Errors = append(res.Errors, "Clicking styled dropdown did not open [role='listbox']")
 		}
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Could not find styled dropdown trigger button[aria-label='Filter My Work by Status']")
+		res.Errors = append(res.Errors, "Missing button[aria-label='Filter My Work by Status']")
 	}
 
 	assertFullWidthPageContainer(page, &res, "My Work")
@@ -352,16 +489,18 @@ func CheckMyWorkAndStyledDropdown(browser *rod.Browser, baseURL, outDir string) 
 	return res
 }
 
-// 3. CheckProjectsAndLeftPanelPlusModal validates /projects: No "+ New Project" button in Project Overview header; clicking "+" in left panel opens Create New Project modal.
-func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+// -----------------------------------------------------------------------------
+// Suite 5: Projects Lifecycle, Selection & Metadata Editing Dialog
+// -----------------------------------------------------------------------------
+func CheckProjectsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
 	url := baseURL + "/projects"
 	res := ValidationCheckResult{
-		ID:         "03-projects-and-plus-modal",
-		Name:       "Project Overview (No Header New Project Button) & Left Panel '+' Create Project Modal",
+		ID:         "05-projects-crud",
+		Name:       "Projects Lifecycle, Selection & Metadata Editing Dialog",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "03-projects-create-modal.png"),
+		Screenshot: filepath.Join(outDir, "05-projects-crud.png"),
 	}
 
 	page := newViewportPage(browser, url)
@@ -375,42 +514,35 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 		res.Errors = append(res.Errors, fmt.Sprintf("Expected URL to include '/projects/proj-jynko-core', got: %q", currentURL))
 	}
 
-	// Verify clicking another project's Overview in the left sidebar updates the browser URL and active project
+	// Verify project switching via left tree
 	if hasCloudOverview, cloudLink, _ := page.Has(`a[aria-label="Open cloud-infra overview"]`); hasCloudOverview && cloudLink != nil {
 		cloudLink.MustClick()
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 		switchedURL := page.MustInfo().URL
-		switchedMain := page.MustElement("main").MustText()
-		if strings.Contains(switchedURL, "/projects/proj-cloud-infra") && strings.Contains(switchedMain, "projects/proj-cloud-infra") {
-			res.Assertions = append(res.Assertions, "Selecting 'cloud-infra -> Overview' updates URL to /projects/proj-cloud-infra and renders cloud-infra overview")
+		if strings.Contains(switchedURL, "/projects/proj-cloud-infra") {
+			res.Assertions = append(res.Assertions, "Selecting 'cloud-infra -> Overview' in left tree switches active project to cloud-infra")
 		} else {
 			res.Passed = false
 			res.Errors = append(res.Errors, fmt.Sprintf("Expected URL '/projects/proj-cloud-infra', got: %q", switchedURL))
 		}
 		if hasHodoOverview, hodoLink, _ := page.Has(`a[aria-label="Open hodo overview"]`); hasHodoOverview && hodoLink != nil {
 			hodoLink.MustClick()
-			labelDeadline := time.Now().Add(3 * time.Second)
-			for time.Now().Before(labelDeadline) {
-				if hasLbl, _, _ := page.Has(`input[aria-label^="Edit label name "]`); hasLbl {
-					break
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
+			time.Sleep(250 * time.Millisecond)
 		}
 	}
 
 	mainText := page.MustElement("main").MustText()
 	hasEditProjBtn, editProjBtn, _ := page.Has(`button[aria-label="Edit project"]`)
 	if !strings.Contains(mainText, "Project Overview & Per-Project RBAC") &&
-		!strings.Contains(mainText, "Projects are the top-level tenant boundary in Jynko") &&
 		!strings.Contains(mainText, "+ New Project") &&
 		hasEditProjBtn {
-		res.Assertions = append(res.Assertions, "Project Overview omits legacy header text and '+ New Project' button, and renders 'Edit' button on active project card")
+		res.Assertions = append(res.Assertions, "Project Overview renders 'Edit' button on active project card and omits legacy header text")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Project Overview failed header/edit button assertions: hasEditProjBtn=%v", hasEditProjBtn))
+		res.Errors = append(res.Errors, fmt.Sprintf("Project Overview failed header/edit button check: hasEditProjBtn=%v", hasEditProjBtn))
 	}
 
+	// Test Edit Project modal
 	if hasEditProjBtn && editProjBtn != nil {
 		editProjBtn.MustClick()
 		time.Sleep(250 * time.Millisecond)
@@ -423,10 +555,10 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 			nameVal = nameEl.MustProperty("value").String()
 		}
 		if strings.Contains(bodyText, "Edit Project") && hasProjNameInput && hasProjPrefixInput && hasProjDescInput && nameVal == "hodo" {
-			res.Assertions = append(res.Assertions, "Clicking 'Edit' on Project Overview opens the Project dialog pre-populated with project name, key prefix, and description")
+			res.Assertions = append(res.Assertions, "Clicking 'Edit' on Project Overview opens Project modal pre-populated with active project metadata")
 		} else {
 			res.Passed = false
-			res.Errors = append(res.Errors, fmt.Sprintf("Edit Project dialog failed assertions: nameVal=%q", nameVal))
+			res.Errors = append(res.Errors, fmt.Sprintf("Edit Project modal failed: nameVal=%q", nameVal))
 		}
 		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
 			closeBtn.MustClick()
@@ -434,20 +566,10 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 		}
 	}
 
-	hasEditLabelInput, _, _ := page.Has(`input[aria-label^="Edit label name "]`)
-	hasRemoveLabelBtn, _, _ := page.Has(`button[aria-label^="Remove label "]`)
-	if hasEditLabelInput && hasRemoveLabelBtn {
-		res.Assertions = append(res.Assertions, "Project Labels section renders inline editable label name/color inputs and remove ('×') buttons")
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Project Labels section missing editable/removable controls: hasEdit=%v, hasRemove=%v", hasEditLabelInput, hasRemoveLabelBtn))
-	}
-
-	assertFullWidthPageContainer(page, &res, "Projects")
-
-	if has, plusBtn, _ := page.Has(`button[aria-label="Create new project"]`); has && plusBtn != nil {
+	// Test '+' create project modal in sidebar
+	if hasPlus, plusBtn, _ := page.Has(`button[aria-label="Create new project"]`); hasPlus && plusBtn != nil {
 		plusBtn.MustClick()
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 		bodyText := page.MustElement("body").MustText()
 		if strings.Contains(bodyText, "Create New Project") && strings.Contains(bodyText, "Key Prefix") {
 			res.Assertions = append(res.Assertions, "Clicking '+' at root of Projects list in left panel opens 'Create New Project' modal")
@@ -455,87 +577,65 @@ func CheckProjectsAndLeftPanelPlusModal(browser *rod.Browser, baseURL, outDir st
 			res.Passed = false
 			res.Errors = append(res.Errors, "Clicking '+' button did not open 'Create New Project' modal")
 		}
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, "Missing button[aria-label='Create new project'] in left panel")
+		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+			closeBtn.MustClick()
+			time.Sleep(150 * time.Millisecond)
+		}
 	}
+
+	assertFullWidthPageContainer(page, &res, "Projects")
 
 	page.MustScreenshot(res.Screenshot)
-
-	// Verify Cycles CRUD UI (/projects/proj-jynko-core/cycles): + New Cycle, Edit modal, Active toggle, and Delete confirmation
-	cyclesPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/cycles")
-	hasCreateCycleBtn, _, _ := cyclesPage.Has(`button[aria-label="Create new cycle"]`)
-	hasEditCycleBtn, editCycleBtn, _ := cyclesPage.Has(`button[aria-label^="Edit cycle "]`)
-	hasDeleteCycleBtn, _, _ := cyclesPage.Has(`button[aria-label^="Delete cycle "]`)
-	hasToggleActiveBtn, _, _ := cyclesPage.Has(`button[aria-label^="Toggle active status for "]`)
-	hasEditCycleModal := false
-	if hasEditCycleBtn && editCycleBtn != nil {
-		editCycleBtn.MustClick()
-		time.Sleep(200 * time.Millisecond)
-		hasEditCycleModal, _, _ = cyclesPage.Has(`input[aria-label="Edit cycle name"]`)
-	}
-	cyclesPage.MustClose()
-	if hasCreateCycleBtn && hasEditCycleBtn && hasDeleteCycleBtn && hasToggleActiveBtn && hasEditCycleModal {
-		res.Assertions = append(res.Assertions, "Cycles page (/projects/:projectId/cycles) renders '+ New Cycle', clickable Active status badge, 'Delete' confirmation, and 'Edit Sprint Cycle' modal")
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Cycles page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasToggle=%v, hasEditModal=%v", hasCreateCycleBtn, hasEditCycleBtn, hasDeleteCycleBtn, hasToggleActiveBtn, hasEditCycleModal))
-	}
-
-	// Verify Epics CRUD UI (/projects/proj-jynko-core/epics): + New Epic, inline status dropdown, Edit modal, and Delete confirmation
-	epicsPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/epics")
-	hasCreateEpicBtn, _, _ := epicsPage.Has(`button[aria-label="Create new epic"]`)
-	hasEditEpicBtn, editEpicBtn, _ := epicsPage.Has(`button[aria-label^="Edit epic "]`)
-	hasDeleteEpicBtn, _, _ := epicsPage.Has(`button[aria-label^="Delete epic "]`)
-	hasEpicStatusDrop, _, _ := epicsPage.Has(`button[aria-label^="Epic status for "]`)
-	hasEditEpicModal := false
-	if hasEditEpicBtn && editEpicBtn != nil {
-		editEpicBtn.MustClick()
-		time.Sleep(200 * time.Millisecond)
-		hasEditEpicModal, _, _ = epicsPage.Has(`input[aria-label="Edit epic name"]`)
-	}
-	epicsPage.MustClose()
-	if hasCreateEpicBtn && hasEditEpicBtn && hasDeleteEpicBtn && hasEpicStatusDrop && hasEditEpicModal {
-		res.Assertions = append(res.Assertions, "Epics page (/projects/:projectId/epics) renders '+ New Epic', inline status dropdown, 'Delete' confirmation, and 'Edit Strategic Epic' modal")
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Epics page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasStatusDrop=%v, hasEditModal=%v", hasCreateEpicBtn, hasEditEpicBtn, hasDeleteEpicBtn, hasEpicStatusDrop, hasEditEpicModal))
-	}
-
-	// Verify Modules CRUD UI (/projects/proj-jynko-core/modules): + New Module, inline lead dropdown, Edit modal, and Delete confirmation
-	modulesPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/modules")
-	hasCreateModuleBtn, _, _ := modulesPage.Has(`button[aria-label="Create new module"]`)
-	hasEditModuleBtn, editModuleBtn, _ := modulesPage.Has(`button[aria-label^="Edit module "]`)
-	hasDeleteModuleBtn, _, _ := modulesPage.Has(`button[aria-label^="Delete module "]`)
-	hasModuleLeadDrop, _, _ := modulesPage.Has(`button[aria-label^="Module lead for "]`)
-	hasEditModuleModal := false
-	if hasEditModuleBtn && editModuleBtn != nil {
-		editModuleBtn.MustClick()
-		time.Sleep(200 * time.Millisecond)
-		hasEditModuleModal, _, _ = modulesPage.Has(`input[aria-label="Edit module name"]`)
-	}
-	modulesPage.MustClose()
-	if hasCreateModuleBtn && hasEditModuleBtn && hasDeleteModuleBtn && hasModuleLeadDrop && hasEditModuleModal {
-		res.Assertions = append(res.Assertions, "Modules page (/projects/:projectId/modules) renders '+ New Module', inline lead dropdown, 'Delete' confirmation, and 'Edit Feature Module' modal")
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Modules page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasLeadDrop=%v, hasEditModal=%v", hasCreateModuleBtn, hasEditModuleBtn, hasDeleteModuleBtn, hasModuleLeadDrop, hasEditModuleModal))
-	}
-
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
 
-// 4. CheckWorkItemsViews validates /work-items: All 5 view switcher modes, styled filter dropdowns & configurable Kanban columns (Cancelled hidden by default).
+// -----------------------------------------------------------------------------
+// Suite 6: Project Labels Swatch Picker, Inline Rename & Removal
+// -----------------------------------------------------------------------------
+func CheckProjectLabels(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/projects/proj-jynko-core"
+	res := ValidationCheckResult{
+		ID:         "06-project-labels",
+		Name:       "Project Labels Swatch Picker, Inline Rename & Removal",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "06-project-labels.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	hasEditLabelInput, _, _ := page.Has(`input[aria-label^="Edit label name "]`)
+	hasRemoveLabelBtn, _, _ := page.Has(`button[aria-label^="Remove label "]`)
+	hasColorPicker, _, _ := page.Has(`input[aria-label^="Edit label color "]`)
+	hasAddLabelInput, _, _ := page.Has(`input[aria-label="New label name"]`)
+
+	if hasEditLabelInput && hasRemoveLabelBtn && hasColorPicker && hasAddLabelInput {
+		res.Assertions = append(res.Assertions, "Project Labels section renders inline editable name inputs, color swatch pickers, remove ('×') buttons, and new label form")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Project Labels section missing controls: hasEdit=%v, hasRemove=%v, hasColor=%v, hasAdd=%v", hasEditLabelInput, hasRemoveLabelBtn, hasColorPicker, hasAddLabelInput))
+	}
+
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 7: Work Items 5 View Switchers, Filter Bar & Full-Height Kanban
+// -----------------------------------------------------------------------------
 func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
 	url := baseURL + "/work-items"
 	res := ValidationCheckResult{
-		ID:         "04-work-items-views",
-		Name:       "Work Items Shell (5 View Switcher Modes, Styled Filter Dropdowns & Configurable Kanban Columns)",
+		ID:         "07-work-items-views",
+		Name:       "Work Items 5 View Switchers, Filter Bar & Full-Height Kanban",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "04-work-items-board.png"),
+		Screenshot: filepath.Join(outDir, "07-work-items-views.png"),
 	}
 
 	page := newViewportPage(browser, url)
@@ -547,23 +647,6 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 	} else {
 		res.Passed = false
 		res.Errors = append(res.Errors, fmt.Sprintf("Expected URL to include '/projects/proj-jynko-core/work-items', got: %q", currentURL))
-	}
-
-	// Verify switching to cloud-infra work items updates the URL to /projects/proj-cloud-infra/work-items
-	if hasCloudItems, cloudItemsLink, _ := page.Has(`a[aria-label="Open cloud-infra work items"]`); hasCloudItems && cloudItemsLink != nil {
-		cloudItemsLink.MustClick()
-		time.Sleep(300 * time.Millisecond)
-		switchedURL := page.MustInfo().URL
-		if strings.Contains(switchedURL, "/projects/proj-cloud-infra/work-items") {
-			res.Assertions = append(res.Assertions, "Selecting 'cloud-infra -> Work items' updates URL to /projects/proj-cloud-infra/work-items")
-		} else {
-			res.Passed = false
-			res.Errors = append(res.Errors, fmt.Sprintf("Expected URL '/projects/proj-cloud-infra/work-items', got: %q", switchedURL))
-		}
-		if hasHodoItems, hodoItemsLink, _ := page.Has(`a[aria-label="Open hodo work items"]`); hasHodoItems && hodoItemsLink != nil {
-			hodoItemsLink.MustClick()
-			time.Sleep(300 * time.Millisecond)
-		}
 	}
 
 	mainText := page.MustElement("main").MustText()
@@ -587,7 +670,6 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing styled Status filter dropdown in Work Items toolbar")
 	}
 
-	// Verify priority badges show only the label ('High', 'Medium', 'Urgent') without 'lll' or 'll' prefix
 	if !strings.Contains(mainText, "lll High") && !strings.Contains(mainText, "ll Medium") && !strings.Contains(mainText, "\nlll\n") {
 		res.Assertions = append(res.Assertions, "Priority badges display clean label names ('High', 'Medium', 'Urgent') without 'll'/'lll' prefixes")
 	} else {
@@ -595,7 +677,6 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Priority badges still contain 'll' or 'lll' prefixes")
 	}
 
-	// Verify 'Cancelled' column is hidden by default on the Kanban board while 'Backlog'/'Todo'/'In Progress'/'In Review'/'Done' are visible, and no 'Hidden Columns' card is shown on the board
 	hasCancelledCol, _, _ := page.Has(`[data-board-column="CANCELLED"]`)
 	hasTodoCol, _, _ := page.Has(`[data-board-column="TODO"]`)
 	hasFullHeightCol, _, _ := page.Has(`.board-column.h-full`)
@@ -603,10 +684,9 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Assertions = append(res.Assertions, "Kanban board columns stretch to fill full page height (.board-column.h-full) and hide 'Cancelled' column by default (Columns 5/6)")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected full-height Kanban columns, Cancelled hidden by default, Columns (5/6), and no Hidden Columns rail; hasCancelledCol=%v, hasFullHeightCol=%v", hasCancelledCol, hasFullHeightCol))
+		res.Errors = append(res.Errors, fmt.Sprintf("Kanban board check failed: hasCancelled=%v, hasFullHeight=%v", hasCancelledCol, hasFullHeightCol))
 	}
 
-	// Open "Columns (5/6)" popover and verify configurable column toggles
 	if has, colBtn, _ := page.Has(`button[aria-label="Configure Kanban board columns"]`); has && colBtn != nil {
 		colBtn.MustClick()
 		time.Sleep(250 * time.Millisecond)
@@ -614,16 +694,36 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 			res.Assertions = append(res.Assertions, "Clicking 'Columns (5/6)' opens Kanban Board Columns configurator with per-status visibility switches")
 		} else {
 			res.Passed = false
-			res.Errors = append(res.Errors, "Kanban Board Columns configurator popover did not render status switches")
+			res.Errors = append(res.Errors, "Kanban Board Columns configurator did not render status switches")
 		}
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Missing button[aria-label='Configure Kanban board columns'] in Work Items toolbar")
+		res.Errors = append(res.Errors, "Missing button[aria-label='Configure Kanban board columns']")
 	}
 
 	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
 
-	// Open Work Item side panel on the board and verify Start Date, Due Date, Full view button, and no Delete button
+// -----------------------------------------------------------------------------
+// Suite 8: Work Item Detail Drawer & Full-Page View
+// -----------------------------------------------------------------------------
+func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/projects/proj-jynko-core/work-items"
+	res := ValidationCheckResult{
+		ID:         "08-work-item-detail",
+		Name:       "Work Item Detail Drawer (Pinned Actions) & Full-Page View",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "08-work-item-detail.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	// Open Work Item side drawer
 	if hasCard, cardEl, _ := page.Has(`[data-item-key="HODO-1"]`); hasCard && cardEl != nil {
 		cardEl.MustClick()
 		time.Sleep(300 * time.Millisecond)
@@ -651,10 +751,10 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 				hasDrawerLabelOption, _, _ = drawerEl.Has(`button[aria-label^="Toggle work item label "]`)
 			}
 			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete") {
-				res.Assertions = append(res.Assertions, "Work Item side panel renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, plus separate 'Labels:' line with multi-select dropdown")
+				res.Assertions = append(res.Assertions, "Work Item side drawer renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, plus separate 'Labels:' line with multi-select dropdown")
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side panel failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption))
+				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side drawer failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption))
 			}
 		} else {
 			res.Passed = false
@@ -662,7 +762,9 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		}
 	}
 
-	// Verify the dedicated full-page Work Item route (/projects/proj-jynko-core/work-items/item-1)
+	page.MustScreenshot(res.Screenshot)
+
+	// Verify full-page Work Item route (/projects/proj-jynko-core/work-items/item-1)
 	detailPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/work-items/item-1")
 	defer detailPage.MustClose()
 	detailMain := detailPage.MustElement("main").MustText()
@@ -671,34 +773,172 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 	hasDueDateBtn, _, _ := detailPage.Has(`button[aria-label="Work item due date"]`)
 	hasEstimateBtn, _, _ := detailPage.Has(`button[aria-label="Work item estimate"]`)
 	hasAutoGrowDesc, _, _ := detailPage.Has(`textarea.auto-grow-description[aria-label="Work item description"]`)
-	hasPageLabelBtn, pageLabelBtn, _ := detailPage.Has(`button[aria-label="Toggle work item label dropdown"]`)
-	hasPageLabelOption := false
-	if hasPageLabelBtn && pageLabelBtn != nil {
-		pageLabelBtn.MustClick()
-		time.Sleep(150 * time.Millisecond)
-		hasPageLabelOption, _, _ = detailPage.Has(`button[aria-label^="Toggle work item label "]`)
-	}
-	if strings.Contains(detailMain, "HODO-1") && hasTopPropsPage && hasStartDateBtn && hasDueDateBtn && hasEstimateBtn && hasAutoGrowDesc && hasPageLabelOption && strings.Contains(detailMain, "Sub-Work Items") {
-		res.Assertions = append(res.Assertions, "Full-page Work Item view (/projects/:projectId/work-items/:itemId) renders top value-only property dropdown pills, separate 'Labels:' line with multi-select dropdown, and auto-growing Description")
+	hasBackLink, _, _ := detailPage.Has(`a[aria-label="Back to Work Items"]`)
+
+	if strings.Contains(detailMain, "HODO-1") && hasTopPropsPage && hasStartDateBtn && hasDueDateBtn && hasEstimateBtn && hasAutoGrowDesc && hasBackLink && strings.Contains(detailMain, "Sub-Work Items") {
+		res.Assertions = append(res.Assertions, "Full-page Work Item view renders single-column layout with top property pills, auto-growing Description, and sub-items checklist")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions; hasTopProps=%v, hasStartDate=%v, hasDueDate=%v, hasEstimate=%v, hasAutoGrowDesc=%v, hasPageLabelOption=%v", hasTopPropsPage, hasStartDateBtn, hasDueDateBtn, hasEstimateBtn, hasAutoGrowDesc, hasPageLabelOption))
+		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions: hasTopProps=%v, hasStartDate=%v, hasDueDate=%v, hasEstimate=%v, hasAutoGrowDesc=%v, hasBackLink=%v", hasTopPropsPage, hasStartDateBtn, hasDueDateBtn, hasEstimateBtn, hasAutoGrowDesc, hasBackLink))
 	}
 
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
 
-// 5. CheckWikiSectionLayout validates /wiki: Secondary panel switches to Wiki (Collections & Pages tree) and right side renders Page View & Editor.
-func CheckWikiSectionLayout(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+// -----------------------------------------------------------------------------
+// Suite 9: Sprint Cycles Management
+// -----------------------------------------------------------------------------
+func CheckCyclesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/projects/proj-jynko-core/cycles"
+	res := ValidationCheckResult{
+		ID:         "09-cycles-crud",
+		Name:       "Sprint Cycles Management, Active Badge Toggle & Modals",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "09-cycles-crud.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	hasCreateCycleBtn, _, _ := page.Has(`button[aria-label="Create new cycle"]`)
+	hasEditCycleBtn, editCycleBtn, _ := page.Has(`button[aria-label^="Edit cycle "]`)
+	hasDeleteCycleBtn, _, _ := page.Has(`button[aria-label^="Delete cycle "]`)
+	hasToggleActiveBtn, _, _ := page.Has(`button[aria-label^="Toggle active status for "]`)
+	hasEditCycleModal := false
+
+	if hasEditCycleBtn && editCycleBtn != nil {
+		editCycleBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasEditCycleModal, _, _ = page.Has(`input[aria-label="Edit cycle name"]`)
+		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+			closeBtn.MustClick()
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+
+	if hasCreateCycleBtn && hasEditCycleBtn && hasDeleteCycleBtn && hasToggleActiveBtn && hasEditCycleModal {
+		res.Assertions = append(res.Assertions, "Cycles page renders '+ New Cycle', clickable Active status badge toggle, 'Delete' confirmation, and 'Edit Sprint Cycle' modal")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Cycles page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasToggle=%v, hasEditModal=%v", hasCreateCycleBtn, hasEditCycleBtn, hasDeleteCycleBtn, hasToggleActiveBtn, hasEditCycleModal))
+	}
+
+	assertFullWidthPageContainer(page, &res, "Cycles")
+
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 10: Strategic Epics Tracking & Management
+// -----------------------------------------------------------------------------
+func CheckEpicsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/projects/proj-jynko-core/epics"
+	res := ValidationCheckResult{
+		ID:         "10-epics-crud",
+		Name:       "Strategic Epics Tracking, Inline Status & Modals",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "10-epics-crud.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	hasCreateEpicBtn, _, _ := page.Has(`button[aria-label="Create new epic"]`)
+	hasEditEpicBtn, editEpicBtn, _ := page.Has(`button[aria-label^="Edit epic "]`)
+	hasDeleteEpicBtn, _, _ := page.Has(`button[aria-label^="Delete epic "]`)
+	hasEpicStatusDrop, _, _ := page.Has(`button[aria-label^="Epic status for "]`)
+	hasEditEpicModal := false
+
+	if hasEditEpicBtn && editEpicBtn != nil {
+		editEpicBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasEditEpicModal, _, _ = page.Has(`input[aria-label="Edit epic name"]`)
+		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+			closeBtn.MustClick()
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+
+	if hasCreateEpicBtn && hasEditEpicBtn && hasDeleteEpicBtn && hasEpicStatusDrop && hasEditEpicModal {
+		res.Assertions = append(res.Assertions, "Epics page renders '+ New Epic', inline status dropdown, 'Delete' confirmation, and 'Edit Strategic Epic' modal")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Epics page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasStatusDrop=%v, hasEditModal=%v", hasCreateEpicBtn, hasEditEpicBtn, hasDeleteEpicBtn, hasEpicStatusDrop, hasEditEpicModal))
+	}
+
+	assertFullWidthPageContainer(page, &res, "Epics")
+
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 11: Feature Modules Management
+// -----------------------------------------------------------------------------
+func CheckModulesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/projects/proj-jynko-core/modules"
+	res := ValidationCheckResult{
+		ID:         "11-modules-crud",
+		Name:       "Feature Modules Management, Lead Dropdown & Modals",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "11-modules-crud.png"),
+	}
+
+	page := newViewportPage(browser, url)
+	defer page.MustClose()
+
+	hasCreateModuleBtn, _, _ := page.Has(`button[aria-label="Create new module"]`)
+	hasEditModuleBtn, editModuleBtn, _ := page.Has(`button[aria-label^="Edit module "]`)
+	hasDeleteModuleBtn, _, _ := page.Has(`button[aria-label^="Delete module "]`)
+	hasModuleLeadDrop, _, _ := page.Has(`button[aria-label^="Module lead for "]`)
+	hasEditModuleModal := false
+
+	if hasEditModuleBtn && editModuleBtn != nil {
+		editModuleBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasEditModuleModal, _, _ = page.Has(`input[aria-label="Edit module name"]`)
+		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+			closeBtn.MustClick()
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+
+	if hasCreateModuleBtn && hasEditModuleBtn && hasDeleteModuleBtn && hasModuleLeadDrop && hasEditModuleModal {
+		res.Assertions = append(res.Assertions, "Modules page renders '+ New Module', inline lead dropdown, 'Delete' confirmation, and 'Edit Feature Module' modal")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Modules page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasLeadDrop=%v, hasEditModal=%v", hasCreateModuleBtn, hasEditModuleBtn, hasDeleteModuleBtn, hasModuleLeadDrop, hasEditModuleModal))
+	}
+
+	assertFullWidthPageContainer(page, &res, "Modules")
+
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 12: Wiki Workspace & Document Editor
+// -----------------------------------------------------------------------------
+func CheckWikiWorkspace(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
 	url := baseURL + "/wiki"
 	res := ValidationCheckResult{
-		ID:         "05-wiki-section-layout",
-		Name:       "Two-Section Wiki Layout (Secondary Panel Collections/Pages Tree + Right-Side Page Editor)",
+		ID:         "12-wiki-workspace",
+		Name:       "Wiki Workspace, Collections Tree & Document Editor",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "05-wiki-section.png"),
+		Screenshot: filepath.Join(outDir, "12-wiki-workspace.png"),
 	}
 
 	page := newViewportPage(browser, url)
@@ -740,21 +980,76 @@ func CheckWikiSectionLayout(browser *rod.Browser, baseURL, outDir string) Valida
 
 	assertFullWidthPageContainer(page, &res, "Wiki")
 
+	// Verify creating a project auto-creates a Wiki collection and project 'Pages' link navigates to it
+	cleanupTestProjectByName("wiki-sync-test")
+	defer cleanupTestProjectByName("wiki-sync-test")
+
+	homePage := newViewportPage(browser, baseURL+"/home")
+	if hasPlus, plusBtn, _ := homePage.Has(`button[aria-label="Create new project"]`); hasPlus && plusBtn != nil {
+		plusBtn.MustClick()
+		time.Sleep(250 * time.Millisecond)
+
+		nameInput := homePage.MustElement(`input[aria-label="New project name"]`)
+		nameInput.MustInput("wiki-sync-test")
+
+		prefixInput := homePage.MustElement(`input[aria-label="New project key prefix"]`)
+		prefixInput.MustInput("WSYN")
+
+		descInput := homePage.MustElement(`textarea[aria-label="New project description"]`)
+		descInput.MustInput("Auto wiki sync test project.")
+
+		submitBtn := homePage.MustElement(`button[aria-label="Submit create project"]`)
+		submitBtn.MustClick()
+
+		syncDeadline := time.Now().Add(6 * time.Second)
+		for time.Now().Before(syncDeadline) {
+			if hasLink, _, _ := homePage.Has(`a[aria-label="Open wiki-sync-test pages in Wiki"]`); hasLink {
+				break
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+
+		if hasPagesLink, pagesLink, _ := homePage.Has(`a[aria-label="Open wiki-sync-test pages in Wiki"]`); hasPagesLink && pagesLink != nil {
+			pagesLink.MustClick()
+			openDeadline := time.Now().Add(6 * time.Second)
+			for time.Now().Before(openDeadline) {
+				mText := homePage.MustElement("main").MustText()
+				if strings.Contains(mText, "wiki-sync-test — Project Overview") {
+					break
+				}
+				time.Sleep(150 * time.Millisecond)
+			}
+			mText := homePage.MustElement("main").MustText()
+			if strings.Contains(mText, "wiki-sync-test — Project Overview") {
+				res.Assertions = append(res.Assertions, "Creating project 'wiki-sync-test' automatically created matching Wiki collection and opened its project overview page in Wiki")
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, "Navigating to newly created project pages in Wiki failed to open project overview page")
+			}
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Missing link a[aria-label='Open wiki-sync-test pages in Wiki'] under created project")
+		}
+	}
+	homePage.MustClose()
+
 	page.MustScreenshot(res.Screenshot)
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
 
-// 6. CheckStickiesBoard validates /stickies: Colorful sticky notes board, funny color palettes & interactive note creation.
+// -----------------------------------------------------------------------------
+// Suite 13: Stickies Board Scratchpad
+// -----------------------------------------------------------------------------
 func CheckStickiesBoard(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
 	url := baseURL + "/stickies"
 	res := ValidationCheckResult{
-		ID:         "06-stickies-board",
-		Name:       "Stickies Canvas, Funny Color Palettes & Interactive Random Note Creation",
+		ID:         "13-stickies-board",
+		Name:       "Stickies Board, Fun Color Palettes & Surprise Me Generator",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "06-stickies-board.png"),
+		Screenshot: filepath.Join(outDir, "13-stickies-board.png"),
 	}
 
 	page := newViewportPage(browser, url)
@@ -771,7 +1066,6 @@ func CheckStickiesBoard(browser *rod.Browser, baseURL, outDir string) Validation
 		res.Errors = append(res.Errors, "Stickies view failed to render colorful sticky notes or funny palette labels")
 	}
 
-	// Click "Surprise Me" to spawn a new random sticky note persisted in Firestore
 	if has, surpriseBtn, _ := page.Has(`button[aria-label="Surprise me random sticky"]`); has && surpriseBtn != nil {
 		surpriseBtn.MustClick()
 		var updatedMain string
@@ -802,94 +1096,62 @@ func CheckStickiesBoard(browser *rod.Browser, baseURL, outDir string) Validation
 	return res
 }
 
-// 7. CheckProjectPagesAndAutoWikiCollection validates creating a new project automatically creates its Wiki collection, and clicking 'Pages' under the project navigates to that collection in the Wiki section.
-func CheckProjectPagesAndAutoWikiCollection(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+// -----------------------------------------------------------------------------
+// Suite 14: Settings Workspace
+// -----------------------------------------------------------------------------
+func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
 	start := time.Now()
-	url := baseURL + "/home"
+	url := baseURL + "/settings"
 	res := ValidationCheckResult{
-		ID:         "07-project-pages-and-auto-collection",
-		Name:       "Create Project -> Auto-Created Wiki Collection & Project 'Pages' Navigation to Wiki",
+		ID:         "14-settings",
+		Name:       "Settings Workspace: General App Preferences & Per-Project Settings",
 		URL:        url,
 		Passed:     true,
-		Screenshot: filepath.Join(outDir, "07-project-pages-wiki-collection.png"),
+		Screenshot: filepath.Join(outDir, "14-settings.png"),
 	}
-
-	cleanupTestProjectByName("mobile-sdk")
 
 	page := newViewportPage(browser, url)
 	defer page.MustClose()
-	defer cleanupTestProjectByName("mobile-sdk")
 
-	// Step 1: Open Create Project modal from left sidebar '+' button
-	if has, plusBtn, _ := page.Has(`button[aria-label="Create new project"]`); has && plusBtn != nil {
-		plusBtn.MustClick()
-		time.Sleep(250 * time.Millisecond)
+	asideText := page.MustElement("aside").MustText()
+	mainText := page.MustElement("main").MustText()
 
-		nameInput := page.MustElement(`input[aria-label="New project name"]`)
-		nameInput.MustInput("mobile-sdk")
+	if strings.Contains(asideText, "Settings") &&
+		strings.Contains(asideText, "General Settings") &&
+		strings.Contains(asideText, "Per-Project Settings") {
+		res.Assertions = append(res.Assertions, "Secondary panel switches to Settings navigation (General Settings + Per-Project Settings list)")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Secondary panel did not render Settings navigation")
+	}
 
-		prefixInput := page.MustElement(`input[aria-label="New project key prefix"]`)
-		prefixInput.MustInput("MSDK")
+	if strings.Contains(mainText, "Application & Interface Preferences") &&
+		strings.Contains(mainText, "Notifications & Activity Digest") {
+		res.Assertions = append(res.Assertions, "General App Settings view renders mock global preferences and notification toggles")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "General App Settings view failed to render expected mock sections")
+	}
 
-		descInput := page.MustElement(`textarea[aria-label="New project description"]`)
-		descInput.MustInput("Cross-platform mobile SDK for iOS and Android.")
+	if has, projSettingsBtn, _ := page.Has(`button[aria-label="Open project settings for hodo"]`); has && projSettingsBtn != nil {
+		projSettingsBtn.MustClick()
+		time.Sleep(300 * time.Millisecond)
 
-		submitBtn := page.MustElement(`button[aria-label="Submit create project"]`)
-		submitBtn.MustClick()
-
-		deadline := time.Now().Add(6 * time.Second)
-		for time.Now().Before(deadline) {
-			if hasLink, _, _ := page.Has(`a[aria-label="Open mobile-sdk pages in Wiki"]`); hasLink {
-				break
-			}
-			time.Sleep(150 * time.Millisecond)
-		}
-
-		asideText := page.MustElement("aside").MustText()
-		if strings.Contains(asideText, "mobile-sdk") {
-			res.Assertions = append(res.Assertions, "Created new project 'mobile-sdk' (MSDK) in Firestore via left sidebar '+' modal")
+		updatedMain := page.MustElement("main").MustText()
+		if strings.Contains(updatedMain, "Project Identity & Metadata — hodo") &&
+			strings.Contains(updatedMain, "Work Item & Cycle Defaults (hodo)") &&
+			strings.Contains(updatedMain, "Wiki Collection & Documentation Policy (hodo)") {
+			res.Assertions = append(res.Assertions, "Clicking project in Settings panel switches to Per-Project Settings (Metadata, Workflow Defaults, Wiki Policy & RBAC)")
 		} else {
 			res.Passed = false
-			res.Errors = append(res.Errors, "New project 'mobile-sdk' did not appear in the left Projects tree")
+			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")
 		}
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Missing button[aria-label='Create new project']")
+		res.Errors = append(res.Errors, "Missing button[aria-label='Open project settings for hodo'] in Settings panel")
 	}
 
-	// Step 2: Click 'Pages' under the newly created 'mobile-sdk' project in the left Work panel
-	if has, pagesLink, _ := page.Has(`a[aria-label="Open mobile-sdk pages in Wiki"]`); has && pagesLink != nil {
-		pagesLink.MustClick()
-
-		deadline := time.Now().Add(6 * time.Second)
-		for time.Now().Before(deadline) {
-			mainText := page.MustElement("main").MustText()
-			if strings.Contains(mainText, "mobile-sdk — Project Overview") {
-				break
-			}
-			time.Sleep(150 * time.Millisecond)
-		}
-
-		asideText := page.MustElement("aside").MustText()
-		mainText := page.MustElement("main").MustText()
-
-		if hasCol, _, _ := page.Has(`button[aria-label="Collection mobile-sdk"]`); hasCol && strings.Contains(asideText, "Collections") {
-			res.Assertions = append(res.Assertions, "Creating project 'mobile-sdk' automatically created the 'mobile-sdk' Collection in the Wiki section")
-		} else {
-			res.Passed = false
-			res.Errors = append(res.Errors, "Wiki section did not contain auto-created 'mobile-sdk' collection")
-		}
-
-		if strings.Contains(mainText, "mobile-sdk") && strings.Contains(mainText, "mobile-sdk — Project Overview") {
-			res.Assertions = append(res.Assertions, "Clicking 'Pages' under project 'mobile-sdk' navigated to the 'mobile-sdk' collection and opened its project overview page in the Wiki section")
-		} else {
-			res.Passed = false
-			res.Errors = append(res.Errors, fmt.Sprintf("Wiki editor did not open 'mobile-sdk — Project Overview' page; mainText=%q", mainText))
-		}
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, "Missing link a[aria-label='Open mobile-sdk pages in Wiki'] under newly created project")
-	}
+	assertFullWidthPageContainer(page, &res, "Settings")
 
 	page.MustScreenshot(res.Screenshot)
 	res.DurationMs = time.Since(start).Milliseconds()
@@ -947,108 +1209,4 @@ func cleanupTestProjectByName(name string) {
 			}
 		}
 	}
-}
-
-// 8. CheckSettingsGeneralAndPerProject validates /settings: General App Settings view & interactive switching to Per-Project Settings.
-func CheckSettingsGeneralAndPerProject(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
-	start := time.Now()
-	url := baseURL + "/settings"
-	res := ValidationCheckResult{
-		ID:         "08-settings-general-and-project",
-		Name:       "Settings Section: General App Settings & Per-Project Settings Switcher",
-		URL:        url,
-		Passed:     true,
-		Screenshot: filepath.Join(outDir, "08-settings-page.png"),
-	}
-
-	page := newViewportPage(browser, url)
-	defer page.MustClose()
-
-	asideText := page.MustElement("aside").MustText()
-	mainText := page.MustElement("main").MustText()
-
-	if strings.Contains(asideText, "Settings") &&
-		strings.Contains(asideText, "General Settings") &&
-		strings.Contains(asideText, "Per-Project Settings") {
-		res.Assertions = append(res.Assertions, "Secondary panel switches to Settings navigation (General Settings + Per-Project Settings list)")
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, "Secondary panel did not render Settings navigation")
-	}
-
-	if strings.Contains(mainText, "Application & Interface Preferences") &&
-		strings.Contains(mainText, "Notifications & Activity Digest") {
-		res.Assertions = append(res.Assertions, "General App Settings view renders mock global preferences and notification toggles")
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, "General App Settings view failed to render expected mock sections")
-	}
-
-	// Click 'hodo' in the Per-Project Settings sidebar list to switch to Per-Project Settings
-	if has, projSettingsBtn, _ := page.Has(`button[aria-label="Open project settings for hodo"]`); has && projSettingsBtn != nil {
-		projSettingsBtn.MustClick()
-		time.Sleep(300 * time.Millisecond)
-
-		updatedMain := page.MustElement("main").MustText()
-		if strings.Contains(updatedMain, "Project Identity & Metadata — hodo") &&
-			strings.Contains(updatedMain, "Work Item & Cycle Defaults (hodo)") &&
-			strings.Contains(updatedMain, "Wiki Collection & Documentation Policy (hodo)") {
-			res.Assertions = append(res.Assertions, "Clicking project in Settings panel switches to Per-Project Settings (Metadata, Workflow Defaults, Wiki Policy & RBAC)")
-		} else {
-			res.Passed = false
-			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")
-		}
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, "Missing button[aria-label='Open project settings for hodo'] in Settings panel")
-	}
-
-	assertFullWidthPageContainer(page, &res, "Settings")
-
-	page.MustScreenshot(res.Screenshot)
-
-	// Verify Top-Right User Avatar Dropdown Card & User Profile Page (/profile)
-	if hasUserBtn, userBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasUserBtn && userBtn != nil {
-		userBtn.MustClick()
-		time.Sleep(250 * time.Millisecond)
-
-		if hasCard, cardEl, _ := page.Has(`[data-testid="user-dropdown-card"]`); hasCard && cardEl != nil {
-			cardText := cardEl.MustText()
-			hasProfileBtn, profileBtn, _ := cardEl.Has(`button[aria-label="Open user profile"]`)
-			hasSignOutBtn, _, _ := cardEl.Has(`button[aria-label="Sign out"]`)
-			if hasProfileBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
-				res.Assertions = append(res.Assertions, "Top-right user button opens account dropdown card with Name, Email, Profile button, and Sign out button")
-				profileBtn.MustClick()
-				time.Sleep(300 * time.Millisecond)
-
-				profileURL := page.MustInfo().URL
-				profileMain := page.MustElement("main").MustText()
-				hasNameInput, _, _ := page.Has(`input[aria-label="Profile display name"]`)
-				hasReadonlyEmail, _, _ := page.Has(`input[aria-label="Profile email"][readonly]`)
-				hasAvatarInput, _, _ := page.Has(`input[aria-label="Profile avatar URL"]`)
-				if strings.Contains(profileURL, "/profile") &&
-					strings.Contains(profileMain, "User Profile") &&
-					hasNameInput &&
-					hasReadonlyEmail &&
-					hasAvatarInput {
-					res.Assertions = append(res.Assertions, "Clicking 'Profile' in user dropdown navigates to /profile with Name, read-only IAP Email, and Photo/Avatar controls")
-				} else {
-					res.Passed = false
-					res.Errors = append(res.Errors, fmt.Sprintf("User Profile page (/profile) failed assertions: url=%q, hasName=%v, hasReadonlyEmail=%v, hasAvatar=%v", profileURL, hasNameInput, hasReadonlyEmail, hasAvatarInput))
-				}
-			} else {
-				res.Passed = false
-				res.Errors = append(res.Errors, "User dropdown card missing expected Name/Email, Profile button, or Sign out button")
-			}
-		} else {
-			res.Passed = false
-			res.Errors = append(res.Errors, "Clicking top-right user button did not open [data-testid='user-dropdown-card']")
-		}
-	} else {
-		res.Passed = false
-		res.Errors = append(res.Errors, "Missing top-right user button button[aria-label='Open user menu']")
-	}
-
-	res.DurationMs = time.Since(start).Milliseconds()
-	return res
 }

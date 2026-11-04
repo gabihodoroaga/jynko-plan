@@ -1,0 +1,62 @@
+steps:
+  # ----------------------------------------------------------------------------
+  # Step 1: Build the Unified Container Image (Angular + Go Backend)
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '-t'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:$SHORT_SHA'
+      - '-t'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:latest'
+      - '.'
+
+  # ----------------------------------------------------------------------------
+  # Step 2: Push Image to Google Artifact Registry
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko'
+
+  # ----------------------------------------------------------------------------
+  # Step 3: Deploy to Google Cloud Run
+  # ----------------------------------------------------------------------------
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-cloud-run'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:$SHORT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--service-account'
+      - '$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--ingress'
+      - 'internal-and-cloud-load-balancing'
+      - '--set-env-vars'
+      - 'ENV=production,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,IAP_AUDIENCE=$_IAP_AUDIENCE,STATIC_DIR=/app/web'
+
+substitutions:
+  _AR_LOCATION: 'us-central1'
+  _AR_REPOSITORY: 'jynko-repo'
+  _SERVICE_NAME: 'jynko-app'
+  _REGION: 'us-central1'
+  _SERVICE_ACCOUNT: 'jynko-runner'
+  _FIRESTORE_DB: '(default)'
+  _IAP_AUDIENCE: ''
+
+images:
+  - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:$SHORT_SHA'
+  - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
