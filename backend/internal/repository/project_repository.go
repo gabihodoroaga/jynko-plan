@@ -138,6 +138,9 @@ func (r *firestoreProjectRepository) GetByID(ctx context.Context, projectID stri
 	if proj.MemberIDs == nil {
 		proj.MemberIDs = []string{}
 	}
+	if proj.Settings == nil {
+		proj.Settings = model.DefaultProjectSettings()
+	}
 	return &proj, nil
 }
 
@@ -184,6 +187,9 @@ func (r *firestoreProjectRepository) queryProjectsByUser(ctx context.Context, us
 			if p.MemberIDs == nil {
 				p.MemberIDs = []string{}
 			}
+			if p.Settings == nil {
+				p.Settings = model.DefaultProjectSettings()
+			}
 			seen[p.ID] = true
 			projects = append(projects, p)
 		}
@@ -211,6 +217,9 @@ func (r *firestoreProjectRepository) queryProjectsByUser(ctx context.Context, us
 			if !seen[p.ID] {
 				if p.MemberIDs == nil {
 					p.MemberIDs = []string{}
+				}
+				if p.Settings == nil {
+					p.Settings = model.DefaultProjectSettings()
 				}
 				seen[p.ID] = true
 				projects = append(projects, p)

@@ -16,57 +16,9 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
   imports: [CommonModule, FormsModule, DropdownComponent, StatusBadgeComponent],
   template: `
     <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
-      <!-- Top Settings Header & Scope Tabs (General App Settings vs Per-Project Settings) -->
-      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-lg font-semibold text-slate-900">Settings</h1>
-            <span class="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-600 font-mono text-[10px] font-medium">
-              Mock Configuration Preview
-            </span>
-          </div>
-          <p class="text-xs text-slate-500 mt-0.5">
-            Configure global Jynko application preferences or per-project workflow, Wiki, and RBAC settings.
-          </p>
-        </div>
-
-        <div class="flex items-center gap-3">
-          @if (settingsService.lastSavedMessage(); as msg) {
-            <span class="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
-              ✓ {{ msg }}
-            </span>
-          }
-
-          <!-- Scope Switcher Pill Group -->
-          <div class="inline-flex bg-slate-200/70 p-0.5 rounded-lg border border-slate-200">
-            <button
-              type="button"
-              (click)="settingsService.openGeneralSettings()"
-              aria-label="General App Settings tab"
-              class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-              [ngClass]="
-                settingsService.activeScope() === 'GENERAL'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              "
-            >
-              General App Settings
-            </button>
-            <button
-              type="button"
-              (click)="settingsService.openProjectSettings()"
-              aria-label="Per-Project Settings tab"
-              class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-              [ngClass]="
-                settingsService.activeScope() === 'PROJECT'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              "
-            >
-              Per-Project Settings
-            </button>
-          </div>
-        </div>
+      <!-- Top Settings Header -->
+      <div class="border-b border-slate-200 pb-4">
+        <h1 class="text-lg font-semibold text-slate-900">Settings</h1>
       </div>
 
       @if (settingsService.activeScope() === 'GENERAL') {
@@ -269,33 +221,15 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
         @if (projectService.activeProject(); as proj) {
           @let pset = settingsService.activeProjectSettings();
           <div class="space-y-5">
-            <!-- Project Selector Bar -->
+            <!-- Active Project Bar -->
             <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-card flex flex-wrap items-center justify-between gap-3">
               <div class="flex items-center gap-2.5">
                 <span class="text-xs font-semibold text-slate-600">Configuring Project:</span>
-                <div class="flex flex-wrap items-center gap-1.5">
-                  @for (p of projectService.projects(); track p.id) {
-                    <button
-                      type="button"
-                      (click)="settingsService.openProjectSettings(p.id)"
-                      [attr.aria-label]="'Configure project ' + p.name"
-                      class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors"
-                      [ngClass]="
-                        p.id === proj.id
-                          ? 'bg-sky-600 text-white border-sky-600'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      "
-                    >
-                      <span>👇</span>
-                      <span>{{ p.name }}</span>
-                      <span
-                        class="font-mono text-[10px] px-1 rounded"
-                        [ngClass]="p.id === proj.id ? 'bg-sky-700 text-sky-100' : 'bg-slate-200/70 text-slate-600'"
-                      >
-                        {{ p.key_prefix }}
-                      </span>
-                    </button>
-                  }
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50 text-xs font-medium text-slate-800">
+                  <span>{{ proj.name }}</span>
+                  <span class="font-mono text-[10px] px-1 rounded bg-slate-200/70 text-slate-600">
+                    {{ proj.key_prefix }}
+                  </span>
                 </div>
               </div>
 
@@ -426,6 +360,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     type="checkbox"
                     [attr.switch]="''"
                     role="switch"
+                    aria-label="Toggle auto-assign new work items to module lead"
                     class="jynko-switch"
                     [checked]="pset.autoAssignToLead"
                     (change)="settingsService.updateActiveProjectSetting('autoAssignToLead', $any($event.target).checked)"
@@ -443,6 +378,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     type="checkbox"
                     [attr.switch]="''"
                     role="switch"
+                    aria-label="Toggle auto-rollover unfinished cycle work items"
                     class="jynko-switch"
                     [checked]="pset.autoRolloverUnfinishedCycleItems"
                     (change)="settingsService.updateActiveProjectSetting('autoRolloverUnfinishedCycleItems', $any($event.target).checked)"
@@ -460,6 +396,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     type="checkbox"
                     [attr.switch]="''"
                     role="switch"
+                    aria-label="Toggle require point estimate before in progress"
                     class="jynko-switch"
                     [checked]="pset.requireEstimateBeforeInProgress"
                     (change)="settingsService.updateActiveProjectSetting('requireEstimateBeforeInProgress', $any($event.target).checked)"
@@ -543,6 +480,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     type="checkbox"
                     [attr.switch]="''"
                     role="switch"
+                    aria-label="Toggle auto-lock published runbooks"
                     class="jynko-switch"
                     [checked]="pset.autoLockPublishedRunbooks"
                     (change)="settingsService.updateActiveProjectSetting('autoLockPublishedRunbooks', $any($event.target).checked)"
@@ -560,6 +498,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     type="checkbox"
                     [attr.switch]="''"
                     role="switch"
+                    aria-label="Toggle record immutable version snapshot on every save"
                     class="jynko-switch"
                     [checked]="pset.createVersionOnEverySave"
                     (change)="settingsService.updateActiveProjectSetting('createVersionOnEverySave', $any($event.target).checked)"
@@ -719,10 +658,7 @@ export class SettingsComponent {
   ];
 
   updateProjectField(projectId: string, field: 'name' | 'key_prefix' | 'description', value: string): void {
-    this.projectService.projects.update((list) =>
-      list.map((p) => (p.id === projectId ? { ...p, [field]: value } : p))
-    );
-    this.settingsService.flashSaved(`Updated project ${field} (mock)`);
+    this.projectService.updateProject(projectId, { [field]: value });
   }
 
   openProjectWikiCollection(proj: Project): void {
@@ -740,6 +676,5 @@ export class SettingsComponent {
     this.projectService.upsertMember(email, this.newMemberName.trim(), this.newMemberRole);
     this.newMemberEmail = '';
     this.newMemberName = '';
-    this.settingsService.flashSaved('Assigned project member role');
   }
 }

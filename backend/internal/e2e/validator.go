@@ -677,11 +677,18 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Priority badges still contain 'll' or 'lll' prefixes")
 	}
 
+	// Switch explicitly to Board view to check Kanban columns and configurator
+	if hasBoardBtn, boardBtn, _ := page.Has(`button[aria-label="Switch to Board view"]`); hasBoardBtn && boardBtn != nil {
+		boardBtn.MustClick()
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	boardMainText := page.MustElement("main").MustText()
 	hasCancelledCol, _, _ := page.Has(`[data-board-column="CANCELLED"]`)
 	hasTodoCol, _, _ := page.Has(`[data-board-column="TODO"]`)
 	hasFullHeightCol, _, _ := page.Has(`.board-column.h-full`)
-	if !hasCancelledCol && hasTodoCol && hasFullHeightCol && strings.Contains(mainText, "Columns (5/6)") && !strings.Contains(mainText, "Hidden Columns") {
-		res.Assertions = append(res.Assertions, "Kanban board columns stretch to fill full page height (.board-column.h-full) and hide 'Cancelled' column by default (Columns 5/6)")
+	if !hasCancelledCol && hasTodoCol && hasFullHeightCol && strings.Contains(boardMainText, "Columns (") && !strings.Contains(boardMainText, "Hidden Columns") {
+		res.Assertions = append(res.Assertions, "Kanban board columns stretch to fill full page height (.board-column.h-full) and hide 'Cancelled' column by default")
 	} else {
 		res.Passed = false
 		res.Errors = append(res.Errors, fmt.Sprintf("Kanban board check failed: hasCancelled=%v, hasFullHeight=%v", hasCancelledCol, hasFullHeightCol))
@@ -1142,6 +1149,35 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 			strings.Contains(updatedMain, "Work Item & Cycle Defaults (hodo)") &&
 			strings.Contains(updatedMain, "Wiki Collection & Documentation Policy (hodo)") {
 			res.Assertions = append(res.Assertions, "Clicking project in Settings panel switches to Per-Project Settings (Metadata, Workflow Defaults, Wiki Policy & RBAC)")
+
+			// Verify project setting persistence across full page reload
+			if hasSwitch, switchEl, _ := page.Has(`input[aria-label="Toggle require point estimate before in progress"]`); hasSwitch && switchEl != nil {
+				currentChecked := switchEl.MustEval(`() => this.checked`).Bool()
+				targetChecked := !currentChecked
+
+				switchEl.MustEval(`() => this.click()`)
+				time.Sleep(600 * time.Millisecond)
+
+				// Reload page to test Firestore reload persistence
+				page.MustReload()
+				page.MustWaitLoad()
+				time.Sleep(600 * time.Millisecond)
+
+				if hasBtn, hodoBtn, _ := page.Has(`button[aria-label="Open project settings for hodo"]`); hasBtn && hodoBtn != nil {
+					hodoBtn.MustClick()
+					time.Sleep(500 * time.Millisecond)
+					newChecked := page.MustEval(`() => {
+						const el = document.querySelector('input[aria-label="Toggle require point estimate before in progress"]');
+						return el ? el.checked : false;
+					}`).Bool()
+					if newChecked == targetChecked {
+						res.Assertions = append(res.Assertions, "Project settings persist across full browser reload backed by Google Cloud Firestore")
+					} else {
+						res.Passed = false
+						res.Errors = append(res.Errors, fmt.Sprintf("Project settings were lost after browser reload (expected %v, got %v)", targetChecked, newChecked))
+					}
+				}
+			}
 		} else {
 			res.Passed = false
 			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")

@@ -33,6 +33,7 @@ export interface DropdownOption {
         class="flex items-center justify-between gap-2 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-md text-slate-700 transition-colors focus:outline-none focus:border-slate-300 disabled:opacity-50 disabled:pointer-events-none select-none"
         [ngClass]="[
           fullWidth ? 'w-full' : '',
+          maxWidth ? maxWidth : '',
           size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
         ]"
       >
@@ -127,6 +128,7 @@ export class DropdownComponent {
   @Input() ariaLabel = '';
   @Input() disabled = false;
   @Input() fullWidth = false;
+  @Input() maxWidth = '';
   @Input() size: 'sm' | 'md' = 'md';
   @Input() align: 'left' | 'right' = 'left';
   @Input() dropUp = false;

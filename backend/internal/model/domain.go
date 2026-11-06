@@ -4,15 +4,46 @@ import "time"
 
 // Project represents the top-level boundary for work tracking, documentation, and RBAC.
 type Project struct {
-	ID          string    `firestore:"id" json:"id"`
-	Name        string    `firestore:"name" json:"name"`
-	KeyPrefix   string    `firestore:"key_prefix" json:"key_prefix"` // e.g., "JYNKO"
-	Description string    `firestore:"description" json:"description"`
-	ItemSeq     int       `firestore:"item_seq" json:"item_seq"`     // Atomic sequence counter for WorkItem keys
-	MemberIDs   []string  `firestore:"member_ids" json:"member_ids"` // Indexed array of user IDs for fast project listing
-	CreatedBy   string    `firestore:"created_by" json:"created_by"`
-	CreatedAt   time.Time `firestore:"created_at" json:"created_at"`
-	UpdatedAt   time.Time `firestore:"updated_at" json:"updated_at"`
+	ID          string           `firestore:"id" json:"id"`
+	Name        string           `firestore:"name" json:"name"`
+	KeyPrefix   string           `firestore:"key_prefix" json:"key_prefix"` // e.g., "JYNKO"
+	Description string           `firestore:"description" json:"description"`
+	ItemSeq     int              `firestore:"item_seq" json:"item_seq"`     // Atomic sequence counter for WorkItem keys
+	MemberIDs   []string         `firestore:"member_ids" json:"member_ids"` // Indexed array of user IDs for fast project listing
+	Settings    *ProjectSettings `firestore:"settings,omitempty" json:"settings,omitempty"`
+	CreatedBy   string           `firestore:"created_by" json:"created_by"`
+	CreatedAt   time.Time        `firestore:"created_at" json:"created_at"`
+	UpdatedAt   time.Time        `firestore:"updated_at" json:"updated_at"`
+}
+
+// ProjectSettings stores configurable project-level workflows, board view defaults, and documentation policies.
+type ProjectSettings struct {
+	DefaultNewItemStatus             string   `firestore:"default_new_item_status" json:"default_new_item_status"`
+	DefaultNewItemPriority           string   `firestore:"default_new_item_priority" json:"default_new_item_priority"`
+	EstimationScale                  string   `firestore:"estimation_scale" json:"estimation_scale"`
+	CycleDurationWeeks               string   `firestore:"cycle_duration_weeks" json:"cycle_duration_weeks"`
+	VisibleBoardColumns              []string `firestore:"visible_board_columns" json:"visible_board_columns"`
+	AutoAssignToLead                 bool     `firestore:"auto_assign_to_lead" json:"auto_assign_to_lead"`
+	AutoRolloverUnfinishedCycleItems bool     `firestore:"auto_rollover_unfinished_cycle_items" json:"auto_rollover_unfinished_cycle_items"`
+	RequireEstimateBeforeInProgress  bool     `firestore:"require_estimate_before_in_progress" json:"require_estimate_before_in_progress"`
+	AutoLockPublishedRunbooks        bool     `firestore:"auto_lock_published_runbooks" json:"auto_lock_published_runbooks"`
+	CreateVersionOnEverySave         bool     `firestore:"create_version_on_every_save" json:"create_version_on_every_save"`
+}
+
+// DefaultProjectSettings returns sensible defaults for a project's settings.
+func DefaultProjectSettings() *ProjectSettings {
+	return &ProjectSettings{
+		DefaultNewItemStatus:             "TODO",
+		DefaultNewItemPriority:           "MEDIUM",
+		EstimationScale:                  "FIBONACCI",
+		CycleDurationWeeks:               "2",
+		VisibleBoardColumns:              []string{"BACKLOG", "TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"},
+		AutoAssignToLead:                 false,
+		AutoRolloverUnfinishedCycleItems: true,
+		RequireEstimateBeforeInProgress:  false,
+		AutoLockPublishedRunbooks:        false,
+		CreateVersionOnEverySave:         true,
+	}
 }
 
 // Module represents a persistent functional component or feature domain.

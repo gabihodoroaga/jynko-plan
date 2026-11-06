@@ -34,9 +34,10 @@ type CreateProjectInput struct {
 
 // UpdateProjectInput holds parameters for updating a project.
 type UpdateProjectInput struct {
-	Name        *string `json:"name"`
-	KeyPrefix   *string `json:"key_prefix"`
-	Description *string `json:"description"`
+	Name        *string                `json:"name"`
+	KeyPrefix   *string                `json:"key_prefix"`
+	Description *string                `json:"description"`
+	Settings    *model.ProjectSettings `json:"settings"`
 }
 
 // UpsertMemberInput holds parameters for adding or updating a project member.
@@ -67,6 +68,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, creator model.UserCo
 		Description: strings.TrimSpace(input.Description),
 		ItemSeq:     0,
 		MemberIDs:   []string{creator.UserID},
+		Settings:    model.DefaultProjectSettings(),
 		CreatedBy:   creator.UserID,
 	}
 
@@ -113,6 +115,9 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, in
 	}
 	if input.Description != nil {
 		proj.Description = strings.TrimSpace(*input.Description)
+	}
+	if input.Settings != nil {
+		proj.Settings = input.Settings
 	}
 
 	if err := s.repo.Update(ctx, proj); err != nil {

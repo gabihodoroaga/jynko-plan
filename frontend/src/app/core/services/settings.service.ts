@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ProjectService } from './project.service';
-import { ALL_STATUSES, WorkItemStatus } from '../models/project.model';
+import { ALL_STATUSES, ProjectSettingsModel, WorkItemStatus } from '../models/project.model';
 
 export const DEFAULT_VISIBLE_BOARD_COLUMNS: WorkItemStatus[] = [
   'BACKLOG',
@@ -36,7 +36,7 @@ export interface ProjectSpecificSettings {
   createVersionOnEverySave: boolean;
 }
 
-const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSettings => ({
+export const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSettings => ({
   projectId,
   defaultNewItemStatus: 'TODO',
   defaultNewItemPriority: 'MEDIUM',
@@ -50,16 +50,48 @@ const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSettings =>
   createVersionOnEverySave: true,
 });
 
-@Injectable({
-  providedIn: 'root',
-})
-export class SettingsService {
-  private readonly projectService = inject(ProjectService);
+export function toModelSettings(s: ProjectSpecificSettings): ProjectSettingsModel {
+  return {
+    default_new_item_status: s.defaultNewItemStatus,
+    default_new_item_priority: s.defaultNewItemPriority,
+    estimation_scale: s.estimationScale,
+    cycle_duration_weeks: s.cycleDurationWeeks,
+    visible_board_columns: s.visibleBoardColumns,
+    auto_assign_to_lead: s.autoAssignToLead,
+    auto_rollover_unfinished_cycle_items: s.autoRolloverUnfinishedCycleItems,
+    require_estimate_before_in_progress: s.requireEstimateBeforeInProgress,
+    auto_lock_published_runbooks: s.autoLockPublishedRunbooks,
+    create_version_on_every_save: s.createVersionOnEverySave,
+  };
+}
 
-  readonly activeScope = signal<'GENERAL' | 'PROJECT'>('GENERAL');
-  readonly lastSavedMessage = signal<string>('');
+export function fromModelSettings(projectId: string, m?: ProjectSettingsModel): ProjectSpecificSettings {
+  const d = DEFAULT_PROJECT_SETTINGS(projectId);
+  if (!m) return d;
+  return {
+    projectId,
+    defaultNewItemStatus: m.default_new_item_status || d.defaultNewItemStatus,
+    defaultNewItemPriority: m.default_new_item_priority || d.defaultNewItemPriority,
+    estimationScale: m.estimation_scale || d.estimationScale,
+    cycleDurationWeeks: m.cycle_duration_weeks || d.cycleDurationWeeks,
+    visibleBoardColumns:
+      m.visible_board_columns && m.visible_board_columns.length > 0
+        ? m.visible_board_columns
+        : d.visibleBoardColumns,
+    autoAssignToLead: m.auto_assign_to_lead ?? d.autoAssignToLead,
+    autoRolloverUnfinishedCycleItems:
+      m.auto_rollover_unfinished_cycle_items ?? d.autoRolloverUnfinishedCycleItems,
+    requireEstimateBeforeInProgress:
+      m.require_estimate_before_in_progress ?? d.requireEstimateBeforeInProgress,
+    autoLockPublishedRunbooks: m.auto_lock_published_runbooks ?? d.autoLockPublishedRunbooks,
+    createVersionOnEverySave: m.create_version_on_every_save ?? d.createVersionOnEverySave,
+  };
+}
 
-  readonly generalSettings = signal<GeneralAppSettings>({
+const LOCAL_STORAGE_GENERAL_KEY = 'jynko_general_settings';
+
+function loadInitialGeneralSettings(): GeneralAppSettings {
+  const defaults: GeneralAppSettings = {
     instanceName: 'Jynko Engineering',
     defaultLandingRoute: '/home',
     defaultWorkItemView: 'LIST',
@@ -69,41 +101,39 @@ export class SettingsService {
     dailyMorningDigest: true,
     notifyOnAssignment: true,
     notifyOnWikiUnlock: false,
-  });
+  };
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_GENERAL_KEY);
+    if (raw) {
+      return { ...defaults, ...JSON.parse(raw) };
+    }
+  } catch {}
+  return defaults;
+}
 
-  readonly projectSettingsByProject = signal<Record<string, ProjectSpecificSettings>>({
-    'proj-jynko-core': {
-      projectId: 'proj-jynko-core',
-      defaultNewItemStatus: 'TODO',
-      defaultNewItemPriority: 'MEDIUM',
-      estimationScale: 'FIBONACCI',
-      cycleDurationWeeks: '2',
-      visibleBoardColumns: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'],
-      autoAssignToLead: true,
-      autoRolloverUnfinishedCycleItems: true,
-      requireEstimateBeforeInProgress: false,
-      autoLockPublishedRunbooks: true,
-      createVersionOnEverySave: true,
-    },
-    'proj-cloud-infra': {
-      projectId: 'proj-cloud-infra',
-      defaultNewItemStatus: 'BACKLOG',
-      defaultNewItemPriority: 'HIGH',
-      estimationScale: 'LINEAR',
-      cycleDurationWeeks: '1',
-      visibleBoardColumns: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'],
-      autoAssignToLead: false,
-      autoRolloverUnfinishedCycleItems: true,
-      requireEstimateBeforeInProgress: true,
-      autoLockPublishedRunbooks: true,
-      createVersionOnEverySave: true,
-    },
-  });
+@Injectable({
+  providedIn: 'root',
+})
+export class SettingsService {
+  private readonly projectService = inject(ProjectService);
+
+  readonly activeScope = signal<'GENERAL' | 'PROJECT'>('GENERAL');
+
+  readonly generalSettings = signal<GeneralAppSettings>(loadInitialGeneralSettings());
+
+  readonly projectSettingsByProject = signal<Record<string, ProjectSpecificSettings>>({});
 
   readonly activeProjectSettings = computed<ProjectSpecificSettings>(() => {
-    const projectId = this.projectService.activeProjectId();
-    const map = this.projectSettingsByProject();
-    return map[projectId] ?? DEFAULT_PROJECT_SETTINGS(projectId);
+    const project = this.projectService.activeProject();
+    if (!project) {
+      const pid = this.projectService.activeProjectId();
+      return this.projectSettingsByProject()[pid] ?? DEFAULT_PROJECT_SETTINGS(pid);
+    }
+    const local = this.projectSettingsByProject()[project.id];
+    if (local) {
+      return local;
+    }
+    return fromModelSettings(project.id, project.settings);
   });
 
   readonly visibleBoardStatuses = computed<WorkItemStatus[]>(() => {
@@ -152,8 +182,13 @@ export class SettingsService {
   }
 
   updateGeneral<K extends keyof GeneralAppSettings>(key: K, value: GeneralAppSettings[K]): void {
-    this.generalSettings.update((prev) => ({ ...prev, [key]: value }));
-    this.flashSaved('General app settings updated (mock)');
+    this.generalSettings.update((prev) => {
+      const next = { ...prev, [key]: value };
+      try {
+        localStorage.setItem(LOCAL_STORAGE_GENERAL_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   }
 
   updateActiveProjectSetting<K extends keyof ProjectSpecificSettings>(
@@ -161,24 +196,17 @@ export class SettingsService {
     value: ProjectSpecificSettings[K]
   ): void {
     const projectId = this.projectService.activeProjectId();
+    if (!projectId) return;
     const current = this.activeProjectSettings();
+    const updated: ProjectSpecificSettings = {
+      ...current,
+      [key]: value,
+    };
     this.projectSettingsByProject.update((map) => ({
       ...map,
-      [projectId]: {
-        ...current,
-        [key]: value,
-      },
+      [projectId]: updated,
     }));
-    const projName = this.projectService.activeProject()?.name ?? projectId;
-    this.flashSaved(`Project settings updated for "${projName}" (mock)`);
-  }
-
-  flashSaved(msg: string): void {
-    this.lastSavedMessage.set(msg);
-    setTimeout(() => {
-      if (this.lastSavedMessage() === msg) {
-        this.lastSavedMessage.set('');
-      }
-    }, 2500);
+    const payloadSettings = toModelSettings(updated);
+    this.projectService.updateProject(projectId, { settings: payloadSettings });
   }
 }

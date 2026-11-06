@@ -52,7 +52,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
           <!-- Drawer Top Bar: Work Item Key + Status, Priority, Assignee, Cycle on the left; Full view & Close on the right -->
           <div class="flex items-start justify-between gap-2 px-5 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
             <div class="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
-              <span class="font-mono text-xs font-semibold text-slate-500 px-2 py-0.5 rounded bg-white border border-slate-200 mr-0.5">
+              <span class="font-mono text-xs font-semibold text-slate-500 px-2 py-0.5 rounded bg-white border border-slate-200 mr-0.5 shrink-0">
                 {{ item.key }}
               </span>
 
@@ -87,6 +87,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                 [disabled]="!projectService.canEdit()"
                 ariaLabel="Work item assignee"
                 size="sm"
+                maxWidth="max-w-[130px]"
               ></app-dropdown>
 
               <!-- Cycle -->
@@ -98,15 +99,16 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                 [disabled]="!projectService.canEdit()"
                 ariaLabel="Work item cycle"
                 size="sm"
+                maxWidth="max-w-[170px]"
               ></app-dropdown>
             </div>
 
-            <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+            <div class="flex items-center gap-1.5 shrink-0 ml-auto self-start pt-0.5">
               <button
                 type="button"
                 (click)="openFullPage(item)"
                 aria-label="Open work item full page"
-                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-[11px] font-medium text-slate-700 whitespace-nowrap"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-[11px] font-medium text-slate-700 whitespace-nowrap shadow-sm"
                 title="Open as full page"
               >
                 <span>⤢</span>
@@ -116,7 +118,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                 type="button"
                 (click)="workItemService.closeItemDetail()"
                 aria-label="Close work item drawer"
-                class="text-slate-400 hover:text-slate-700 px-2 py-1 rounded hover:bg-slate-200/60 text-xs shrink-0"
+                class="text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-200/60 text-xs shrink-0 inline-flex items-center justify-center h-6 w-6"
               >
                 ✕
               </button>

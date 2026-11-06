@@ -23,35 +23,34 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! curl -fsS "http://localhost:8082/api/v1/projects" 2>/dev/null | grep -q "proj-jynko-core"; then
-  if lsof -ti :8082 >/dev/null 2>&1; then
-    echo "==> Restarting existing Go backend process on :8082..."
-    kill $(lsof -ti :8082) 2>/dev/null || true
-    sleep 1
-  fi
-  echo "==> Building and starting Go backend server at ${API_HEALTH_URL}..."
-  go -C "${REPO_ROOT}/backend" build -o /tmp/jynko-server-e2e ./cmd/server/main.go
-  (cd "${REPO_ROOT}/backend" && exec /tmp/jynko-server-e2e) >/tmp/jynko-backend-e2e.log 2>&1 &
-  BACKEND_PID=$!
+if lsof -ti :8082 >/dev/null 2>&1; then
+  echo "==> Restarting existing Go backend process on :8082..."
+  kill $(lsof -ti :8082) 2>/dev/null || true
+  sleep 1
+fi
 
-  echo "==> Waiting for Go backend server at ${API_HEALTH_URL}..."
-  BACKEND_READY=0
-  for _ in $(seq 1 30); do
-    if curl -fsS "${API_HEALTH_URL}" >/dev/null 2>&1; then
-      BACKEND_READY=1
-      break
-    fi
-    if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
+echo "==> Building and starting Go backend server at ${API_HEALTH_URL}..."
+go -C "${REPO_ROOT}/backend" build -o /tmp/jynko-server-e2e ./cmd/server/main.go
+(cd "${REPO_ROOT}/backend" && exec /tmp/jynko-server-e2e) >/tmp/jynko-backend-e2e.log 2>&1 &
+BACKEND_PID=$!
 
-  if [[ "${BACKEND_READY}" -ne 1 ]]; then
-    echo "ERROR: Backend failed to start at ${API_HEALTH_URL} within 30s. Logs:" >&2
-    cat /tmp/jynko-backend-e2e.log >&2 || true
-    exit 1
+echo "==> Waiting for Go backend server at ${API_HEALTH_URL}..."
+BACKEND_READY=0
+for _ in $(seq 1 30); do
+  if curl -fsS "${API_HEALTH_URL}" >/dev/null 2>&1; then
+    BACKEND_READY=1
+    break
   fi
+  if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${BACKEND_READY}" -ne 1 ]]; then
+  echo "ERROR: Backend failed to start at ${API_HEALTH_URL} within 30s. Logs:" >&2
+  cat /tmp/jynko-backend-e2e.log >&2 || true
+  exit 1
 fi
 
 if ! curl -fsS "${BASE_URL}" >/dev/null 2>&1; then

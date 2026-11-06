@@ -93,6 +93,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
               [disabled]="!projectService.canEdit()"
               ariaLabel="Work item assignee"
               size="sm"
+              maxWidth="max-w-[140px]"
             ></app-dropdown>
 
             <!-- Cycle -->
@@ -104,6 +105,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
               [disabled]="!projectService.canEdit()"
               ariaLabel="Work item cycle"
               size="sm"
+              maxWidth="max-w-[180px]"
             ></app-dropdown>
           </div>
 

@@ -9,6 +9,7 @@ import {
   Project,
   ProjectMember,
   ProjectRole,
+  ProjectSettingsModel,
 } from '../models/project.model';
 
 @Injectable({
@@ -162,7 +163,7 @@ export class ProjectService {
 
   updateProject(
     projectId: string,
-    patch: { name?: string; key_prefix?: string; description?: string },
+    patch: { name?: string; key_prefix?: string; description?: string; settings?: ProjectSettingsModel },
     onUpdated?: (project: Project) => void
   ): void {
     if (!projectId) return;
@@ -189,6 +190,10 @@ export class ProjectService {
       const trimmed = patch.description.trim();
       payload['description'] = trimmed;
       optimistic.description = trimmed;
+    }
+    if (patch.settings !== undefined) {
+      payload['settings'] = patch.settings;
+      optimistic.settings = patch.settings;
     }
 
     this.projects.update((prev) =>

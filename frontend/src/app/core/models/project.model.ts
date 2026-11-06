@@ -27,6 +27,19 @@ export interface UserContext {
   avatar_color?: string;
 }
 
+export interface ProjectSettingsModel {
+  default_new_item_status: string;
+  default_new_item_priority: string;
+  estimation_scale: string;
+  cycle_duration_weeks: string;
+  visible_board_columns: WorkItemStatus[];
+  auto_assign_to_lead: boolean;
+  auto_rollover_unfinished_cycle_items: boolean;
+  require_estimate_before_in_progress: boolean;
+  auto_lock_published_runbooks: boolean;
+  create_version_on_every_save: boolean;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -34,6 +47,7 @@ export interface Project {
   description: string;
   item_seq: number;
   member_ids: string[];
+  settings?: ProjectSettingsModel;
   created_by: string;
   created_at: string;
   updated_at: string;

@@ -47,6 +47,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
             <button
               type="button"
               (click)="workItemService.activeView.set(v.mode)"
+              [attr.aria-label]="'Switch to ' + v.label + ' view'"
               class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
               [ngClass]="
                 workItemService.activeView() === v.mode

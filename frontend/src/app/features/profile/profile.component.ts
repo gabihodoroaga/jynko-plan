@@ -22,15 +22,6 @@ export interface AvatarColorOption {
             Manage your personal display name and avatar. Email is managed by Google Cloud IAP.
           </p>
         </div>
-
-        @if (savedNotice()) {
-          <span
-            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium"
-          >
-            <span>✓</span>
-            <span>Profile saved</span>
-          </span>
-        }
       </div>
 
       <!-- Profile Card -->
@@ -194,7 +185,6 @@ export class ProfileComponent implements OnInit {
   readonly displayName = signal<string>('');
   readonly avatarUrl = signal<string>('');
   readonly avatarColor = signal<string>('#ea580c');
-  readonly savedNotice = signal<boolean>(false);
 
   readonly colorOptions: AvatarColorOption[] = [
     { hex: '#ea580c', label: 'Orange' },
@@ -256,7 +246,5 @@ export class ProfileComponent implements OnInit {
       avatar_url: this.avatarUrl().trim(),
       avatar_color: this.avatarColor(),
     });
-    this.savedNotice.set(true);
-    setTimeout(() => this.savedNotice.set(false), 2500);
   }
 }
