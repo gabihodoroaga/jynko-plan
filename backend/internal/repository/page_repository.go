@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"jynko/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
 // PageRepository defines persistence operations for Wiki Pages, PageVersions, and PageCollections.

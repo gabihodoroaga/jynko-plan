@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"jynko/internal/model"
-	"jynko/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
 
 // ErrPageLocked is returned when attempting to update a locked Wiki Page.

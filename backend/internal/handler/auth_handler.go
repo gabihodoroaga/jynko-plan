@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/middleware"
-	"jynko/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
 type userProfileOverride struct {

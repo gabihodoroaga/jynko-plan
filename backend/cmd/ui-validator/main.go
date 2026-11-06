@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"jynko/internal/e2e"
+	"github.com/gabihodoroaga/jynko-plan/internal/e2e"
 )
 
 func main() {

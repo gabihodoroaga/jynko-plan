@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -17,7 +18,13 @@ type Config struct {
 	DevUserEmail        string
 	DevUserName         string
 	CORSAllowedOrigins  []string
-	StaticDir           string
+	StaticDir               string
+	LogLevel                string
+	LogFormat               string
+	EnableCloudTrace        bool
+	EnableCloudMetrics      bool
+	EnablePrometheusMetrics bool
+	OTelSampleRatio         float64
 }
 
 // Load reads an optional .env file and populates Config from environment variables.
@@ -34,18 +41,33 @@ func Load() *Config {
 		}
 	}
 
+	envVal := getEnv("ENV", "development")
+	defaultLogFormat := "json"
+	isProd := strings.EqualFold(envVal, "production") || strings.EqualFold(envVal, "prod")
+
 	return &Config{
-		Port:                getEnv("PORT", "8082"),
-		Env:                 getEnv("ENV", "development"),
-		GoogleCloudProject:  getEnv("GOOGLE_CLOUD_PROJECT", "codelab1-244421"),
-		FirestoreDatabaseID: getEnv("FIRESTORE_DATABASE_ID", "(default)"),
-		IAPAudience:         getEnv("IAP_AUDIENCE", ""),
-		DevUserID:           getEnv("DEV_USER_ID", "dev-user-1"),
-		DevUserEmail:        getEnv("DEV_USER_EMAIL", "dev@jynko.local"),
-		DevUserName:         getEnv("DEV_USER_NAME", "Local Developer"),
-		CORSAllowedOrigins:  origins,
-		StaticDir:           getEnv("STATIC_DIR", ""),
+		Port:                    getEnv("PORT", "8082"),
+		Env:                     envVal,
+		GoogleCloudProject:      getEnv("GOOGLE_CLOUD_PROJECT", "codelab1-244421"),
+		FirestoreDatabaseID:     getEnv("FIRESTORE_DATABASE_ID", "(default)"),
+		IAPAudience:             getEnv("IAP_AUDIENCE", ""),
+		DevUserID:               getEnv("DEV_USER_ID", "dev-user-1"),
+		DevUserEmail:            getEnv("DEV_USER_EMAIL", "dev@jynko.local"),
+		DevUserName:             getEnv("DEV_USER_NAME", "Local Developer"),
+		CORSAllowedOrigins:      origins,
+		StaticDir:               getEnv("STATIC_DIR", ""),
+		LogLevel:                getEnv("LOG_LEVEL", "info"),
+		LogFormat:               getEnv("LOG_FORMAT", defaultLogFormat),
+		EnableCloudTrace:        getEnvBool("ENABLE_CLOUD_TRACE", isProd),
+		EnableCloudMetrics:      getEnvBool("ENABLE_CLOUD_METRICS", isProd),
+		EnablePrometheusMetrics: getEnvBool("ENABLE_PROMETHEUS_METRICS", true),
+		OTelSampleRatio:         getEnvFloat("OTEL_SAMPLE_RATIO", 1.0),
 	}
+}
+
+// IsProduction returns true when running in production mode.
+func (c *Config) IsProduction() bool {
+	return strings.EqualFold(c.Env, "production") || strings.EqualFold(c.Env, "prod")
 }
 
 // IsDevelopment returns true when running in local development mode.
@@ -56,6 +78,26 @@ func (c *Config) IsDevelopment() bool {
 func getEnv(key, fallback string) string {
 	if val, ok := os.LookupEnv(key); ok && strings.TrimSpace(val) != "" {
 		return strings.TrimSpace(val)
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if val, ok := os.LookupEnv(key); ok && strings.TrimSpace(val) != "" {
+		b, err := strconv.ParseBool(strings.TrimSpace(val))
+		if err == nil {
+			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if val, ok := os.LookupEnv(key); ok && strings.TrimSpace(val) != "" {
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		if err == nil {
+			return f
+		}
 	}
 	return fallback
 }

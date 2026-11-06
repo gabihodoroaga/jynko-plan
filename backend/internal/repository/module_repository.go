@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"jynko/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
 // ModuleRepository defines persistence operations for project Modules.

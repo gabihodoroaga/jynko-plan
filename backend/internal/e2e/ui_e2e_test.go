@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"jynko/internal/e2e"
+	"github.com/gabihodoroaga/jynko-plan/internal/e2e"
 )
 
 func TestJynkoUIEndToEnd(t *testing.T) {

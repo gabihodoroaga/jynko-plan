@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/repository"
-	"jynko/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/service"
 )
 
 // LabelHandler handles HTTP requests for project Labels.

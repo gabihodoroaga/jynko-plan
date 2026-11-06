@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,28 +13,55 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/config"
-	"jynko/internal/handler"
-	"jynko/internal/middleware"
-	"jynko/internal/model"
-	"jynko/internal/repository"
-	"jynko/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/config"
+	"github.com/gabihodoroaga/jynko-plan/internal/handler"
+	"github.com/gabihodoroaga/jynko-plan/internal/logger"
+	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/telemetry"
 )
 
 func main() {
 	cfg := config.Load()
 
+	// Initialize structured logger configured for GCP Cloud Logging
+	appLogger := logger.New(logger.Config{
+		Format:    cfg.LogFormat,
+		Level:     logger.ParseLevel(cfg.LogLevel),
+		ProjectID: cfg.GoogleCloudProject,
+		AddSource: cfg.IsProduction(),
+	})
+	slog.SetDefault(appLogger)
+
 	ctx := context.Background()
+
+	// Initialize OpenTelemetry Tracing and Metrics pipelines
+	shutdownTel, err := telemetry.Init(ctx, cfg)
+	if err != nil {
+		slog.Warn("failed to initialize OpenTelemetry", slog.String("error", err.Error()))
+	} else {
+		defer func() {
+			telCtx, telCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer telCancel()
+			if err := shutdownTel(telCtx); err != nil {
+				slog.Warn("error shutting down OpenTelemetry", slog.String("error", err.Error()))
+			}
+		}()
+	}
+
 	firestoreClient, err := repository.NewFirestoreClient(ctx, cfg.GoogleCloudProject, cfg.FirestoreDatabaseID)
 	if err != nil {
-		log.Fatalf("failed to initialize Firestore client: %v", err)
+		slog.Error("failed to initialize Firestore client", slog.String("error", err.Error()), slog.String("gcp_project", cfg.GoogleCloudProject))
+		os.Exit(1)
 	}
 	defer func() {
 		_ = firestoreClient.Close()
 	}()
 
 	if err := repository.EnsureSeedData(ctx, firestoreClient); err != nil {
-		log.Printf("warning: failed to ensure Firestore seed data: %v", err)
+		slog.Warn("warning: failed to ensure Firestore seed data", slog.String("error", err.Error()))
 	}
 
 	// Repositories
@@ -90,9 +117,14 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Jynko server listening on :%s (env=%s, gcp_project=%s)", cfg.Port, cfg.Env, cfg.GoogleCloudProject)
+		slog.Info("Jynko server listening",
+			slog.String("port", cfg.Port),
+			slog.String("env", cfg.Env),
+			slog.String("gcp_project", cfg.GoogleCloudProject),
+		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			slog.Error("server error", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
@@ -121,12 +153,21 @@ func SetupRouter(
 	stickyHandler *handler.StickyHandler,
 ) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
-	r.Use(middleware.CORSMiddleware(cfg.CORSAllowedOrigins))
+	r.Use(
+		telemetry.GinTracingMiddleware("jynko"),
+		telemetry.HTTPMetricsMiddleware(),
+		middleware.StructuredLogger(cfg.GoogleCloudProject),
+		middleware.StructuredRecovery(cfg.GoogleCloudProject),
+		middleware.CORSMiddleware(cfg.CORSAllowedOrigins),
+	)
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	if cfg.EnablePrometheusMetrics {
+		r.GET("/metrics", gin.WrapH(telemetry.PrometheusHandler()))
+	}
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.IAPAuthMiddleware(cfg))

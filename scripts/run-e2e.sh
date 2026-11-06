@@ -11,6 +11,9 @@ API_HEALTH_URL="${JYNKO_E2E_API_HEALTH_URL:-http://localhost:8082/healthz}"
 BACKEND_PID=""
 SERVER_PID=""
 
+BACKEND_LOG="${TMPDIR:-/tmp}/jynko-backend-e2e-$$.log"
+NG_LOG="${TMPDIR:-/tmp}/jynko-ng-e2e-$$.log"
+
 cleanup() {
   if [[ -n "${SERVER_PID}" ]] && kill -0 "${SERVER_PID}" 2>/dev/null; then
     echo "==> Stopping background Angular dev server (PID ${SERVER_PID})..."
@@ -20,6 +23,7 @@ cleanup() {
     echo "==> Stopping background Go backend server (PID ${BACKEND_PID})..."
     kill "${BACKEND_PID}" 2>/dev/null || true
   fi
+  rm -f "${BACKEND_LOG}" "${NG_LOG}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -31,7 +35,7 @@ fi
 
 echo "==> Building and starting Go backend server at ${API_HEALTH_URL}..."
 go -C "${REPO_ROOT}/backend" build -o /tmp/jynko-server-e2e ./cmd/server/main.go
-(cd "${REPO_ROOT}/backend" && exec /tmp/jynko-server-e2e) >/tmp/jynko-backend-e2e.log 2>&1 &
+(cd "${REPO_ROOT}/backend" && exec /tmp/jynko-server-e2e) >"${BACKEND_LOG}" 2>&1 &
 BACKEND_PID=$!
 
 echo "==> Waiting for Go backend server at ${API_HEALTH_URL}..."
@@ -49,13 +53,13 @@ done
 
 if [[ "${BACKEND_READY}" -ne 1 ]]; then
   echo "ERROR: Backend failed to start at ${API_HEALTH_URL} within 30s. Logs:" >&2
-  cat /tmp/jynko-backend-e2e.log >&2 || true
+  cat "${BACKEND_LOG}" >&2 || true
   exit 1
 fi
 
 if ! curl -fsS "${BASE_URL}" >/dev/null 2>&1; then
   echo "==> Frontend not detected at ${BASE_URL}; starting Angular dev server..."
-  NG_CLI_ANALYTICS=false npm --prefix "${REPO_ROOT}/frontend" run start -- --host 127.0.0.1 --port 4202 >/tmp/jynko-ng-e2e.log 2>&1 &
+  CI=true NG_CLI_ANALYTICS=false npm --prefix "${REPO_ROOT}/frontend" run start -- --host 127.0.0.1 --port 4202 >"${NG_LOG}" 2>&1 &
   SERVER_PID=$!
 
   echo "==> Waiting for Angular dev server at ${BASE_URL}..."
@@ -73,7 +77,7 @@ if ! curl -fsS "${BASE_URL}" >/dev/null 2>&1; then
 
   if [[ "${READY}" -ne 1 ]]; then
     echo "ERROR: Frontend failed to start at ${BASE_URL} within 60s. Logs:" >&2
-    cat /tmp/jynko-ng-e2e.log >&2 || true
+    cat "${NG_LOG}" >&2 || true
     exit 1
   fi
 fi

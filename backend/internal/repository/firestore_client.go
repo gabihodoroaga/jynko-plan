@@ -5,6 +5,9 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/firestore"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 )
 
 // FirestoreClient wraps the Google Cloud Firestore client.
@@ -15,6 +18,7 @@ type FirestoreClient struct {
 }
 
 // NewFirestoreClient initializes a live connection to Google Cloud Firestore for the given GCP project ID and optional database ID.
+// It instruments the underlying gRPC client with OpenTelemetry so that database operations generate child spans under active request traces.
 func NewFirestoreClient(ctx context.Context, gcpProjectID string, databaseID ...string) (*FirestoreClient, error) {
 	if gcpProjectID == "" {
 		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT is required to initialize Firestore client")
@@ -25,14 +29,17 @@ func NewFirestoreClient(ctx context.Context, gcpProjectID string, databaseID ...
 		dbID = databaseID[0]
 	}
 
+	// Instrument gRPC connection with OpenTelemetry stats handler
+	grpcOpt := option.WithGRPCDialOption(grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+
 	var (
 		client *firestore.Client
 		err    error
 	)
 	if dbID == "" || dbID == "(default)" {
-		client, err = firestore.NewClient(ctx, gcpProjectID)
+		client, err = firestore.NewClient(ctx, gcpProjectID, grpcOpt)
 	} else {
-		client, err = firestore.NewClientWithDatabase(ctx, gcpProjectID, dbID)
+		client, err = firestore.NewClientWithDatabase(ctx, gcpProjectID, dbID, grpcOpt)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create firestore client: %w", err)

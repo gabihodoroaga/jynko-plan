@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"jynko/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
 // ErrNotFound is returned when a requested Firestore document does not exist.

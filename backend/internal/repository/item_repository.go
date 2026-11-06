@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"jynko/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
 // ItemRepository defines persistence operations for WorkItems, SubWorkItems, and Comments.

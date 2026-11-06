@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/middleware"
-	"jynko/internal/repository"
-	"jynko/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/service"
 )
 
 // ProjectHandler handles HTTP requests for Projects and RBAC membership.

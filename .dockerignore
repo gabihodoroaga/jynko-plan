@@ -1,0 +1,36 @@
+# Version control and editor
+.git
+.github
+.gitignore
+.agents
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+**/.DS_Store
+
+# Documentation and operational scripts
+docs/
+scripts/
+*.md
+
+# Backend exclusions
+backend/bin/
+backend/dist/
+backend/internal/e2e/screenshots/
+backend/.env
+backend/.env.*
+backend/*.test
+backend/ui-validator
+
+# Frontend exclusions
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
+frontend/.editorconfig
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.cache/
+frontend/coverage/

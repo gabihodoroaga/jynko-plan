@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/middleware"
-	"jynko/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
+	"github.com/gabihodoroaga/jynko-plan/internal/service"
 )
 
 // CommentHandler handles HTTP requests for WorkItem comments.

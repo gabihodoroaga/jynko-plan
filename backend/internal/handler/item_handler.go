@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/middleware"
-	"jynko/internal/model"
-	"jynko/internal/repository"
-	"jynko/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/service"
 )
 
 // ItemHandler handles HTTP requests for WorkItems and SubWorkItems.

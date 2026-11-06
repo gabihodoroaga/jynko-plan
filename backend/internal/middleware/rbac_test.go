@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/config"
-	"jynko/internal/model"
-	"jynko/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/config"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
 
 type mockProjectRepo struct {

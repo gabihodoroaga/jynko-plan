@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"jynko/internal/model"
-	"jynko/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
 
 // EpicService handles business logic for project Epics.

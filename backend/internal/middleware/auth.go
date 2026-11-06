@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"jynko/internal/config"
-	"jynko/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/config"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
 const userContextKey = "jynko_user_context"

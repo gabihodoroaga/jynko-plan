@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"jynko/internal/model"
-	"jynko/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/model"
+	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
 
 type mockStickyRepo struct {
