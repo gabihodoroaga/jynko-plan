@@ -117,12 +117,17 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/source.reader"
-  
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+
 # Allow Cloud Build to assign the runtime service account to Cloud Run
 gcloud iam service-accounts add-iam-policy-binding \
   "${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
+
 ```
 
 ---

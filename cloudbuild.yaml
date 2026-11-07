@@ -42,7 +42,7 @@ steps:
       - '$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com'
       - '--set-env-vars'
       - 'ENV=production,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,IAP_AUDIENCE=$_IAP_AUDIENCE,STATIC_DIR=/app/web'
-      - no-allow-unauthenticated
+      - '--no-allow-unauthenticated'
 
 substitutions:
   _SERVICE_NAME: 'jynko-plan-prod'
