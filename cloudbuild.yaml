@@ -47,7 +47,7 @@ steps:
 substitutions:
   _SERVICE_NAME: 'jynko-plan-prod'
   _REGION: 'europe-west3'
-  _SERVICE_ACCOUNT: 'jynko-runner'
+  _SERVICE_ACCOUNT: 'jynko-plan-runner'
   _FIRESTORE_DB: '(default)'
   _IAP_AUDIENCE: ''
 
