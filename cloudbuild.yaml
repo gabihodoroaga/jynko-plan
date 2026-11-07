@@ -7,9 +7,9 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:$SHORT_SHA'
+      - 'eu.gcr.io/$PROJECT_ID/jynko-plan:$SHORT_SHA'
       - '-t'
-      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:latest'
+      - 'eu.gcr.io/$PROJECT_ID/jynko-plan:latest'
       - '.'
 
   # ----------------------------------------------------------------------------
@@ -20,7 +20,7 @@ steps:
     args:
       - 'push'
       - '--all-tags'
-      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko'
+      - 'eu.gcr.io/$PROJECT_ID/jynko-plan'
 
   # ----------------------------------------------------------------------------
   # Step 3: Deploy to Google Cloud Run
@@ -33,30 +33,27 @@ steps:
       - 'deploy'
       - '$_SERVICE_NAME'
       - '--image'
-      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:$SHORT_SHA'
+      - 'eu.gcr.io/$PROJECT_ID/jynko-plan:$SHORT_SHA'
       - '--region'
       - '$_REGION'
       - '--platform'
       - 'managed'
       - '--service-account'
       - '$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--ingress'
-      - 'internal-and-cloud-load-balancing'
       - '--set-env-vars'
       - 'ENV=production,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,IAP_AUDIENCE=$_IAP_AUDIENCE,STATIC_DIR=/app/web'
+      - no-allow-unauthenticated
 
 substitutions:
-  _AR_LOCATION: 'us-central1'
-  _AR_REPOSITORY: 'jynko-repo'
-  _SERVICE_NAME: 'jynko-app'
-  _REGION: 'us-central1'
+  _SERVICE_NAME: 'jynko-plan-prod'
+  _REGION: 'europe-west3'
   _SERVICE_ACCOUNT: 'jynko-runner'
   _FIRESTORE_DB: '(default)'
   _IAP_AUDIENCE: ''
 
 images:
-  - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:$SHORT_SHA'
-  - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPOSITORY/jynko:latest'
+  - 'eu.gcr.io/$PROJECT_ID/jynko-plan:$SHORT_SHA'
+  - 'eu.gcr.io/$PROJECT_ID/jynko-plan:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY

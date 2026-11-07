@@ -43,10 +43,11 @@ gcloud config set project YOUR_PROJECT_ID
 Set common environment variables for your deployment shell:
 ```bash
 export PROJECT_ID=$(gcloud config get-value project)
-export REGION="us-central1"
-export SERVICE_NAME="jynko-app"
-export AR_REPO="jynko-repo"
-export RUNNER_SA="jynko-runner"
+export REGION="europe-west3"
+export SERVICE_NAME="jynko-plan-app"
+export AR_REPO="jynko-plan"
+export RUNNER_SA="jynko-plan-runner"
+export BUILDER_SA="jynko-plan-build"
 export DOMAIN="jynko.yourdomain.com"
 ```
 
@@ -85,7 +86,7 @@ Create a dedicated least-privilege service account for the Jynko container:
 ```bash
 gcloud iam service-accounts create $RUNNER_SA \
   --description="Runtime service account for Jynko Cloud Run service" \
-  --display-name="Jynko Runner"
+  --display-name="Jynko Plan Runner"
 
 # Grant permission to read and write to Firestore
 gcloud projects add-iam-policy-binding $PROJECT_ID \
@@ -98,15 +99,29 @@ Grant Cloud Build permission to deploy to Cloud Run and act as the runtime servi
 ```bash
 PROJECT_NUM=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 
-# Grant Cloud Run Admin to Cloud Build
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:${PROJECT_NUM}@cloudbuild.gserviceaccount.com" \
-  --role="roles/run.admin"
 
+
+gcloud iam service-accounts create $BUILDER_SA \
+  --description="Runtime service account for Jynko Cloud Run service" \
+  --display-name="Jynko Plan Builder"
+
+# Grant permission to read and write to Firestore
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+  
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/logging.logWriter"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/source.reader"
+  
 # Allow Cloud Build to assign the runtime service account to Cloud Run
 gcloud iam service-accounts add-iam-policy-binding \
   "${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --member="serviceAccount:${PROJECT_NUM}@cloudbuild.gserviceaccount.com" \
+  --member="serviceAccount:${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
 ```
 
@@ -135,8 +150,8 @@ Automate deployments whenever commits are pushed to your Git repository (GitHub 
 Run the following command to create an automated build trigger on the `main` branch:
 ```bash
 gcloud builds triggers create github \
-  --name="jynko-deploy-main" \
-  --repo-name="jynko" \
+  --name="jynko-plan-main" \
+  --repo-name="jynko-plan" \
   --repo-owner="gabihodoroaga" \
   --branch-pattern="^main$" \
   --build-config="cloudbuild.yaml" \
