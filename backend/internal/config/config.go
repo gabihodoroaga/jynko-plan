@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -9,15 +10,17 @@ import (
 
 // Config holds all environment configuration for the Jynko backend server.
 type Config struct {
-	Port                string
-	Env                 string
-	GoogleCloudProject  string
-	FirestoreDatabaseID string
-	IAPAudience         string
-	DevUserID           string
-	DevUserEmail        string
-	DevUserName         string
-	CORSAllowedOrigins  []string
+	Port                    string
+	Env                     string
+	ProjectPrefix           string
+	ProjectsCollection      string
+	GoogleCloudProject      string
+	FirestoreDatabaseID     string
+	IAPAudience             string
+	DevUserID               string
+	DevUserEmail            string
+	DevUserName             string
+	CORSAllowedOrigins      []string
 	StaticDir               string
 	LogLevel                string
 	LogFormat               string
@@ -25,6 +28,35 @@ type Config struct {
 	EnableCloudMetrics      bool
 	EnablePrometheusMetrics bool
 	OTelSampleRatio         float64
+}
+
+// DeriveEnvPrefix returns standard environment abbreviations ("dev", "stg", "prd").
+func DeriveEnvPrefix(env string) string {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "production", "prod", "prd":
+		return "prd"
+	case "staging", "stage", "stg":
+		return "stg"
+	case "development", "dev", "local":
+		return "dev"
+	default:
+		trimmed := strings.ToLower(strings.TrimSpace(env))
+		if trimmed == "" {
+			return "dev"
+		}
+		return trimmed
+	}
+}
+
+// DeriveProjectsCollection generates the collection name from project prefix and environment prefix:
+// e.g. "jp-dev-projects", "jp-stg-projects", "jp-prd-projects".
+func DeriveProjectsCollection(projectPrefix, env string) string {
+	prefix := strings.ToLower(strings.TrimSpace(projectPrefix))
+	if prefix == "" {
+		prefix = "jp"
+	}
+	envPrefix := DeriveEnvPrefix(env)
+	return fmt.Sprintf("%s-%s-projects", prefix, envPrefix)
 }
 
 // Load reads an optional .env file and populates Config from environment variables.
@@ -45,9 +77,17 @@ func Load() *Config {
 	defaultLogFormat := "json"
 	isProd := strings.EqualFold(envVal, "production") || strings.EqualFold(envVal, "prod")
 
+	projectPrefix := getEnv("PROJECT_PREFIX", "jp")
+	projectsCol := getEnv("PROJECTS_COLLECTION", "")
+	if projectsCol == "" {
+		projectsCol = DeriveProjectsCollection(projectPrefix, envVal)
+	}
+
 	return &Config{
 		Port:                    getEnv("PORT", "8082"),
 		Env:                     envVal,
+		ProjectPrefix:           projectPrefix,
+		ProjectsCollection:      projectsCol,
 		GoogleCloudProject:      getEnv("GOOGLE_CLOUD_PROJECT", "codelab1-244421"),
 		FirestoreDatabaseID:     getEnv("FIRESTORE_DATABASE_ID", "(default)"),
 		IAPAudience:             getEnv("IAP_AUDIENCE", ""),

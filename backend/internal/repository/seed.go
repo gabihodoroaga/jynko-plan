@@ -35,14 +35,21 @@ func EnsureSeedData(ctx context.Context, fc *FirestoreClient) error {
 	coreRef := fc.ProjectDoc("proj-jynko-core")
 	snap, err := coreRef.Get(ctx)
 	if err == nil && snap.Exists() {
-		slog.InfoContext(ctx, "Firestore seed check: project already exists", slog.String("project_id", "proj-jynko-core"), slog.String("gcp_project", fc.ProjectID))
+		slog.InfoContext(ctx, "Firestore seed check: project already exists",
+			slog.String("collection", fc.ProjectsCollection),
+			slog.String("project_id", "proj-jynko-core"),
+			slog.String("gcp_project", fc.ProjectID),
+		)
 		return nil
 	}
 	if err != nil && status.Code(err) != codes.NotFound {
 		return err
 	}
 
-	slog.InfoContext(ctx, "Seeding initial Jynko data into Firestore", slog.String("gcp_project", fc.ProjectID))
+	slog.InfoContext(ctx, "Seeding initial Jynko data into Firestore",
+		slog.String("collection", fc.ProjectsCollection),
+		slog.String("gcp_project", fc.ProjectID),
+	)
 	batch := fc.Client.Batch()
 
 	// =========================================================================
@@ -816,6 +823,9 @@ This collection contains all infrastructure documentation and operational playbo
 	if err != nil {
 		return err
 	}
-	slog.InfoContext(ctx, "Successfully seeded initial Jynko data into Firestore", slog.String("gcp_project", fc.ProjectID))
+	slog.InfoContext(ctx, "Successfully seeded initial Jynko data into Firestore",
+		slog.String("collection", fc.ProjectsCollection),
+		slog.String("gcp_project", fc.ProjectID),
+	)
 	return nil
 }

@@ -51,9 +51,13 @@ func main() {
 		}()
 	}
 
-	firestoreClient, err := repository.NewFirestoreClient(ctx, cfg.GoogleCloudProject, cfg.FirestoreDatabaseID)
+	firestoreClient, err := repository.NewFirestoreClient(ctx, cfg.GoogleCloudProject, cfg.FirestoreDatabaseID, cfg.ProjectsCollection)
 	if err != nil {
-		slog.Error("failed to initialize Firestore client", slog.String("error", err.Error()), slog.String("gcp_project", cfg.GoogleCloudProject))
+		slog.Error("failed to initialize Firestore client",
+			slog.String("error", err.Error()),
+			slog.String("gcp_project", cfg.GoogleCloudProject),
+			slog.String("collection", cfg.ProjectsCollection),
+		)
 		os.Exit(1)
 	}
 	defer func() {
@@ -121,6 +125,7 @@ func main() {
 			slog.String("port", cfg.Port),
 			slog.String("env", cfg.Env),
 			slog.String("gcp_project", cfg.GoogleCloudProject),
+			slog.String("projects_collection", cfg.ProjectsCollection),
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", slog.String("error", err.Error()))
