@@ -51,8 +51,7 @@ substitutions:
   _IAP_AUDIENCE: ''
 
 images:
-  - 'eu.gcr.io/$PROJECT_ID/jynko-plan:$SHORT_SHA'
-  - 'eu.gcr.io/$PROJECT_ID/jynko-plan:latest'
+  - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
