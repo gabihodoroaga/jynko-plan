@@ -33,7 +33,7 @@ COPY --from=frontend-builder /app/frontend/dist/jynko-frontend/browser ./web
 
 ENV PORT=8080
 ENV STATIC_DIR=/app/web
-ENV ENV=production
+ENV ENV=prd
 EXPOSE 8080
 
 CMD ["./server"]

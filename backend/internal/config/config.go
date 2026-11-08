@@ -30,33 +30,37 @@ type Config struct {
 	OTelSampleRatio         float64
 }
 
-// DeriveEnvPrefix returns standard environment abbreviations ("dev", "stg", "prd").
-func DeriveEnvPrefix(env string) string {
-	switch strings.ToLower(strings.TrimSpace(env)) {
-	case "production", "prod", "prd":
-		return "prd"
-	case "staging", "stage", "stg":
-		return "stg"
-	case "development", "dev", "local":
-		return "dev"
+// Valid aligned environment values: strictly prd, stg, dev.
+const (
+	EnvPrd = "prd"
+	EnvStg = "stg"
+	EnvDev = "dev"
+)
+
+// ParseEnv validates and aligns the environment string strictly to "prd", "stg", or "dev".
+// Default is "dev". No other variations (such as prod or production) are allowed.
+func ParseEnv(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case EnvPrd:
+		return EnvPrd
+	case EnvStg:
+		return EnvStg
+	case EnvDev:
+		return EnvDev
 	default:
-		trimmed := strings.ToLower(strings.TrimSpace(env))
-		if trimmed == "" {
-			return "dev"
-		}
-		return trimmed
+		return EnvDev
 	}
 }
 
-// DeriveProjectsCollection generates the collection name from project prefix and environment prefix:
+// DeriveProjectsCollection generates the collection name from project prefix and aligned environment:
 // e.g. "jp-dev-projects", "jp-stg-projects", "jp-prd-projects".
 func DeriveProjectsCollection(projectPrefix, env string) string {
 	prefix := strings.ToLower(strings.TrimSpace(projectPrefix))
 	if prefix == "" {
 		prefix = "jp"
 	}
-	envPrefix := DeriveEnvPrefix(env)
-	return fmt.Sprintf("%s-%s-projects", prefix, envPrefix)
+	envVal := ParseEnv(env)
+	return fmt.Sprintf("%s-%s-projects", prefix, envVal)
 }
 
 // Load reads an optional .env file and populates Config from environment variables.
@@ -73,9 +77,9 @@ func Load() *Config {
 		}
 	}
 
-	envVal := getEnv("ENV", "development")
+	envVal := ParseEnv(getEnv("ENV", EnvDev))
 	defaultLogFormat := "json"
-	isProd := strings.EqualFold(envVal, "production") || strings.EqualFold(envVal, "prod")
+	isPrd := envVal == EnvPrd
 
 	projectPrefix := getEnv("PROJECT_PREFIX", "jp")
 	projectsCol := getEnv("PROJECTS_COLLECTION", "")
@@ -98,21 +102,36 @@ func Load() *Config {
 		StaticDir:               getEnv("STATIC_DIR", ""),
 		LogLevel:                getEnv("LOG_LEVEL", "info"),
 		LogFormat:               getEnv("LOG_FORMAT", defaultLogFormat),
-		EnableCloudTrace:        getEnvBool("ENABLE_CLOUD_TRACE", isProd),
-		EnableCloudMetrics:      getEnvBool("ENABLE_CLOUD_METRICS", isProd),
+		EnableCloudTrace:        getEnvBool("ENABLE_CLOUD_TRACE", isPrd),
+		EnableCloudMetrics:      getEnvBool("ENABLE_CLOUD_METRICS", isPrd),
 		EnablePrometheusMetrics: getEnvBool("ENABLE_PROMETHEUS_METRICS", true),
 		OTelSampleRatio:         getEnvFloat("OTEL_SAMPLE_RATIO", 1.0),
 	}
 }
 
-// IsProduction returns true when running in production mode.
-func (c *Config) IsProduction() bool {
-	return strings.EqualFold(c.Env, "production") || strings.EqualFold(c.Env, "prod")
+// IsPrd returns true when running in prd mode.
+func (c *Config) IsPrd() bool {
+	return c.Env == EnvPrd
 }
 
-// IsDevelopment returns true when running in local development mode.
+// IsProduction is an alias for IsPrd (checking Env == "prd").
+func (c *Config) IsProduction() bool {
+	return c.IsPrd()
+}
+
+// IsStg returns true when running in stg mode.
+func (c *Config) IsStg() bool {
+	return c.Env == EnvStg
+}
+
+// IsDev returns true when running in dev mode.
+func (c *Config) IsDev() bool {
+	return c.Env == EnvDev
+}
+
+// IsDevelopment is an alias for IsDev (checking Env == "dev").
 func (c *Config) IsDevelopment() bool {
-	return strings.EqualFold(c.Env, "development") || strings.EqualFold(c.Env, "dev") || strings.EqualFold(c.Env, "local")
+	return c.IsDev()
 }
 
 func getEnv(key, fallback string) string {

@@ -4,7 +4,7 @@
 
 This document specifies the technical architecture for **Jynko**, an open-source, high-performance project management and knowledge platform hosted on GitHub. Designed to maximize developer productivity and team collaboration, the system provides work tracking across projects, feature modules, epics, cycles, work items, sub-work items, labels, and threaded discussion comments, seamlessly integrated with a dedicated **Wiki and Knowledge Management System**.
 
-The platform is architected as a decoupled system featuring a **Go REST API backend** powered by the **Gin framework**, **Google Cloud Firestore** (direct connection to a live GCP Firestore project) as the primary NoSQL document database, and an **Angular 18+ single-page application** styled natively with **Tailwind CSS** in a light-theme design system. Authentication is handled via **Google Cloud Identity-Aware Proxy (IAP) / OIDC headers** (with a configurable local fallback for `ENV=development`). A per-project **Role-Based Access Control (RBAC)** model enforces authorization across all resources (`Project` is the top-level tenant; there is no Workspace entity).
+The platform is architected as a decoupled system featuring a **Go REST API backend** powered by the **Gin framework**, **Google Cloud Firestore** (direct connection to a live GCP Firestore project) as the primary NoSQL document database, and an **Angular 18+ single-page application** styled natively with **Tailwind CSS** in a light-theme design system. Authentication is handled via **Google Cloud Identity-Aware Proxy (IAP) / OIDC headers** (with a configurable local fallback for `ENV=dev`). A per-project **Role-Based Access Control (RBAC)** model enforces authorization across all resources (`Project` is the top-level tenant; there is no Workspace entity).
 
 ### Architectural Component Layers
 
@@ -395,7 +395,7 @@ Jynko relies on **Google Cloud Identity-Aware Proxy (IAP)** / OIDC headers for u
 * `X-Goog-Authenticated-User-Id`: e.g., `accounts.google.com:1122334455` (normalized to a stable user ID or email-based ID).
 * `X-Goog-Authenticated-User-Email`: e.g., `accounts.google.com:user@example.com` (stripped of the provider prefix).
 * `X-Goog-IAP-JWT-Assertion`: Optional signed JWT assertion when cryptographic verification is configured (`IAP_AUDIENCE`).
-* **Local Development Mode (`ENV=development`)**: When running locally outside GCP, the auth middleware accepts `X-Dev-User-Id`, `X-Dev-User-Email`, and `X-Dev-User-Name` headers or falls back to default developer credentials configured in `.env` (`DEV_USER_ID`, `DEV_USER_EMAIL`, `DEV_USER_NAME`).
+* **Local Development Mode (`ENV=dev`)**: When running locally outside GCP, the auth middleware accepts `X-Dev-User-Id`, `X-Dev-User-Email`, and `X-Dev-User-Name` headers or falls back to default developer credentials configured in `.env` (`DEV_USER_ID`, `DEV_USER_EMAIL`, `DEV_USER_NAME`).
 
 Any IAP-authenticated user can create a new `Project` via `POST /api/v1/projects` and is automatically registered as an `ADMIN` in `projects/{projectId}/members/{userId}`.
 
@@ -684,7 +684,7 @@ This sequential execution plan structures the full implementation of Jynko acros
 4. Implement `/backend/internal/repository/firestore_client.go` and all Firestore repositories (`project`, `item`, `cycle`, `epic`, `module`, `label`, `page`, `sticky`) including atomic Firestore transaction support for `Project.ItemSeq` (`JYNKO-1`).
 
 ### Phase 2: Gin REST API, IAP Auth & Per-Project RBAC
-1. Implement Google Cloud IAP / OIDC header authentication in `/backend/internal/middleware/auth.go` (with `ENV=development` fallback) and `/api/v1/auth/me`.
+1. Implement Google Cloud IAP / OIDC header authentication in `/backend/internal/middleware/auth.go` (with `ENV=dev` fallback) and `/api/v1/auth/me`.
 2. Implement per-project RBAC middleware in `/backend/internal/middleware/rbac.go`.
 3. Implement domain services and Gin HTTP handlers for Projects, Members, Modules, Epics, Cycles, Labels, Work Items, Sub-Items, Comments, Wiki Pages, Page Versions, Collections, and Stickies.
 4. Wire all `/api/v1` routes in `/backend/cmd/server/main.go` and verify compilation and unit tests.

@@ -61,7 +61,7 @@ func TestIAPAuthAndRBACMiddleware(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{Env: "production"}
+	cfg := &config.Config{Env: "prd"}
 	r := gin.New()
 	r.Use(IAPAuthMiddleware(cfg))
 
@@ -75,7 +75,7 @@ func TestIAPAuthAndRBACMiddleware(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	// 1. Missing IAP headers in production -> 401
+	// 1. Missing IAP headers in prd -> 401
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/projects/proj-1/items", nil)
 	r.ServeHTTP(w, req)

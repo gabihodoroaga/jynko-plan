@@ -11,7 +11,7 @@ This file is the canonical reference for AI coding agents working on **Jynko**, 
 2. **Authentication — Google Cloud IAP / OIDC Only**:
    - Production authentication relies strictly on Google Cloud Identity-Aware Proxy (IAP) / OIDC headers (`X-Goog-Authenticated-User-Id`, `X-Goog-Authenticated-User-Email`, `X-Goog-IAP-JWT-Assertion`).
    - Do **not** build password login forms, Firebase Auth, or custom JWT token issuers.
-   - For local development (`ENV=development`), the backend auth middleware falls back to `X-Dev-User-Id`, `X-Dev-User-Email`, and `X-Dev-User-Name` headers (or `.env` defaults `DEV_USER_ID`, `DEV_USER_EMAIL`, `DEV_USER_NAME`).
+   - For local development (`ENV=dev`), the backend auth middleware falls back to `X-Dev-User-Id`, `X-Dev-User-Email`, and `X-Dev-User-Name` headers (or `.env` defaults `DEV_USER_ID`, `DEV_USER_EMAIL`, `DEV_USER_NAME`).
    - Any authenticated user can create a new project (`POST /api/v1/projects`) and automatically becomes its initial `ADMIN`.
 3. **Database — Live GCP Firestore Connection**:
    - Backend persistence connects directly to a live Google Cloud Firestore project (`GOOGLE_CLOUD_PROJECT`) using `cloud.google.com/go/firestore`.
@@ -135,7 +135,7 @@ JYNKO_E2E=1 JYNKO_E2E_OUT_DIR=/tmp/jynko-screenshots go -C backend test -v -coun
 ### Required Environment Variables (`backend/.env`)
 ```env
 PORT=8082
-ENV=development
+ENV=dev
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 FIRESTORE_DATABASE_ID=(default)
 IAP_AUDIENCE=

@@ -13,7 +13,7 @@ import (
 const userContextKey = "jynko_user_context"
 
 // IAPAuthMiddleware validates Google Cloud Identity-Aware Proxy (IAP) / OIDC headers.
-// In development mode (ENV=development), it falls back to X-Dev-User-* headers or configured dev defaults.
+// In dev mode (ENV=dev), it falls back to X-Dev-User-* headers or configured dev defaults.
 func IAPAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rawIAPUserID := strings.TrimSpace(c.GetHeader("X-Goog-Authenticated-User-Id"))
@@ -31,7 +31,7 @@ func IAPAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 				email = userID
 			}
 			name = deriveDisplayName(email)
-		} else if cfg != nil && cfg.IsDevelopment() {
+		} else if cfg != nil && (cfg.IsDev() || cfg.IsDevelopment()) {
 			devID := strings.TrimSpace(c.GetHeader("X-Dev-User-Id"))
 			devEmail := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Dev-User-Email")))
 			devName := strings.TrimSpace(c.GetHeader("X-Dev-User-Name"))
