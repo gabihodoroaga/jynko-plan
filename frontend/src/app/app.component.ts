@@ -31,14 +31,31 @@ import {
     DropdownComponent,
   ],
   template: `
-    <div class="flex flex-col h-screen w-screen overflow-hidden bg-[#f0f4f9] text-slate-900">
+    <div class="flex flex-col h-dvh w-full overflow-hidden bg-[#f0f4f9] text-slate-900">
       <!-- Global Top Application Bar (Jynko App Icon on left, Search in center, User on right) -->
-      <header class="h-11 px-3.5 bg-[#f0f4f9] flex items-center justify-between gap-4 shrink-0 select-none">
-        <!-- Left: Simple Application Brand Icon (no dropdown caret) -->
-        <div class="flex items-center gap-2 min-w-[180px]">
+      <header class="h-11 px-3 sm:px-3.5 bg-[#f0f4f9] flex items-center justify-between gap-2 sm:gap-4 shrink-0 select-none">
+        <!-- Left: Mobile Hamburger + Simple Application Brand Icon (no dropdown caret) -->
+        <div class="flex items-center gap-1.5 md:min-w-[180px] shrink-0">
+          <button
+            type="button"
+            (click)="toggleMobileNavigation()"
+            aria-label="Toggle mobile navigation"
+            [attr.aria-expanded]="settingsService.isMobileMenuOpen()"
+            class="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 hover:bg-[#e1e9f4] transition-colors"
+            title="Toggle navigation menu"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              @if (settingsService.isMobileMenuOpen()) {
+                <path d="M18 6 6 18M6 6l12 12" />
+              } @else {
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              }
+            </svg>
+          </button>
+
           <a
             routerLink="/home"
-            (click)="activeRailSection.set('WORK')"
+            (click)="activeRailSection.set('WORK'); settingsService.closeMobileMenu()"
             class="inline-flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-[#e1e9f4] transition-colors"
             title="Jynko Home"
           >
@@ -122,7 +139,7 @@ import {
             <div
               data-testid="user-dropdown-card"
               (click)="$event.stopPropagation()"
-              class="absolute right-0 top-9 z-50 w-80 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_rgba(15,23,42,0.14)] overflow-hidden"
+              class="absolute right-0 top-9 z-50 w-[calc(100vw-1.5rem)] max-w-80 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_rgba(15,23,42,0.14)] overflow-hidden"
             >
               <!-- Upper Account Identity & Profile Action -->
               <div class="p-5 flex items-start gap-4">
@@ -177,7 +194,26 @@ import {
       </header>
 
       <!-- Main 3-Column Body: [1. Left Rail] + [2. Contextual Secondary Panel (Work | Wiki)] + [3. Right Workspace] -->
-      <div class="flex flex-1 min-h-0 overflow-hidden">
+      <div class="relative flex flex-1 min-h-0 overflow-hidden">
+        <!-- Mobile Backdrop Overlay when off-canvas navigation drawer is open -->
+        @if (settingsService.isMobileMenuOpen()) {
+          <div
+            data-testid="mobile-nav-backdrop"
+            class="fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-[1px] md:hidden"
+            (click)="settingsService.closeMobileMenu()"
+          ></div>
+        }
+
+        <!-- Single-DOM Off-Canvas Navigation Wrapper on < md; Static Flex Row on >= md -->
+        <div
+          data-testid="app-navigation-drawer"
+          class="fixed inset-y-0 left-0 z-50 flex transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 md:shadow-none shrink-0"
+          [ngClass]="
+            settingsService.isMobileMenuOpen()
+              ? 'translate-x-0 shadow-2xl'
+              : '-translate-x-full md:translate-x-0'
+          "
+        >
         <!-- 1. Left Icon Navigation Rail (w-[68px]) with ONLY 3 buttons: Work, Wiki, Settings -->
         <nav
           aria-label="Primary rail"
@@ -833,6 +869,7 @@ import {
             </button>
           </aside>
         }
+        </div>
 
         <!-- 3. Right Main Workspace Column -->
         <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-white border-t border-slate-200/90">
@@ -843,6 +880,82 @@ import {
           </div>
         </div>
       </div>
+
+      <!-- Mobile Bottom Navigation Bar (< md) -->
+      <nav
+        aria-label="Mobile bottom navigation"
+        class="md:hidden h-14 px-2 pb-[env(safe-area-inset-bottom)] bg-white border-t border-slate-200 flex items-center justify-around shrink-0 select-none z-30"
+      >
+        <button
+          type="button"
+          (click)="navigateMobileSection('WORK')"
+          aria-label="Mobile Work section"
+          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
+          [ngClass]="activeRailSection() === 'WORK' && !isMyWorkRoute() ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="4" y="4" width="11" height="11" rx="2" />
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+          </svg>
+          <span class="text-[10px] leading-tight">Work</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="navigateMobileSection('MY_WORK')"
+          aria-label="Mobile My Work"
+          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
+          [ngClass]="isMyWorkRoute() ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="10" cy="8" r="4" />
+            <path d="M3 20c0-3.5 3.1-6 7-6M18 14v6M15 17h6" />
+          </svg>
+          <span class="text-[10px] leading-tight">My Work</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="navigateMobileSection('WIKI')"
+          aria-label="Mobile Wiki section"
+          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
+          [ngClass]="activeRailSection() === 'WIKI' ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M6 3h9l5 5v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+            <path d="M8 11h8M8 15h5" />
+          </svg>
+          <span class="text-[10px] leading-tight">Wiki</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="navigateMobileSection('SETTINGS')"
+          aria-label="Mobile Settings section"
+          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
+          [ngClass]="activeRailSection() === 'SETTINGS' ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+          </svg>
+          <span class="text-[10px] leading-tight">Settings</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="toggleMobileNavigation()"
+          aria-label="Open mobile navigation drawer"
+          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
+          [ngClass]="settingsService.isMobileMenuOpen() ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+            <path d="M9 4v16" />
+          </svg>
+          <span class="text-[10px] leading-tight">Menu</span>
+        </button>
+      </nav>
 
       <!-- Global Quick Create Work Item Modal -->
       <app-modal
@@ -881,7 +994,7 @@ import {
             </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div>
               <label class="block text-[11px] font-medium text-slate-600 mb-1">Status</label>
               <app-dropdown
@@ -914,7 +1027,7 @@ import {
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-[11px] font-medium text-slate-600">
@@ -1183,6 +1296,7 @@ export class AppComponent implements OnInit {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
+        this.settingsService.closeMobileMenu();
         if (e.urlAfterRedirects.startsWith('/wiki')) {
           this.activeRailSection.set('WIKI');
         } else if (e.urlAfterRedirects.startsWith('/settings')) {
@@ -1193,14 +1307,51 @@ export class AppComponent implements OnInit {
       });
   }
 
+  toggleMobileNavigation(): void {
+    const next = !this.settingsService.isMobileMenuOpen();
+    if (next) {
+      this.sidebarCollapsed.set(false);
+    }
+    this.settingsService.isMobileMenuOpen.set(next);
+  }
+
+  isMyWorkRoute(): boolean {
+    return this.router.url.startsWith('/my-work');
+  }
+
+  navigateMobileSection(section: 'WORK' | 'MY_WORK' | 'WIKI' | 'SETTINGS'): void {
+    this.settingsService.closeMobileMenu();
+    switch (section) {
+      case 'WORK':
+        this.activeRailSection.set('WORK');
+        this.router.navigate(['/projects', this.projectService.activeProjectId(), 'work-items']);
+        break;
+      case 'MY_WORK':
+        this.activeRailSection.set('WORK');
+        this.router.navigate(['/my-work']);
+        break;
+      case 'WIKI':
+        this.activeRailSection.set('WIKI');
+        this.router.navigate(['/wiki']);
+        break;
+      case 'SETTINGS':
+        this.activeRailSection.set('SETTINGS');
+        this.settingsService.openGeneralSettings();
+        this.router.navigate(['/settings']);
+        break;
+    }
+  }
+
   openGeneralSettingsFromSidebar(): void {
     this.settingsService.openGeneralSettings();
+    this.settingsService.closeMobileMenu();
     this.router.navigate(['/settings']);
   }
 
   openProjectSettingsFromSidebar(projectId: string): void {
     this.selectProjectOnly(projectId);
     this.settingsService.openProjectSettings(projectId);
+    this.settingsService.closeMobileMenu();
     this.router.navigate(['/settings'], { queryParams: { project: projectId } });
   }
 
@@ -1269,11 +1420,13 @@ export class AppComponent implements OnInit {
     this.wikiCollectionsExpanded.set(true);
     this.expandedCollections.update((m) => ({ ...m, [colId]: true }));
     this.activeRailSection.set('WIKI');
+    this.settingsService.closeMobileMenu();
     this.router.navigate(['/wiki']);
   }
 
   selectWikiPage(pageId: string): void {
     this.pageService.selectPage(pageId);
+    this.settingsService.closeMobileMenu();
     if (!this.router.url.startsWith('/wiki')) {
       this.router.navigate(['/wiki']);
     }

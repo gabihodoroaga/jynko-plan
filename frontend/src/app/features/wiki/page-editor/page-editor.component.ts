@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PageService } from '../../../core/services/page.service';
 import { ProjectService } from '../../../core/services/project.service';
+import { SettingsService } from '../../../core/services/settings.service';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 
 interface SlashBlockCommand {
@@ -20,9 +21,18 @@ interface SlashBlockCommand {
     @if (pageService.activePage(); as page) {
       <div class="flex flex-col h-full bg-white">
         <!-- 1. Top Page Breadcrumb & Action Header (matches Wiki screenshot) -->
-        <div class="h-11 px-5 border-b border-slate-200 flex items-center justify-between gap-4 shrink-0 bg-white">
+        <div class="min-h-[44px] px-3 sm:px-5 py-1.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0 bg-white">
           <!-- Left: Collection > Page Title Breadcrumb -->
           <div class="flex items-center gap-2 text-xs text-slate-600 min-w-0">
+            <button
+              type="button"
+              aria-label="Browse wiki collections"
+              (click)="settingsService.isMobileMenuOpen.set(true)"
+              class="md:hidden inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[11px] font-medium text-slate-700 shrink-0"
+            >
+              <span>☰</span>
+              <span>Pages</span>
+            </button>
             <span class="inline-flex items-center gap-1.5 text-slate-600 font-medium shrink-0">
               <svg class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path d="M2 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4a2 2 0 0 1-2-2V6Z" />
@@ -87,7 +97,7 @@ interface SlashBlockCommand {
               <button
                 type="button"
                 (click)="editorMode.set('SPLIT')"
-                class="px-2 py-0.5 rounded text-[11px] font-medium transition-colors"
+                class="hidden md:inline-flex px-2 py-0.5 rounded text-[11px] font-medium transition-colors"
                 [ngClass]="editorMode() === 'SPLIT' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'"
               >
                 Split
@@ -277,7 +287,7 @@ interface SlashBlockCommand {
         >
           <!-- Markdown Source / Block Editor Column (shown in EDIT or SPLIT mode) -->
           @if (editorMode() === 'EDIT' || editorMode() === 'SPLIT') {
-            <div class="w-full px-8 py-8 flex flex-col min-h-full">
+            <div class="w-full px-4 py-4 sm:px-8 sm:py-8 flex flex-col min-h-full">
               <input
                 type="text"
                 aria-label="Wiki page title"
@@ -322,7 +332,7 @@ interface SlashBlockCommand {
                 ></textarea>
 
                 @if (showSlashMenu() && !page.is_locked && projectService.canEdit()) {
-                  <div class="absolute bottom-4 left-4 z-20 w-72 bg-white border border-slate-200 rounded-md shadow-lg p-1.5 space-y-1">
+                  <div class="absolute bottom-4 left-3 right-3 sm:left-4 sm:right-auto z-20 sm:w-72 bg-white border border-slate-200 rounded-md shadow-lg p-1.5 space-y-1">
                     <div class="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 border-b border-slate-100">
                       Insert Markdown Block
                     </div>
@@ -344,7 +354,7 @@ interface SlashBlockCommand {
 
           <!-- Full-Width Document View -->
           @if (editorMode() === 'PREVIEW' || editorMode() === 'SPLIT') {
-            <div class="w-full px-8 py-8">
+            <div class="w-full px-4 py-4 sm:px-8 sm:py-8">
               <!-- Editable Page Title -->
               <input
                 type="text"
@@ -378,6 +388,7 @@ export class PageEditorComponent {
 
   readonly pageService = inject(PageService);
   readonly projectService = inject(ProjectService);
+  readonly settingsService = inject(SettingsService);
 
   readonly editorMode = signal<'SPLIT' | 'EDIT' | 'PREVIEW'>('PREVIEW');
   readonly showSlashMenu = signal<boolean>(false);

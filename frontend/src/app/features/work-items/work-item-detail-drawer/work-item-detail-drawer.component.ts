@@ -50,7 +50,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
           (click)="onAsideClick($event)"
         >
           <!-- Drawer Top Bar: Work Item Key + Status, Priority, Assignee, Cycle on the left; Full view & Close on the right -->
-          <div class="flex items-start justify-between gap-2 px-5 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+          <div class="flex items-start justify-between gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 border-b border-slate-200 bg-slate-50 shrink-0">
             <div class="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
               <span class="font-mono text-xs font-semibold text-slate-500 px-2 py-0.5 rounded bg-white border border-slate-200 mr-0.5 shrink-0">
                 {{ item.key }}
@@ -118,7 +118,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                 type="button"
                 (click)="workItemService.closeItemDetail()"
                 aria-label="Close work item drawer"
-                class="text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-200/60 text-xs shrink-0 inline-flex items-center justify-center h-6 w-6"
+                class="text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-200/60 text-xs shrink-0 inline-flex items-center justify-center h-7 w-7"
               >
                 ✕
               </button>
@@ -126,7 +126,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
           </div>
 
           <!-- Drawer Body -->
-          <div class="flex-1 overflow-y-auto p-5 space-y-5">
+          <div class="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-5">
             <!-- 1. Title -->
             <div>
               <input
@@ -190,7 +190,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                       role="listbox"
                       aria-label="Start date options"
                       (click)="$event.stopPropagation()"
-                      class="absolute left-0 z-50 mt-1 w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
+                      class="fixed left-3 right-3 sm:absolute sm:left-0 sm:right-auto z-50 mt-1 sm:w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
                     >
                       <button
                         type="button"
@@ -262,7 +262,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                       role="listbox"
                       aria-label="Due date options"
                       (click)="$event.stopPropagation()"
-                      class="absolute left-0 z-50 mt-1 w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
+                      class="fixed left-3 right-3 sm:absolute sm:left-0 sm:right-auto z-50 mt-1 sm:w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
                     >
                       <button
                         type="button"
@@ -374,7 +374,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                         role="listbox"
                         aria-label="Work item labels options"
                         (click)="$event.stopPropagation()"
-                        class="absolute left-0 z-50 mt-1 w-52 max-h-60 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1 text-xs"
+                        class="fixed left-3 right-3 sm:absolute sm:left-0 sm:right-auto z-50 mt-1 sm:w-52 max-h-60 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1 text-xs"
                       >
                         @for (lbl of projectService.labels(); track lbl.id) {
                           <button

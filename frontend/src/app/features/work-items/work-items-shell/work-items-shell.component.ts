@@ -39,29 +39,54 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
     <div class="flex flex-col w-full h-full">
       <!-- View Toolbar & Filter Bar (h-11 / 44px) -->
       <div
-        class="min-h-[44px] px-4 py-1.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2"
+        class="min-h-[44px] px-3 sm:px-4 py-1.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2"
       >
-        <!-- 5 Segmented View Switcher Buttons -->
-        <div class="inline-flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200">
-          @for (v of views; track v.mode) {
-            <button
-              type="button"
-              (click)="workItemService.activeView.set(v.mode)"
-              [attr.aria-label]="'Switch to ' + v.label + ' view'"
-              class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
-              [ngClass]="
-                workItemService.activeView() === v.mode
-                  ? 'bg-white text-slate-900 shadow-card border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900'
-              "
-            >
-              {{ v.label }}
-            </button>
-          }
+        <!-- Top Row on Mobile: 5 Segmented View Switcher Buttons + Mobile Actions -->
+        <div class="flex items-center justify-between gap-2 w-full md:w-auto">
+          <div class="inline-flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200 max-w-full overflow-x-auto">
+            @for (v of views; track v.mode) {
+              <button
+                type="button"
+                (click)="workItemService.activeView.set(v.mode)"
+                [attr.aria-label]="'Switch to ' + v.label + ' view'"
+                class="px-2 sm:px-2.5 py-1 rounded text-xs font-medium transition-colors shrink-0 whitespace-nowrap"
+                [ngClass]="
+                  workItemService.activeView() === v.mode
+                    ? 'bg-white text-slate-900 shadow-card border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
+                "
+              >
+                {{ v.label }}
+              </button>
+            }
+          </div>
+
+          <!-- Mobile Filter Toggle Button (< md) -->
+          <button
+            type="button"
+            (click)="isMobileFiltersOpen.set(!isMobileFiltersOpen())"
+            aria-label="Toggle mobile filters"
+            [attr.aria-expanded]="isMobileFiltersOpen()"
+            class="md:hidden h-7 inline-flex items-center gap-1 px-2.5 rounded-md border text-xs font-medium shrink-0 transition-colors"
+            [ngClass]="
+              isMobileFiltersOpen() || hasActiveFilters()
+                ? 'bg-sky-50 border-sky-200 text-sky-700'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            "
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 6h16M7 12h10M10 18h4" stroke-linecap="round" />
+            </svg>
+            <span>Filters</span>
+          </button>
         </div>
 
         <!-- Multi-Attribute Styled Dropdown Filters, Board Columns Configurator & Primary Action Button -->
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div
+            class="flex-wrap items-center gap-2"
+            [ngClass]="isMobileFiltersOpen() ? 'flex w-full md:w-auto' : 'hidden md:flex'"
+          >
           <!-- Configurable Kanban Board Columns Popover Trigger (shown in BOARD mode) -->
           @if (workItemService.activeView() === 'BOARD') {
             <div class="relative">
@@ -83,7 +108,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
                 <div
                   role="dialog"
                   aria-label="Kanban Board Columns Configuration"
-                  class="absolute left-0 mt-1.5 z-40 w-72 rounded-lg bg-white border border-slate-200 shadow-lg p-3 space-y-2.5"
+                  class="absolute left-0 mt-1.5 z-40 w-[calc(100vw-2rem)] max-w-72 rounded-lg bg-white border border-slate-200 shadow-lg p-3 space-y-2.5"
                 >
                   <div class="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div>
@@ -193,12 +218,13 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
               Clear
             </button>
           }
+          </div>
 
           @if (projectService.canEdit()) {
             <button
               type="button"
               (click)="workItemService.isQuickCreateOpen.set(true)"
-              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors ml-auto md:ml-0"
             >
               + Add work item
             </button>
@@ -207,7 +233,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
       </div>
 
       <!-- Active View Canvas (bg-slate-50) -->
-      <div class="flex-1 min-h-0 p-4 bg-slate-50 overflow-auto flex flex-col">
+      <div class="flex-1 min-h-0 p-2.5 sm:p-4 bg-slate-50 overflow-auto flex flex-col">
         @switch (workItemService.activeView()) {
           @case ('LIST') {
             <app-work-item-list></app-work-item-list>
@@ -238,6 +264,7 @@ export class WorkItemsShellComponent {
   readonly settingsService = inject(SettingsService);
 
   readonly isColumnsPopoverOpen = signal<boolean>(false);
+  readonly isMobileFiltersOpen = signal<boolean>(false);
   readonly allStatuses = ALL_STATUSES;
 
   readonly views: { mode: WorkItemViewMode; label: string }[] = [

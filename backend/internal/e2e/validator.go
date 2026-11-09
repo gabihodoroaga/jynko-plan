@@ -117,6 +117,11 @@ func DefaultChecks() []CheckSpec {
 			Name: "Settings Workspace: General App Preferences & Per-Project Settings",
 			Run:  CheckSettings,
 		},
+		{
+			ID:   "15-mobile-responsive",
+			Name: "Mobile Viewport (390x844): Off-Canvas Navigation Drawer, Bottom Tab Bar & Full-Width Workspace",
+			Run:  CheckMobileResponsiveLayout,
+		},
 	}
 }
 
@@ -216,6 +221,28 @@ func newViewportPage(browser *rod.Browser, url string) *rod.Page {
 	page.MustNavigate(url).MustWaitLoad()
 
 	// Wait until the live backend + Firestore API responses populate the application state
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		bodyText := page.MustElement("body").MustText()
+		if strings.Contains(bodyText, "hodo") || strings.Contains(bodyText, "Welcome to Company's Wiki") || strings.Contains(bodyText, "Electric Banana") {
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	time.Sleep(800 * time.Millisecond)
+	return page
+}
+
+func newMobileViewportPage(browser *rod.Browser, url string) *rod.Page {
+	page := browser.MustPage("")
+	_ = proto.EmulationSetDeviceMetricsOverride{
+		Width:             390,
+		Height:            844,
+		DeviceScaleFactor: 2,
+		Mobile:            true,
+	}.Call(page)
+	page.MustNavigate(url).MustWaitLoad()
+
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
 		bodyText := page.MustElement("body").MustText()
@@ -1188,6 +1215,105 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 	}
 
 	assertFullWidthPageContainer(page, &res, "Settings")
+
+	page.MustScreenshot(res.Screenshot)
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res
+}
+
+// -----------------------------------------------------------------------------
+// Suite 15: Mobile Responsive Layout (390x844)
+// -----------------------------------------------------------------------------
+func CheckMobileResponsiveLayout(browser *rod.Browser, baseURL, outDir string) ValidationCheckResult {
+	start := time.Now()
+	url := baseURL + "/home"
+	res := ValidationCheckResult{
+		ID:         "15-mobile-responsive",
+		Name:       "Mobile Viewport (390x844): Off-Canvas Navigation Drawer, Bottom Tab Bar & Full-Width Workspace",
+		URL:        url,
+		Passed:     true,
+		Screenshot: filepath.Join(outDir, "15-mobile-responsive.png"),
+	}
+
+	page := newMobileViewportPage(browser, url)
+	defer page.MustClose()
+
+	// 1. Assert mobile hamburger button & bottom navigation bar are visible
+	hasHamburger := page.MustEval(`() => {
+		const el = document.querySelector('button[aria-label="Toggle mobile navigation"]');
+		return Boolean(el && el.getBoundingClientRect().width > 0);
+	}`).Bool()
+	hasBottomNav := page.MustEval(`() => {
+		const el = document.querySelector('nav[aria-label="Mobile bottom navigation"]');
+		return Boolean(el && el.getBoundingClientRect().width >= 350);
+	}`).Bool()
+	if hasHamburger && hasBottomNav {
+		res.Assertions = append(res.Assertions, "Mobile top hamburger button and fixed bottom navigation bar render at 390x844 viewport")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v) and bottom nav (%v) to be visible at 390x844", hasHamburger, hasBottomNav))
+	}
+
+	// 2. Assert <main> receives full mobile viewport width (>= 350px) instead of being crushed by desktop sidebars
+	mainWidth := page.MustEval(`() => {
+		const el = document.querySelector('main');
+		return el ? Math.round(el.getBoundingClientRect().width) : 0;
+	}`).Int()
+	if mainWidth >= 350 {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("<main> workspace spans full mobile viewport width (%dpx >= 350px) with sidebars off-canvas", mainWidth))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("<main> workspace is too narrow on mobile (%dpx < 350px)", mainWidth))
+	}
+
+	// 3. Open off-canvas navigation drawer via hamburger button, verify backdrop & drawer position, then navigate via drawer link
+	if has, btn, _ := page.Has(`button[aria-label="Toggle mobile navigation"]`); has && btn != nil {
+		btn.MustClick()
+		time.Sleep(300 * time.Millisecond)
+
+		drawerOpen := page.MustEval(`() => {
+			const backdrop = document.querySelector('[data-testid="mobile-nav-backdrop"]');
+			const drawer = document.querySelector('[data-testid="app-navigation-drawer"]');
+			if (!backdrop || !drawer) return false;
+			const rect = drawer.getBoundingClientRect();
+			return rect.left >= -2 && rect.width >= 250;
+		}`).Bool()
+		if drawerOpen {
+			res.Assertions = append(res.Assertions, "Clicking mobile hamburger slides off-canvas navigation drawer into view with backdrop overlay")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Off-canvas navigation drawer or backdrop did not open when clicking mobile hamburger")
+		}
+
+		// Click 'Work items' link inside the open mobile drawer and verify auto-close on route navigation
+		if hasLink, workItemsLink, _ := page.Has(`a[aria-label="Open hodo work items"]`); hasLink && workItemsLink != nil {
+			workItemsLink.MustClick()
+			time.Sleep(600 * time.Millisecond)
+
+			drawerClosed := page.MustEval(`() => !document.querySelector('[data-testid="mobile-nav-backdrop"]')`).Bool()
+			if drawerClosed && strings.Contains(page.MustInfo().URL, "/work-items") {
+				res.Assertions = append(res.Assertions, "Selecting a route inside the mobile drawer navigates and automatically closes the off-canvas drawer")
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, "Mobile navigation drawer did not auto-close after selecting 'Work items' route")
+			}
+		} else {
+			page.MustNavigate(baseURL + "/projects/proj-jynko-core/work-items").MustWaitLoad()
+			time.Sleep(600 * time.Millisecond)
+		}
+	}
+
+	// 4. Verify collapsible mobile filter toggle on Work Items shell
+	hasFilterToggle := page.MustEval(`() => {
+		const el = document.querySelector('button[aria-label="Toggle mobile filters"]');
+		return Boolean(el && el.getBoundingClientRect().width > 0);
+	}`).Bool()
+	if hasFilterToggle {
+		res.Assertions = append(res.Assertions, "Work Items shell renders collapsible mobile filter toggle and horizontally scrollable view tabs on 390x844")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing visible button[aria-label='Toggle mobile filters'] on mobile Work Items shell")
+	}
 
 	page.MustScreenshot(res.Screenshot)
 	res.DurationMs = time.Since(start).Milliseconds()

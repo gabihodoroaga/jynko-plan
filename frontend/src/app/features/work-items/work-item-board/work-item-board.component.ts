@@ -25,12 +25,12 @@ import { PriorityBadgeComponent } from '../../../shared/components/priority-badg
   template: `
     <div
       cdkDropListGroup
-      class="flex gap-3.5 overflow-x-auto pb-2 items-stretch h-full min-h-[calc(100vh-10rem)]"
+      class="flex gap-3.5 overflow-x-auto pb-2 items-stretch h-full min-h-[calc(100vh-10rem)] snap-x snap-mandatory sm:snap-none"
     >
       @for (col of columns(); track col.status) {
         <div
           [attr.data-board-column]="col.status"
-          class="board-column w-72 shrink-0 h-full bg-slate-50 border border-slate-200 rounded-md flex flex-col"
+          class="board-column w-[82vw] max-w-[288px] sm:w-72 snap-center shrink-0 h-full bg-slate-50 border border-slate-200 rounded-md flex flex-col"
         >
           <!-- Column Header -->
           <div class="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 bg-white rounded-t-md shrink-0">
@@ -51,6 +51,7 @@ import { PriorityBadgeComponent } from '../../../shared/components/priority-badg
               <div
                 cdkDrag
                 [cdkDragData]="item"
+                [cdkDragStartDelay]="{ touch: 250, mouse: 0 }"
                 [cdkDragDisabled]="!projectService.canEdit()"
                 [attr.data-item-key]="item.key"
                 (click)="workItemService.openItemDetail(item.id)"

@@ -13,7 +13,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent],
   template: `
-    <div class="w-full p-6 space-y-5 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-base font-semibold text-slate-900">Epics & Strategic Milestones</h2>
@@ -167,7 +167,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
               class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
             ></textarea>
           </div>
-          <div class="grid grid-cols-3 gap-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div>
               <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
               <app-dropdown
@@ -253,7 +253,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
               class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
             ></textarea>
           </div>
-          <div class="grid grid-cols-3 gap-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div>
               <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
               <app-dropdown

@@ -118,6 +118,15 @@ export class SettingsService {
   private readonly projectService = inject(ProjectService);
 
   readonly activeScope = signal<'GENERAL' | 'PROJECT'>('GENERAL');
+  readonly isMobileMenuOpen = signal<boolean>(false);
+
+  toggleMobileMenu(): void {
+    this.isMobileMenuOpen.update((v) => !v);
+  }
+
+  closeMobileMenu(): void {
+    this.isMobileMenuOpen.set(false);
+  }
 
   readonly generalSettings = signal<GeneralAppSettings>(loadInitialGeneralSettings());
 

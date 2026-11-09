@@ -15,10 +15,41 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
   standalone: true,
   imports: [CommonModule, FormsModule, DropdownComponent, StatusBadgeComponent],
   template: `
-    <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
       <!-- Top Settings Header -->
-      <div class="border-b border-slate-200 pb-4">
+      <div class="border-b border-slate-200 pb-4 space-y-2.5">
         <h1 class="text-lg font-semibold text-slate-900">Settings</h1>
+
+        <!-- Mobile In-Page Scope Switcher (General vs Per-Project) -->
+        <div class="md:hidden flex flex-wrap items-center gap-1.5" data-testid="mobile-settings-scope-switcher">
+          <button
+            type="button"
+            (click)="settingsService.activeScope.set('GENERAL')"
+            class="px-2.5 py-1 rounded-md border text-xs font-medium transition-colors"
+            [ngClass]="
+              settingsService.activeScope() === 'GENERAL'
+                ? 'bg-sky-50 border-sky-200 text-sky-700'
+                : 'bg-white border-slate-200 text-slate-600'
+            "
+          >
+            General Settings
+          </button>
+          @for (proj of projectService.projects(); track proj.id) {
+            <button
+              type="button"
+              (click)="projectService.selectProject(proj.id); settingsService.activeScope.set('PROJECT')"
+              class="px-2.5 py-1 rounded-md border text-xs font-medium transition-colors inline-flex items-center gap-1.5"
+              [ngClass]="
+                settingsService.activeScope() === 'PROJECT' && projectService.activeProjectId() === proj.id
+                  ? 'bg-sky-50 border-sky-200 text-sky-700'
+                  : 'bg-white border-slate-200 text-slate-600'
+              "
+            >
+              <span>{{ proj.name }}</span>
+              <span class="font-mono text-[10px] opacity-75">{{ proj.key_prefix }}</span>
+            </button>
+          }
+        </div>
       </div>
 
       @if (settingsService.activeScope() === 'GENERAL') {

@@ -15,7 +15,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
   standalone: true,
   imports: [CommonModule, FormsModule, DropdownComponent],
   template: `
-    <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
       <!-- Active Project Card -->
       @if (projectService.activeProject(); as proj) {
         <div class="bg-white border border-slate-200 rounded-md p-4 shadow-card space-y-3">
@@ -242,7 +242,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
           }
         </div>
         @if (projectService.canEdit()) {
-          <form (ngSubmit)="addLabel()" class="flex items-center gap-2 pt-2">
+          <form (ngSubmit)="addLabel()" class="flex flex-wrap items-center gap-2 pt-2">
             <input
               type="text"
               name="labelName"

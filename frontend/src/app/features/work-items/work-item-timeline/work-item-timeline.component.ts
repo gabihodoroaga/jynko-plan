@@ -22,14 +22,14 @@ interface TimelineBarRow {
   template: `
     <div class="bg-white border border-slate-200 rounded-md shadow-card overflow-hidden">
       <!-- Timeline Header -->
-      <div class="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+      <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 sm:px-4 py-2.5 bg-slate-50 border-b border-slate-200">
         <div>
           <h3 class="text-sm font-semibold text-slate-900">Timeline / Gantt Roadmap</h3>
           <p class="text-[11px] text-slate-500">
             Visualizing work item duration bars from <code class="font-mono">start_date</code> to <code class="font-mono">due_date</code> (Oct 18 – Nov 10, 2026)
           </p>
         </div>
-        <div class="flex items-center gap-3 text-[11px] text-slate-600">
+        <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
           <span class="inline-flex items-center gap-1.5">
             <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span> Done
           </span>
@@ -42,56 +42,61 @@ interface TimelineBarRow {
         </div>
       </div>
 
-      <!-- Axis Labels -->
-      <div class="grid grid-cols-12 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
-        <div class="col-span-4 px-3.5 py-2 border-r border-slate-200">Work Item & Epic</div>
-        <div class="col-span-8 grid grid-cols-6 divide-x divide-slate-200">
-          @for (tick of dateTicks; track tick) {
-            <div class="px-2 py-2 text-center font-mono text-[10px] text-slate-500">{{ tick }}</div>
-          }
-        </div>
-      </div>
-
-      <!-- Gantt Rows -->
-      <div class="divide-y divide-slate-200">
-        @for (row of timelineRows(); track row.item.id) {
-          <div
-            class="grid grid-cols-12 items-center hover:bg-slate-50 transition-colors cursor-pointer"
-            (click)="workItemService.openItemDetail(row.item.id)"
-          >
-            <!-- Left Metadata Column -->
-            <div class="col-span-4 px-3.5 py-3 border-r border-slate-200 flex items-center justify-between gap-2 min-w-0">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="font-mono text-[11px] text-slate-400">{{ row.item.key }}</span>
-                  <span class="text-xs font-medium text-slate-900 truncate">{{ row.item.title }}</span>
-                </div>
-                <div class="text-[11px] text-slate-400 truncate mt-0.5">
-                  Epic: {{ row.epicName }}
-                </div>
-              </div>
-              <app-priority-badge [priority]="row.item.priority"></app-priority-badge>
-            </div>
-
-            <!-- Right Horizontal Bar Track -->
-            <div class="col-span-8 relative h-12 px-2 flex items-center bg-slate-50/40">
-              <!-- Subtle vertical grid lines -->
-              <div class="absolute inset-0 grid grid-cols-6 divide-x divide-slate-200/70 pointer-events-none">
-                <div></div><div></div><div></div><div></div><div></div><div></div>
-              </div>
-
-              <!-- Duration Bar -->
-              <div
-                class="relative h-6 rounded-md border px-2 flex items-center justify-between text-[11px] font-medium shadow-sm transition-all"
-                [ngClass]="barClasses(row.item)"
-                [style.marginLeft.%]="row.leftPercent"
-                [style.width.%]="row.widthPercent"
-              >
-                <span class="truncate">{{ row.item.key }} · {{ row.startLabel }} → {{ row.dueLabel }}</span>
-              </div>
+      <!-- Scrollable Gantt Grid Wrapper for Mobile -->
+      <div class="overflow-x-auto">
+        <div class="min-w-[680px]">
+          <!-- Axis Labels -->
+          <div class="grid grid-cols-12 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
+            <div class="col-span-4 px-3.5 py-2 border-r border-slate-200">Work Item & Epic</div>
+            <div class="col-span-8 grid grid-cols-6 divide-x divide-slate-200">
+              @for (tick of dateTicks; track tick) {
+                <div class="px-2 py-2 text-center font-mono text-[10px] text-slate-500">{{ tick }}</div>
+              }
             </div>
           </div>
-        }
+
+          <!-- Gantt Rows -->
+          <div class="divide-y divide-slate-200">
+            @for (row of timelineRows(); track row.item.id) {
+              <div
+                class="grid grid-cols-12 items-center hover:bg-slate-50 transition-colors cursor-pointer"
+                (click)="workItemService.openItemDetail(row.item.id)"
+              >
+                <!-- Left Metadata Column -->
+                <div class="col-span-4 px-3.5 py-3 border-r border-slate-200 flex items-center justify-between gap-2 min-w-0">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono text-[11px] text-slate-400">{{ row.item.key }}</span>
+                      <span class="text-xs font-medium text-slate-900 truncate">{{ row.item.title }}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 truncate mt-0.5">
+                      Epic: {{ row.epicName }}
+                    </div>
+                  </div>
+                  <app-priority-badge [priority]="row.item.priority"></app-priority-badge>
+                </div>
+
+                <!-- Right Horizontal Bar Track -->
+                <div class="col-span-8 relative h-12 px-2 flex items-center bg-slate-50/40">
+                  <!-- Subtle vertical grid lines -->
+                  <div class="absolute inset-0 grid grid-cols-6 divide-x divide-slate-200/70 pointer-events-none">
+                    <div></div><div></div><div></div><div></div><div></div><div></div>
+                  </div>
+
+                  <!-- Duration Bar -->
+                  <div
+                    class="relative h-6 rounded-md border px-2 flex items-center justify-between text-[11px] font-medium shadow-sm transition-all"
+                    [ngClass]="barClasses(row.item)"
+                    [style.marginLeft.%]="row.leftPercent"
+                    [style.width.%]="row.widthPercent"
+                  >
+                    <span class="truncate">{{ row.item.key }} · {{ row.startLabel }} → {{ row.dueLabel }}</span>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
       </div>
     </div>
   `,

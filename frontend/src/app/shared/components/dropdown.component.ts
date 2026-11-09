@@ -67,7 +67,7 @@ export interface DropdownOption {
         <div
           role="listbox"
           (click)="$event.stopPropagation()"
-          class="absolute z-50 mt-1 min-w-[168px] max-h-60 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1 text-xs"
+          class="absolute z-50 mt-1 min-w-[168px] max-w-[calc(100vw-1.5rem)] max-h-60 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1 text-xs"
           [ngClass]="[
             fullWidth ? 'w-full' : '',
             align === 'right' ? 'right-0' : 'left-0',

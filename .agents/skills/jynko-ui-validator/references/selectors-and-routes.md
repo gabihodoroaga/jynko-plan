@@ -29,6 +29,15 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 - **Top Header Brand**:
   - Brand title text: `Jynko` (must **not** contain a dropdown caret `⌄` or workspace switcher).
   - Global search input: `header input[type="search"]`.
+  - Mobile hamburger button (`< 768px`): `button[aria-label="Toggle mobile navigation"]`.
+- **Mobile Navigation (`< 768px`)**:
+  - Off-canvas navigation drawer container: `[data-testid="app-navigation-drawer"]`
+  - Off-canvas backdrop overlay: `[data-testid="mobile-nav-backdrop"]`
+  - Fixed bottom navigation bar: `nav[aria-label="Mobile bottom navigation"]`
+  - Bottom nav buttons: `button[aria-label="Mobile Work section"]`, `button[aria-label="Mobile My Work"]`, `button[aria-label="Mobile Wiki section"]`, `button[aria-label="Mobile Settings section"]`, `button[aria-label="Open mobile navigation drawer"]`
+  - Work Items mobile filter toggle: `button[aria-label="Toggle mobile filters"]`
+  - Wiki mobile collections drawer trigger: `button[aria-label="Browse wiki collections"]`
+  - Settings mobile scope switcher: `[data-testid="mobile-settings-scope-switcher"]`
 - **Left Icon Rail (`68px`)**:
   - `Work` section button: `aside button` with text `Work`.
   - `Wiki` section button: `aside button` with text `Wiki`.

@@ -36,6 +36,7 @@ steps:
       - '$_REGION'
       - '--platform'
       - 'managed'
+      - '--iap'
       - '--service-account'
       - '$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com'
       - '--set-env-vars'

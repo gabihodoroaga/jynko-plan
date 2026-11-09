@@ -20,8 +20,8 @@ interface CalendarDayCell {
   template: `
     <div class="bg-white border border-slate-200 rounded-md shadow-card overflow-hidden">
       <!-- Calendar Month Toolbar -->
-      <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-        <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-200 bg-slate-50">
+        <div class="flex flex-wrap items-center gap-2">
           <h3 class="text-sm font-semibold text-slate-900">
             {{ currentMonthDate() | date: 'MMMM yyyy' }}
           </h3>
@@ -54,53 +54,58 @@ interface CalendarDayCell {
         </div>
       </div>
 
-      <!-- Days of Week Header -->
-      <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
-        @for (dayName of weekDays; track dayName) {
-          <div class="px-2.5 py-1.5 border-r last:border-r-0 border-slate-200">
-            {{ dayName }}
+      <!-- Scrollable Calendar Grid Wrapper for Mobile -->
+      <div class="overflow-x-auto">
+        <div class="min-w-[640px]">
+          <!-- Days of Week Header -->
+          <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
+            @for (dayName of weekDays; track dayName) {
+              <div class="px-2.5 py-1.5 border-r last:border-r-0 border-slate-200">
+                {{ dayName }}
+              </div>
+            }
           </div>
-        }
-      </div>
 
-      <!-- 42-Cell Calendar Grid -->
-      <div class="grid grid-cols-7 divide-x divide-y divide-slate-200">
-        @for (cell of calendarCells(); track cell.isoDate) {
-          <div
-            class="min-h-[112px] p-2 transition-colors"
-            [ngClass]="cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/70 text-slate-400'"
-          >
-            <div class="flex items-center justify-between mb-1.5">
-              <span
-                class="text-[11px] font-mono px-1.5 py-0.5 rounded"
-                [ngClass]="
-                  cell.isToday
-                    ? 'bg-sky-600 text-white font-semibold'
-                    : 'text-slate-600'
-                "
+          <!-- 42-Cell Calendar Grid -->
+          <div class="grid grid-cols-7 divide-x divide-y divide-slate-200">
+            @for (cell of calendarCells(); track cell.isoDate) {
+              <div
+                class="min-h-[112px] p-2 transition-colors"
+                [ngClass]="cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/70 text-slate-400'"
               >
-                {{ cell.dayNumber }}
-              </span>
-              @if (cell.items.length > 0) {
-                <span class="text-[10px] font-mono text-slate-400">{{ cell.items.length }}</span>
-              }
-            </div>
-
-            <div class="space-y-1">
-              @for (item of cell.items; track item.id) {
-                <div
-                  (click)="workItemService.openItemDetail(item.id)"
-                  class="px-2 py-1 rounded border text-[11px] cursor-pointer truncate transition-colors"
-                  [ngClass]="itemPillClasses(item)"
-                  [title]="item.key + ': ' + item.title"
-                >
-                  <span class="font-mono font-semibold mr-1">{{ item.key }}</span>
-                  <span>{{ item.title }}</span>
+                <div class="flex items-center justify-between mb-1.5">
+                  <span
+                    class="text-[11px] font-mono px-1.5 py-0.5 rounded"
+                    [ngClass]="
+                      cell.isToday
+                        ? 'bg-sky-600 text-white font-semibold'
+                        : 'text-slate-600'
+                    "
+                  >
+                    {{ cell.dayNumber }}
+                  </span>
+                  @if (cell.items.length > 0) {
+                    <span class="text-[10px] font-mono text-slate-400">{{ cell.items.length }}</span>
+                  }
                 </div>
-              }
-            </div>
+
+                <div class="space-y-1">
+                  @for (item of cell.items; track item.id) {
+                    <div
+                      (click)="workItemService.openItemDetail(item.id)"
+                      class="px-2 py-1 rounded border text-[11px] cursor-pointer truncate transition-colors"
+                      [ngClass]="itemPillClasses(item)"
+                      [title]="item.key + ': ' + item.title"
+                    >
+                      <span class="font-mono font-semibold mr-1">{{ item.key }}</span>
+                      <span>{{ item.title }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
           </div>
-        }
+        </div>
       </div>
     </div>
   `,

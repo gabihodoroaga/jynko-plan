@@ -47,7 +47,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
     <div class="flex flex-col h-full bg-white" (click)="openPopover.set(null)">
       @if (currentItem(); as item) {
         <!-- Top Page Header / Breadcrumb Bar: Work Item Key + Status, Priority, Assignee, Cycle on the left; Delete on the right -->
-        <div class="flex items-start justify-between gap-2 px-6 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+        <div class="flex items-start justify-between gap-2 px-3.5 sm:px-6 py-2.5 sm:py-3 border-b border-slate-200 bg-slate-50 shrink-0">
           <div class="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
             <a
               [routerLink]="['/projects', item.project_id, 'work-items']"
@@ -123,7 +123,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
         </div>
 
         <!-- Full-Width Single-Column Vertical Stack Body -->
-        <div class="flex-1 overflow-y-auto w-full p-6 space-y-5">
+        <div class="flex-1 overflow-y-auto w-full p-3.5 sm:p-6 space-y-5">
           <!-- 1. Title -->
           <div>
             <input
@@ -187,7 +187,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                     role="listbox"
                     aria-label="Start date options"
                     (click)="$event.stopPropagation()"
-                    class="absolute left-0 z-50 mt-1 w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
+                    class="fixed left-3 right-3 sm:absolute sm:left-0 sm:right-auto z-50 mt-1 sm:w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
                   >
                     <button
                       type="button"
@@ -259,7 +259,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                     role="listbox"
                     aria-label="Due date options"
                     (click)="$event.stopPropagation()"
-                    class="absolute left-0 z-50 mt-1 w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
+                    class="fixed left-3 right-3 sm:absolute sm:left-0 sm:right-auto z-50 mt-1 sm:w-52 rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1.5 text-xs space-y-1"
                   >
                     <button
                       type="button"
@@ -371,7 +371,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                       role="listbox"
                       aria-label="Work item labels options"
                       (click)="$event.stopPropagation()"
-                      class="absolute left-0 z-50 mt-1 w-52 max-h-60 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1 text-xs"
+                      class="fixed left-3 right-3 sm:absolute sm:left-0 sm:right-auto z-50 mt-1 sm:w-52 max-h-60 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.10)] py-1 text-xs"
                     >
                       @for (lbl of projectService.labels(); track lbl.id) {
                         <button

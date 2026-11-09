@@ -10,7 +10,7 @@ import { PageVersion } from '../../../core/models/page.model';
   imports: [CommonModule],
   template: `
     @if (isOpen) {
-      <div class="w-80 border-l border-slate-200 bg-slate-50 h-full flex flex-col">
+      <div class="fixed inset-y-0 right-0 z-40 w-full max-w-xs shadow-xl md:static md:w-80 md:shadow-none border-l border-slate-200 bg-slate-50 h-full flex flex-col">
         <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200 bg-white">
           <h4 class="text-xs font-semibold text-slate-900">Revision History</h4>
           <button

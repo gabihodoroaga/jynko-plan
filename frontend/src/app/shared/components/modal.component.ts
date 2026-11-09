@@ -21,7 +21,7 @@ import { CommonModule } from '@angular/common';
       [attr.closedby]="'any'"
       [attr.aria-labelledby]="titleId"
       (close)="onNativeClose()"
-      class="w-full rounded-lg bg-white border border-slate-200 shadow-lg p-0 text-slate-900"
+      class="w-[calc(100vw-1.5rem)] sm:w-full max-h-[90dvh] overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-lg p-0 text-slate-900"
       [ngClass]="maxWidth"
     >
       <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">

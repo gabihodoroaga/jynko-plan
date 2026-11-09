@@ -21,8 +21,8 @@ import { DropdownComponent, DropdownOption } from '../../../shared/components/dr
   template: `
     <div class="space-y-4">
       @for (group of groupedItems(); track group.status) {
-        <div class="bg-white border border-slate-200 rounded-md overflow-hidden shadow-card">
-          <div class="flex items-center justify-between px-3.5 py-2 bg-slate-50 border-b border-slate-200">
+        <div class="bg-white border border-slate-200 rounded-md shadow-card">
+          <div class="flex items-center justify-between px-3.5 py-2 bg-slate-50 border-b border-slate-200 rounded-t-md">
             <div class="flex items-center gap-2">
               <app-status-badge [status]="group.status"></app-status-badge>
               <span class="text-[11px] font-mono text-slate-400">{{ group.items.length }}</span>
@@ -35,10 +35,10 @@ import { DropdownComponent, DropdownOption } from '../../../shared/components/dr
             <div class="divide-y divide-slate-200">
               @for (item of group.items; track item.id) {
                 <div
-                  class="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-slate-100/70 transition-colors cursor-pointer"
+                  class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-3.5 py-2.5 hover:bg-slate-100/70 transition-colors cursor-pointer"
                   (click)="workItemService.openItemDetail(item.id)"
                 >
-                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                  <div class="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                     <span class="font-mono text-[11px] font-medium text-slate-400 shrink-0 w-16">
                       {{ item.key }}
                     </span>
@@ -47,14 +47,14 @@ import { DropdownComponent, DropdownOption } from '../../../shared/components/dr
                     </span>
                     @if (item.sub_item_count > 0) {
                       <span
-                        class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-mono text-slate-600"
+                        class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-mono text-slate-600 shrink-0"
                       >
                         ✓ {{ item.completed_sub_count }}/{{ item.sub_item_count }}
                       </span>
                     }
                   </div>
 
-                  <div class="flex items-center gap-2 shrink-0" (click)="$event.stopPropagation()">
+                  <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0" (click)="$event.stopPropagation()">
                     @if (item.estimate !== undefined && item.estimate !== null) {
                       <span
                         class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-600"

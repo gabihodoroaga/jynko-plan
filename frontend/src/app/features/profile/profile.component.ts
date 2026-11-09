@@ -13,7 +13,7 @@ export interface AvatarColorOption {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
       <!-- Page Header -->
       <div class="flex items-center justify-between border-b border-slate-200 pb-4">
         <div>

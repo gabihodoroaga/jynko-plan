@@ -24,7 +24,7 @@ interface ProjectOverviewCard {
   standalone: true,
   imports: [CommonModule, RouterLink, StatusBadgeComponent, PriorityBadgeComponent],
   template: `
-    <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
       <!-- Header (no "+ New work item" button) -->
       <div class="flex items-center justify-between">
         <div>
@@ -38,7 +38,7 @@ interface ProjectOverviewCard {
       </div>
 
       <!-- Aggregate Cross-Project Stat Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-card">
           <div class="text-[11px] font-medium text-slate-500">Active Projects</div>
           <div class="text-2xl font-semibold text-slate-900 mt-1 font-mono">
@@ -174,7 +174,7 @@ interface ProjectOverviewCard {
           </div>
           <div class="divide-y divide-slate-200">
             @for (item of workItemService.items().slice(0, 6); track item.id) {
-              <div class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50">
+              <div class="px-4 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 hover:bg-slate-50">
                 <div class="flex items-center gap-2 min-w-0">
                   <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[10px] font-medium text-slate-600 shrink-0">
                     {{ getProjectName(item.project_id) }}

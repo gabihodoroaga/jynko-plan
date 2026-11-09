@@ -11,7 +11,7 @@ import { Sticky, StickyColor } from '../../core/models/project.model';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="w-full p-6 space-y-5 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
       <!-- Top Header & Action Controls -->
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>

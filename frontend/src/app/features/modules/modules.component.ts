@@ -13,7 +13,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent],
   template: `
-    <div class="w-full p-6 space-y-5 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-base font-semibold text-slate-900">Feature Modules</h2>

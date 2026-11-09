@@ -40,7 +40,7 @@ interface StatusWorkGroup {
     DropdownComponent,
   ],
   template: `
-    <div class="w-full p-6 space-y-6 bg-slate-50 min-h-full">
+    <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
       <!-- Header & Grouping Controls -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -157,7 +157,7 @@ interface StatusWorkGroup {
                 @for (item of group.items; track item.id) {
                   <div
                     (click)="openItem(item)"
-                    class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                    class="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 hover:bg-slate-50 cursor-pointer transition-colors"
                   >
                     <div class="flex items-center gap-3 min-w-0">
                       <span class="font-mono text-[11px] text-slate-400 w-16 shrink-0">
@@ -168,7 +168,7 @@ interface StatusWorkGroup {
                       </span>
                     </div>
 
-                    <div class="flex items-center gap-2.5 shrink-0" (click)="$event.stopPropagation()">
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 self-start sm:self-auto" (click)="$event.stopPropagation()">
                       @if (item.due_date) {
                         <span class="text-[11px] font-mono text-slate-500 hidden sm:inline">
                           Due {{ item.due_date | date: 'MMM d' }}
@@ -208,7 +208,7 @@ interface StatusWorkGroup {
                 @for (item of group.items; track item.id) {
                   <div
                     (click)="openItem(item)"
-                    class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                    class="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 hover:bg-slate-50 cursor-pointer transition-colors"
                   >
                     <div class="flex items-center gap-2.5 min-w-0">
                       <span class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[10px] font-medium text-slate-600 shrink-0">
@@ -222,7 +222,7 @@ interface StatusWorkGroup {
                       </span>
                     </div>
 
-                    <div class="flex items-center gap-2.5 shrink-0" (click)="$event.stopPropagation()">
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 self-start sm:self-auto" (click)="$event.stopPropagation()">
                       @if (item.due_date) {
                         <span class="text-[11px] font-mono text-slate-500 hidden sm:inline">
                           Due {{ item.due_date | date: 'MMM d' }}
