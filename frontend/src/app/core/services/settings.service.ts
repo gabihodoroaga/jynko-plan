@@ -20,6 +20,9 @@ export interface GeneralAppSettings {
   dailyMorningDigest: boolean;
   notifyOnAssignment: boolean;
   notifyOnWikiUnlock: boolean;
+  pwaAutoUpdate: boolean;
+  pwaShowInstallAction: boolean;
+  pwaOfflineBanner: boolean;
 }
 
 export interface ProjectSpecificSettings {
@@ -101,6 +104,9 @@ function loadInitialGeneralSettings(): GeneralAppSettings {
     dailyMorningDigest: true,
     notifyOnAssignment: true,
     notifyOnWikiUnlock: false,
+    pwaAutoUpdate: true,
+    pwaShowInstallAction: true,
+    pwaOfflineBanner: true,
   };
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_GENERAL_KEY);

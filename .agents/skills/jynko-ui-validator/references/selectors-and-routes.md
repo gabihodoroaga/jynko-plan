@@ -33,8 +33,6 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 - **Mobile Navigation (`< 768px`)**:
   - Off-canvas navigation drawer container: `[data-testid="app-navigation-drawer"]`
   - Off-canvas backdrop overlay: `[data-testid="mobile-nav-backdrop"]`
-  - Fixed bottom navigation bar: `nav[aria-label="Mobile bottom navigation"]`
-  - Bottom nav buttons: `button[aria-label="Mobile Work section"]`, `button[aria-label="Mobile My Work"]`, `button[aria-label="Mobile Wiki section"]`, `button[aria-label="Mobile Settings section"]`, `button[aria-label="Open mobile navigation drawer"]`
   - Work Items mobile filter toggle: `button[aria-label="Toggle mobile filters"]`
   - Wiki mobile collections drawer trigger: `button[aria-label="Browse wiki collections"]`
   - Settings mobile scope switcher: `[data-testid="mobile-settings-scope-switcher"]`
@@ -74,6 +72,8 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - Secondary panel General Settings button: `button[aria-label="Open General App Settings"]`
     - Secondary panel Per-Project Settings buttons: `button[aria-label="Open project settings for <projectName>"]`
     - Scope switcher tabs: `button[aria-label="General App Settings tab"]`, `button[aria-label="Per-Project Settings tab"]`
+    - Progressive Web App (PWA) card: `[data-testid="pwa-settings-card"]`, `button[aria-label="Install Jynko PWA from settings"]`, `button[aria-label="Check for PWA updates"]`, `button[aria-label="Clear PWA cache"]`, `input[aria-label="Toggle PWA auto update"]`, `input[aria-label="Toggle PWA install menu shortcut"]`, `input[aria-label="Toggle PWA offline indicator"]`
+    - User menu PWA install shortcut: `button[aria-label="Install Jynko PWA"]`
   - Kanban Board Column Configurator (`/work-items` in `BOARD` mode):
     - Toolbar columns button: `button[aria-label="Configure Kanban board columns"]`
     - Popover dialog: `[role="dialog"][aria-label="Kanban Board Columns Configuration"]`

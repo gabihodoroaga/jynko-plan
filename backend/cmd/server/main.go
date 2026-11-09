@@ -283,12 +283,20 @@ func SetupRouter(
 			// If the requested static file exists on disk, serve it directly
 			candidate := filepath.Join(cleanStaticDir, filepath.Clean(path))
 			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				if strings.HasSuffix(path, ".webmanifest") {
+					c.Header("Content-Type", "application/manifest+json")
+				}
+				switch path {
+				case "/ngsw.json", "/ngsw-worker.js", "/safety-worker.js", "/worker-basic.min.js", "/manifest.webmanifest", "/index.html":
+					c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+				}
 				c.File(candidate)
 				return
 			}
 
 			// Otherwise, fall back to index.html for Angular client-side push-state routing
 			if _, err := os.Stat(indexFile); err == nil {
+				c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 				c.File(indexFile)
 				return
 			}

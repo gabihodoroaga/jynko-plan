@@ -6,6 +6,7 @@ import { SettingsService } from '../../core/services/settings.service';
 import { ProjectService } from '../../core/services/project.service';
 import { PageService } from '../../core/services/page.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PwaService } from '../../core/services/pwa.service';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.model';
@@ -212,6 +213,170 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                   class="jynko-switch"
                   [checked]="gen.notifyOnWikiUnlock"
                   (change)="settingsService.updateGeneral('notifyOnWikiUnlock', $any($event.target).checked)"
+                />
+              </label>
+            </div>
+          </div>
+
+          <!-- Card 3: Progressive Web App (PWA) & Offline Options -->
+          <div
+            data-testid="pwa-settings-card"
+            class="bg-white border border-slate-200 rounded-lg p-5 shadow-card space-y-4"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h2 class="text-sm font-semibold text-slate-900">Progressive Web App (PWA) & Offline Options</h2>
+                <p class="text-xs text-slate-500">
+                  Install Jynko as a standalone desktop or mobile app with offline asset caching and background updates.
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span
+                  class="px-2 py-0.5 rounded-full border text-[11px] font-medium"
+                  [ngClass]="
+                    pwaService.isStandalone()
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-slate-100 border-slate-200 text-slate-600'
+                  "
+                >
+                  {{ pwaService.isStandalone() ? 'Installed (Standalone)' : 'Browser Tab' }}
+                </span>
+                <span
+                  class="px-2 py-0.5 rounded-full border text-[11px] font-medium"
+                  [ngClass]="
+                    pwaService.isOnline()
+                      ? 'bg-sky-50 border-sky-200 text-sky-700'
+                      : 'bg-amber-50 border-amber-200 text-amber-700'
+                  "
+                >
+                  {{ pwaService.isOnline() ? 'Online' : 'Offline' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- PWA Status Summary & Action Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-md bg-slate-50 border border-slate-200/80">
+              <div class="text-xs text-slate-600 space-y-0.5">
+                <div class="font-medium text-slate-800">
+                  Service Worker: {{ pwaService.swEnabled() ? 'Active (ngsw-worker.js)' : 'Standby (active in production builds)' }}
+                </div>
+                @if (pwaService.lastCheckedAt(); as ts) {
+                  <div class="text-[11px] font-mono text-slate-400">Last checked: {{ ts }}</div>
+                }
+                @if (pwaService.statusMessage(); as msg) {
+                  <div class="text-[11px] text-sky-700">{{ msg }}</div>
+                }
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                @if (!pwaService.isStandalone()) {
+                  <button
+                    type="button"
+                    aria-label="Install Jynko PWA from settings"
+                    (click)="pwaService.promptInstall()"
+                    class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors"
+                  >
+                    Install Jynko App
+                  </button>
+                }
+                <button
+                  type="button"
+                  aria-label="Check for PWA updates"
+                  [disabled]="pwaService.checkingForUpdate()"
+                  (click)="pwaService.checkForUpdates()"
+                  class="px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-xs font-medium text-slate-700 disabled:opacity-50 transition-colors"
+                >
+                  {{ pwaService.checkingForUpdate() ? 'Checking...' : 'Check for updates' }}
+                </button>
+                @if (pwaService.updateAvailable()) {
+                  <button
+                    type="button"
+                    aria-label="Activate PWA update and reload"
+                    (click)="pwaService.applyUpdateAndReload()"
+                    class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition-colors"
+                  >
+                    Reload to update
+                  </button>
+                }
+                <button
+                  type="button"
+                  aria-label="Clear PWA cache"
+                  (click)="pwaService.clearCacheAndReload()"
+                  class="px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 text-xs font-medium text-slate-600 transition-colors"
+                >
+                  Reset cache
+                </button>
+              </div>
+            </div>
+
+            <!-- Native <details> disclosure for platform install instructions (content-first noise reduction) -->
+            @if (!pwaService.isStandalone()) {
+              <details
+                [attr.open]="pwaService.showInstallGuide() ? '' : null"
+                class="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-600"
+              >
+                <summary class="cursor-pointer font-medium text-slate-700 select-none">
+                  How to install Jynko on desktop or mobile
+                </summary>
+                <p class="mt-1.5 text-[11px] leading-relaxed text-slate-600">
+                  {{ pwaService.getInstallInstructions() }}
+                </p>
+              </details>
+            }
+
+            <!-- Configurable PWA Toggle Preferences -->
+            <div class="divide-y divide-slate-100">
+              <label class="py-2.5 flex items-center justify-between gap-4 cursor-pointer">
+                <div>
+                  <div class="text-xs font-medium text-slate-800">Auto-Check for Application Updates</div>
+                  <div class="text-[11px] text-slate-500">
+                    Periodically check for new Jynko releases in the background and show a non-blocking reload toast.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  aria-label="Toggle PWA auto update"
+                  [attr.switch]="''"
+                  role="switch"
+                  class="jynko-switch"
+                  [checked]="gen.pwaAutoUpdate"
+                  (change)="settingsService.updateGeneral('pwaAutoUpdate', $any($event.target).checked)"
+                />
+              </label>
+
+              <label class="py-2.5 flex items-center justify-between gap-4 cursor-pointer">
+                <div>
+                  <div class="text-xs font-medium text-slate-800">Show "Install Jynko App" in User Menu</div>
+                  <div class="text-[11px] text-slate-500">
+                    Display a quick install action in the top-right account card whenever Jynko is running in a browser tab.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  aria-label="Toggle PWA install menu shortcut"
+                  [attr.switch]="''"
+                  role="switch"
+                  class="jynko-switch"
+                  [checked]="gen.pwaShowInstallAction"
+                  (change)="settingsService.updateGeneral('pwaShowInstallAction', $any($event.target).checked)"
+                />
+              </label>
+
+              <label class="py-2.5 flex items-center justify-between gap-4 cursor-pointer">
+                <div>
+                  <div class="text-xs font-medium text-slate-800">Show Offline Connection Badge</div>
+                  <div class="text-[11px] text-slate-500">
+                    Show a compact status pill in the top header when offline cached read mode is active.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  aria-label="Toggle PWA offline indicator"
+                  [attr.switch]="''"
+                  role="switch"
+                  class="jynko-switch"
+                  [checked]="gen.pwaOfflineBanner"
+                  (change)="settingsService.updateGeneral('pwaOfflineBanner', $any($event.target).checked)"
                 />
               </label>
             </div>
@@ -632,6 +797,7 @@ export class SettingsComponent {
   readonly projectService = inject(ProjectService);
   readonly pageService = inject(PageService);
   readonly authService = inject(AuthService);
+  readonly pwaService = inject(PwaService);
   private readonly router = inject(Router);
 
   readonly allStatuses = ALL_STATUSES;

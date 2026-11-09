@@ -219,3 +219,34 @@ textarea.auto-grow-description {
     font-size: 16px;
   }
 }
+
+/* Modern Web Guidance: Persistent Toast Notifications (popover="manual" + legacy fallback) */
+.pwa-toast {
+  inset: auto 1rem 1rem auto;
+  margin: 0;
+  width: min(22rem, calc(100vw - 2rem));
+  transition: opacity 0.18s ease, transform 0.18s ease, display 0.18s allow-discrete, overlay 0.18s allow-discrete;
+}
+
+@media (min-width: 768px) {
+  .pwa-toast {
+    inset: auto 1.25rem 1.25rem auto;
+  }
+}
+
+[popover].pwa-toast:is(:popover-open, .\:popover-open) {
+  display: block;
+  position: fixed;
+}
+
+@supports not selector(:popover-open) {
+  .pwa-toast {
+    display: none;
+    position: fixed;
+    z-index: 60;
+  }
+
+  .pwa-toast.pwa-toast-fallback-open {
+    display: block;
+  }
+}

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -8,6 +8,7 @@ import { ProjectService } from './core/services/project.service';
 import { WorkItemService } from './core/services/work-item.service';
 import { PageService } from './core/services/page.service';
 import { SettingsService } from './core/services/settings.service';
+import { PwaService } from './core/services/pwa.service';
 import { ModalComponent } from './shared/components/modal.component';
 import { DropdownComponent, DropdownOption } from './shared/components/dropdown.component';
 import {
@@ -107,8 +108,19 @@ import {
           </div>
         </div>
 
-        <!-- Right: User Avatar & Account Popover Card -->
-        <div class="relative flex items-center gap-2.5">
+        <!-- Right: Offline Indicator + User Avatar & Account Popover Card -->
+        <div class="relative flex items-center gap-2">
+          @if (!pwaService.isOnline() && settingsService.generalSettings().pwaOfflineBanner) {
+            <span
+              data-testid="pwa-offline-badge"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-medium shrink-0"
+              title="Network connection lost — reading from cached data where available"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              <span class="hidden sm:inline">Offline</span>
+            </span>
+          }
+
           <button
             type="button"
             (click)="toggleUserMenu($event)"
@@ -177,8 +189,23 @@ import {
                 </div>
               </div>
 
-              <!-- Bottom Action Bar: Sign out -->
-              <div class="px-5 py-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-end">
+              <!-- Bottom Action Bar: Install App (when in browser tab) + Sign out -->
+              <div class="px-5 py-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-2">
+                @if (!pwaService.isStandalone() && settingsService.generalSettings().pwaShowInstallAction) {
+                  <button
+                    type="button"
+                    (click)="installPwaFromMenu()"
+                    aria-label="Install Jynko PWA"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-xs font-medium text-sky-700 transition-colors"
+                  >
+                    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Install app</span>
+                  </button>
+                } @else {
+                  <span></span>
+                }
                 <button
                   type="button"
                   (click)="signOut()"
@@ -881,82 +908,6 @@ import {
         </div>
       </div>
 
-      <!-- Mobile Bottom Navigation Bar (< md) -->
-      <nav
-        aria-label="Mobile bottom navigation"
-        class="md:hidden h-14 px-2 pb-[env(safe-area-inset-bottom)] bg-white border-t border-slate-200 flex items-center justify-around shrink-0 select-none z-30"
-      >
-        <button
-          type="button"
-          (click)="navigateMobileSection('WORK')"
-          aria-label="Mobile Work section"
-          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
-          [ngClass]="activeRailSection() === 'WORK' && !isMyWorkRoute() ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="4" y="4" width="11" height="11" rx="2" />
-            <rect x="9" y="9" width="11" height="11" rx="2" />
-          </svg>
-          <span class="text-[10px] leading-tight">Work</span>
-        </button>
-
-        <button
-          type="button"
-          (click)="navigateMobileSection('MY_WORK')"
-          aria-label="Mobile My Work"
-          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
-          [ngClass]="isMyWorkRoute() ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="10" cy="8" r="4" />
-            <path d="M3 20c0-3.5 3.1-6 7-6M18 14v6M15 17h6" />
-          </svg>
-          <span class="text-[10px] leading-tight">My Work</span>
-        </button>
-
-        <button
-          type="button"
-          (click)="navigateMobileSection('WIKI')"
-          aria-label="Mobile Wiki section"
-          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
-          [ngClass]="activeRailSection() === 'WIKI' ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M6 3h9l5 5v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
-            <path d="M8 11h8M8 15h5" />
-          </svg>
-          <span class="text-[10px] leading-tight">Wiki</span>
-        </button>
-
-        <button
-          type="button"
-          (click)="navigateMobileSection('SETTINGS')"
-          aria-label="Mobile Settings section"
-          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
-          [ngClass]="activeRailSection() === 'SETTINGS' ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
-          </svg>
-          <span class="text-[10px] leading-tight">Settings</span>
-        </button>
-
-        <button
-          type="button"
-          (click)="toggleMobileNavigation()"
-          aria-label="Open mobile navigation drawer"
-          class="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors"
-          [ngClass]="settingsService.isMobileMenuOpen() ? 'text-[#0b57d0] font-semibold' : 'text-slate-600'"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="3" y="4" width="18" height="16" rx="2.5" />
-            <path d="M9 4v16" />
-          </svg>
-          <span class="text-[10px] leading-tight">Menu</span>
-        </button>
-      </nav>
-
       <!-- Global Quick Create Work Item Modal -->
       <app-modal
         [isOpen]="workItemService.isQuickCreateOpen()"
@@ -1202,6 +1153,43 @@ import {
           </div>
         </form>
       </app-modal>
+
+      <!-- Non-Intrusive Top-Layer PWA Update Toast (popover="manual" with explicit Close & Reload) -->
+      <div
+        #pwaToastEl
+        id="pwa-update-toast"
+        [attr.popover]="'manual'"
+        role="status"
+        aria-live="polite"
+        class="pwa-toast rounded-lg bg-white border border-slate-200 shadow-[0_10px_28px_rgba(15,23,42,0.14)] p-3.5 text-xs text-slate-800"
+        [class.pwa-toast-fallback-open]="pwaService.updateAvailable()"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-semibold text-slate-900">Update available</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">A new version of Jynko is ready.</div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              (click)="pwaService.applyUpdateAndReload()"
+              class="px-2.5 py-1 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-medium transition-colors"
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              [attr.popovertarget]="'pwa-update-toast'"
+              [attr.popovertargetaction]="'hide'"
+              (click)="pwaService.dismissUpdateBanner()"
+              aria-label="Close update notification"
+              class="px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
 })
@@ -1211,7 +1199,10 @@ export class AppComponent implements OnInit {
   readonly workItemService = inject(WorkItemService);
   readonly pageService = inject(PageService);
   readonly settingsService = inject(SettingsService);
+  readonly pwaService = inject(PwaService);
   private readonly router = inject(Router);
+
+  @ViewChild('pwaToastEl') pwaToastRef?: ElementRef<HTMLElement>;
 
   readonly activeRailSection = signal<'WORK' | 'WIKI' | 'SETTINGS'>('WORK');
   readonly sidebarCollapsed = signal<boolean>(false);
@@ -1255,6 +1246,21 @@ export class AppComponent implements OnInit {
           this.newProjectDesc = '';
         }
       }
+    });
+
+    effect(() => {
+      const showToast = this.pwaService.updateAvailable();
+      const el = this.pwaToastRef?.nativeElement as (HTMLElement & { showPopover?: () => void; hidePopover?: () => void }) | undefined;
+      if (!el || typeof HTMLElement === 'undefined' || !('popover' in HTMLElement.prototype)) {
+        return;
+      }
+      try {
+        if (showToast) {
+          el.showPopover?.();
+        } else {
+          el.hidePopover?.();
+        }
+      } catch {}
     });
   }
 
@@ -1315,30 +1321,13 @@ export class AppComponent implements OnInit {
     this.settingsService.isMobileMenuOpen.set(next);
   }
 
-  isMyWorkRoute(): boolean {
-    return this.router.url.startsWith('/my-work');
-  }
-
-  navigateMobileSection(section: 'WORK' | 'MY_WORK' | 'WIKI' | 'SETTINGS'): void {
-    this.settingsService.closeMobileMenu();
-    switch (section) {
-      case 'WORK':
-        this.activeRailSection.set('WORK');
-        this.router.navigate(['/projects', this.projectService.activeProjectId(), 'work-items']);
-        break;
-      case 'MY_WORK':
-        this.activeRailSection.set('WORK');
-        this.router.navigate(['/my-work']);
-        break;
-      case 'WIKI':
-        this.activeRailSection.set('WIKI');
-        this.router.navigate(['/wiki']);
-        break;
-      case 'SETTINGS':
-        this.activeRailSection.set('SETTINGS');
-        this.settingsService.openGeneralSettings();
-        this.router.navigate(['/settings']);
-        break;
+  async installPwaFromMenu(): Promise<void> {
+    this.isUserMenuOpen.set(false);
+    const result = await this.pwaService.promptInstall();
+    if (result === 'guide') {
+      this.activeRailSection.set('SETTINGS');
+      this.settingsService.openGeneralSettings();
+      await this.router.navigate(['/settings']);
     }
   }
 

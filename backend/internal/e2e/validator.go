@@ -119,7 +119,7 @@ func DefaultChecks() []CheckSpec {
 		},
 		{
 			ID:   "15-mobile-responsive",
-			Name: "Mobile Viewport (390x844): Off-Canvas Navigation Drawer, Bottom Tab Bar & Full-Width Workspace",
+			Name: "Mobile Viewport (390x844): Off-Canvas Navigation Drawer & Full-Width Workspace",
 			Run:  CheckMobileResponsiveLayout,
 		},
 	}
@@ -294,6 +294,28 @@ func CheckAppShell(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 		res.Errors = append(res.Errors, fmt.Sprintf("Expected header to show 'Jynko' without '⌄', got: %q", headerText))
 	}
 
+	// Verify PWA Web App Manifest link (crossorigin="use-credentials" for IAP) and served manifest + icon assets
+	hasManifestLink, _, _ := page.Has(`head link[rel="manifest"][href="manifest.webmanifest"][crossorigin="use-credentials"]`)
+	manifestOK := false
+	if mResp, err := http.Get(baseURL + "/manifest.webmanifest"); err == nil {
+		defer mResp.Body.Close()
+		var manifestData map[string]any
+		if mResp.StatusCode == http.StatusOK && json.NewDecoder(mResp.Body).Decode(&manifestData) == nil {
+			manifestOK = manifestData["short_name"] == "Jynko" && manifestData["display"] == "standalone"
+		}
+	}
+	iconOK := false
+	if iResp, err := http.Get(baseURL + "/assets/icons/icon-192x192.png"); err == nil {
+		defer iResp.Body.Close()
+		iconOK = iResp.StatusCode == http.StatusOK
+	}
+	if hasManifestLink && manifestOK && iconOK {
+		res.Assertions = append(res.Assertions, "PWA manifest.webmanifest (crossorigin=use-credentials) and 192x192 PNG icon are linked and served")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("PWA manifest/icon check failed: hasLink=%v, manifestOK=%v, iconOK=%v", hasManifestLink, manifestOK, iconOK))
+	}
+
 	hasWorkRailBtn, _, _ := page.Has(`nav[aria-label="Primary rail"] a[href*="work-items"]`)
 	hasWikiRailBtn, _, _ := page.Has(`nav[aria-label="Primary rail"] a[href="/wiki"]`)
 	hasSettingsRailBtn, _, _ := page.Has(`nav[aria-label="Primary rail"] a[aria-label="Open Settings"]`)
@@ -365,10 +387,11 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 		if hasCard, cardEl, _ := page.Has(`[data-testid="user-dropdown-card"]`); hasCard && cardEl != nil {
 			cardText := cardEl.MustText()
 			hasProfileBtn, profileBtn, _ := cardEl.Has(`button[aria-label="Open user profile"]`)
+			hasInstallPwaBtn, _, _ := cardEl.Has(`button[aria-label="Install Jynko PWA"]`)
 			hasSignOutBtn, _, _ := cardEl.Has(`button[aria-label="Sign out"]`)
 
-			if hasProfileBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
-				res.Assertions = append(res.Assertions, "Top-right user button opens Google-style account card with Name, Email, Profile button, and Sign out button")
+			if hasProfileBtn && hasInstallPwaBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
+				res.Assertions = append(res.Assertions, "Top-right user button opens Google-style account card with Name, Email, Profile, Install PWA, and Sign out actions")
 				profileBtn.MustClick()
 				time.Sleep(300 * time.Millisecond)
 
@@ -1160,11 +1183,24 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 	}
 
 	if strings.Contains(mainText, "Application & Interface Preferences") &&
-		strings.Contains(mainText, "Notifications & Activity Digest") {
-		res.Assertions = append(res.Assertions, "General App Settings view renders mock global preferences and notification toggles")
+		strings.Contains(mainText, "Notifications & Activity Digest") &&
+		strings.Contains(mainText, "Progressive Web App (PWA) & Offline Options") {
+		res.Assertions = append(res.Assertions, "General App Settings view renders global preferences, notification toggles, and Progressive Web App (PWA) options card")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "General App Settings view failed to render expected mock sections")
+		res.Errors = append(res.Errors, "General App Settings view failed to render expected Preferences, Notifications, or PWA sections")
+	}
+
+	hasPwaInstallBtn, _, _ := page.Has(`[data-testid="pwa-settings-card"] button[aria-label="Install Jynko PWA from settings"]`)
+	hasPwaCheckBtn, pwaCheckBtn, _ := page.Has(`[data-testid="pwa-settings-card"] button[aria-label="Check for PWA updates"]`)
+	hasPwaAutoSwitch, _, _ := page.Has(`[data-testid="pwa-settings-card"] input[aria-label="Toggle PWA auto update"]`)
+	if hasPwaInstallBtn && hasPwaCheckBtn && hasPwaAutoSwitch {
+		pwaCheckBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		res.Assertions = append(res.Assertions, "PWA settings card exposes Install Jynko App action, Check for updates trigger, and configurable PWA toggle switches")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Missing controls in PWA settings card: install=%v, check=%v, autoSwitch=%v", hasPwaInstallBtn, hasPwaCheckBtn, hasPwaAutoSwitch))
 	}
 
 	if has, projSettingsBtn, _ := page.Has(`button[aria-label="Open project settings for hodo"]`); has && projSettingsBtn != nil {
@@ -1229,7 +1265,7 @@ func CheckMobileResponsiveLayout(browser *rod.Browser, baseURL, outDir string) V
 	url := baseURL + "/home"
 	res := ValidationCheckResult{
 		ID:         "15-mobile-responsive",
-		Name:       "Mobile Viewport (390x844): Off-Canvas Navigation Drawer, Bottom Tab Bar & Full-Width Workspace",
+		Name:       "Mobile Viewport (390x844): Off-Canvas Navigation Drawer & Full-Width Workspace",
 		URL:        url,
 		Passed:     true,
 		Screenshot: filepath.Join(outDir, "15-mobile-responsive.png"),
@@ -1238,20 +1274,20 @@ func CheckMobileResponsiveLayout(browser *rod.Browser, baseURL, outDir string) V
 	page := newMobileViewportPage(browser, url)
 	defer page.MustClose()
 
-	// 1. Assert mobile hamburger button & bottom navigation bar are visible
+	// 1. Assert mobile hamburger button is visible and bottom navigation bar is omitted to maximize vertical screen space
 	hasHamburger := page.MustEval(`() => {
 		const el = document.querySelector('button[aria-label="Toggle mobile navigation"]');
 		return Boolean(el && el.getBoundingClientRect().width > 0);
 	}`).Bool()
 	hasBottomNav := page.MustEval(`() => {
 		const el = document.querySelector('nav[aria-label="Mobile bottom navigation"]');
-		return Boolean(el && el.getBoundingClientRect().width >= 350);
+		return Boolean(el);
 	}`).Bool()
-	if hasHamburger && hasBottomNav {
-		res.Assertions = append(res.Assertions, "Mobile top hamburger button and fixed bottom navigation bar render at 390x844 viewport")
+	if hasHamburger && !hasBottomNav {
+		res.Assertions = append(res.Assertions, "Mobile top hamburger button renders and bottom navigation bar is omitted to maximize vertical screen space at 390x844")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v) and bottom nav (%v) to be visible at 390x844", hasHamburger, hasBottomNav))
+		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v) and bottom nav omitted (!%v) at 390x844", hasHamburger, hasBottomNav))
 	}
 
 	// 2. Assert <main> receives full mobile viewport width (>= 350px) instead of being crushed by desktop sidebars
