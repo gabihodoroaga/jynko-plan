@@ -65,6 +65,10 @@ type CreateCommentInput struct {
 	Body string `json:"body" binding:"required"`
 }
 
+type UpdateCommentInput struct {
+	Body string `json:"body" binding:"required"`
+}
+
 func (s *ItemService) List(ctx context.Context, projectID string, filter model.WorkItemFilter) ([]model.WorkItem, error) {
 	return s.repo.List(ctx, projectID, filter)
 }
@@ -243,6 +247,14 @@ func (s *ItemService) CreateComment(ctx context.Context, projectID, itemID strin
 		return nil, err
 	}
 	return comment, nil
+}
+
+func (s *ItemService) UpdateComment(ctx context.Context, projectID, itemID, commentID string, input UpdateCommentInput) (*model.Comment, error) {
+	body := strings.TrimSpace(input.Body)
+	if body == "" {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.UpdateComment(ctx, projectID, itemID, commentID, body)
 }
 
 func (s *ItemService) DeleteComment(ctx context.Context, projectID, itemID, commentID string) error {

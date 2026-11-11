@@ -344,6 +344,36 @@ export class WorkItemService {
     });
   }
 
+  updateComment(itemId: string, commentId: string, body: string): void {
+    const projectId = this.resolveProjectIdForItem(itemId);
+    if (!projectId) return;
+    this.api
+      .put<Comment>(`/projects/${projectId}/items/${itemId}/comments/${commentId}`, { body })
+      .subscribe({
+        next: (updated) => {
+          this.commentsByItem.update((m) => {
+            const list = (m[itemId] ?? []).map((c) => (c.id === commentId ? updated : c));
+            return { ...m, [itemId]: list };
+          });
+        },
+      });
+  }
+
+  deleteComment(itemId: string, commentId: string): void {
+    const projectId = this.resolveProjectIdForItem(itemId);
+    if (!projectId) return;
+    this.api
+      .delete<void>(`/projects/${projectId}/items/${itemId}/comments/${commentId}`)
+      .subscribe({
+        next: () => {
+          this.commentsByItem.update((m) => {
+            const list = (m[itemId] ?? []).filter((c) => c.id !== commentId);
+            return { ...m, [itemId]: list };
+          });
+        },
+      });
+  }
+
   private recalcSubCounts(itemId: string): void {
     const subs = this.subItemsByItem()[itemId] ?? [];
     const total = subs.length;

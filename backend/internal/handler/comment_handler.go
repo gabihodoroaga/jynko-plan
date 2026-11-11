@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -46,6 +47,28 @@ func (h *CommentHandler) CreateComment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, comment)
+}
+
+func (h *CommentHandler) UpdateComment(c *gin.Context) {
+	projectID := c.Param("projectId")
+	itemID := c.Param("itemId")
+	commentID := c.Param("commentId")
+	var input service.UpdateCommentInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	comment, err := h.svc.UpdateComment(c.Request.Context(), projectID, itemID, commentID, input)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, comment)
 }
 
 func (h *CommentHandler) DeleteComment(c *gin.Context) {

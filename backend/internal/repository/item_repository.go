@@ -32,6 +32,7 @@ type ItemRepository interface {
 
 	ListComments(ctx context.Context, projectID, itemID string) ([]model.Comment, error)
 	CreateComment(ctx context.Context, projectID string, comment *model.Comment) error
+	UpdateComment(ctx context.Context, projectID, itemID, commentID, body string) (*model.Comment, error)
 	DeleteComment(ctx context.Context, projectID, itemID, commentID string) error
 }
 
@@ -380,6 +381,24 @@ func (r *firestoreItemRepository) CreateComment(ctx context.Context, projectID s
 	comment.UpdatedAt = now
 	_, err := docRef.Set(ctx, comment)
 	return err
+}
+
+func (r *firestoreItemRepository) UpdateComment(ctx context.Context, projectID, itemID, commentID, body string) (*model.Comment, error) {
+	docRef := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").Doc(commentID)
+	doc, err := docRef.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var comment model.Comment
+	if err := doc.DataTo(&comment); err != nil {
+		return nil, err
+	}
+	comment.Body = body
+	comment.UpdatedAt = time.Now().UTC()
+	if _, err := docRef.Set(ctx, &comment); err != nil {
+		return nil, err
+	}
+	return &comment, nil
 }
 
 func (r *firestoreItemRepository) DeleteComment(ctx context.Context, projectID, itemID, commentID string) error {

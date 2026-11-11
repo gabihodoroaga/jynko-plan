@@ -183,6 +183,15 @@ textarea.auto-grow-description {
   overflow-y: auto;
 }
 
+textarea.auto-grow-comment {
+  field-sizing: content;
+  height: auto;
+  width: 100%;
+  min-block-size: 3lh;
+  max-block-size: 40vh;
+  overflow-y: auto;
+}
+
 @supports not (field-sizing: content) {
   .growable-textarea {
     display: grid;
@@ -191,11 +200,19 @@ textarea.auto-grow-description {
   }
 
   .growable-textarea::after,
-  .growable-textarea > textarea.auto-grow-description {
+  .growable-textarea > textarea.auto-grow-description,
+  .growable-textarea > textarea.auto-grow-comment {
     grid-area: 1 / 1 / 2 / 2;
     font: inherit;
     padding: 0.75rem;
+  }
+
+  .growable-textarea > textarea.auto-grow-description {
     min-block-size: 8lh;
+  }
+
+  .growable-textarea > textarea.auto-grow-comment {
+    min-block-size: 3lh;
   }
 
   .growable-textarea::after {
@@ -205,7 +222,8 @@ textarea.auto-grow-description {
     word-break: break-word;
   }
 
-  .growable-textarea > textarea.auto-grow-description {
+  .growable-textarea > textarea.auto-grow-description,
+  .growable-textarea > textarea.auto-grow-comment {
     resize: none;
     overflow: hidden;
   }

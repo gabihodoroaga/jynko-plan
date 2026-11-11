@@ -7,6 +7,7 @@ import { ProjectService } from '../../../core/services/project.service';
 import {
   ALL_PRIORITIES,
   ALL_STATUSES,
+  Comment,
   Label,
   SubWorkItem,
   WorkItem,
@@ -514,14 +515,99 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
 
             <div class="space-y-2.5">
               @for (cmt of currentComments(); track cmt.id) {
-                <div class="p-3 rounded-md bg-slate-50 border border-slate-200">
-                  <div class="flex items-center justify-between mb-1">
+                <div class="p-3 rounded-md bg-slate-50 border border-slate-200 space-y-2">
+                  <div class="flex items-center justify-between">
                     <span class="text-xs font-semibold text-slate-800">{{ cmt.author_name }}</span>
-                    <span class="text-[10px] font-mono text-slate-400">
-                      {{ cmt.created_at | date: 'MMM d, HH:mm' }}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[10px] font-mono text-slate-400">
+                        {{ cmt.created_at | date: 'MMM d, HH:mm' }}
+                      </span>
+                      @if (projectService.canEdit() && editingCommentId() !== cmt.id) {
+                        <button
+                          type="button"
+                          (click)="startEditComment(cmt)"
+                          aria-label="Edit comment"
+                          class="text-[11px] text-slate-400 hover:text-sky-600 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          (click)="deleteComment(item.id, cmt.id)"
+                          aria-label="Delete comment"
+                          class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      }
+                    </div>
                   </div>
-                  <div class="text-xs text-slate-700" [innerHTML]="cmt.body | markdown"></div>
+
+                  @if (editingCommentId() === cmt.id) {
+                    <!-- Inline Markdown Editor for Existing Comment -->
+                    <div class="space-y-2 pt-1 border-t border-slate-200">
+                      <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Edit Comment (Markdown)
+                        </span>
+                        <button
+                          type="button"
+                          (click)="previewEditingComment.set(!previewEditingComment())"
+                          aria-label="Toggle editing comment preview"
+                          class="text-[11px] text-sky-600 hover:underline"
+                        >
+                          {{ previewEditingComment() ? 'Edit Markdown' : 'Preview Rendered' }}
+                        </button>
+                      </div>
+
+                      @if (previewEditingComment()) {
+                        <div
+                          class="p-2.5 rounded-md bg-white border border-slate-200 min-h-[70px] max-h-[30vh] overflow-y-auto text-xs text-slate-800"
+                          [innerHTML]="editingCommentBody | markdown"
+                        ></div>
+                      } @else {
+                        <div
+                          class="growable-textarea text-xs font-mono leading-relaxed"
+                          [attr.data-replicated-value]="editingCommentBody || ''"
+                        >
+                          <textarea
+                            rows="2"
+                            [(ngModel)]="editingCommentBody"
+                            (input)="syncGrowableTextarea($event)"
+                            (keydown)="handleEditCommentKeydown($event, item.id, cmt.id)"
+                            aria-label="Edit comment markdown"
+                            placeholder="Edit your Markdown comment..."
+                            class="auto-grow-comment w-full min-h-[70px] max-h-[30vh] p-2 text-xs font-mono leading-relaxed text-slate-800 bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 resize-y"
+                          ></textarea>
+                        </div>
+                      }
+
+                      <div class="flex items-center justify-between pt-1">
+                        <span class="text-[10px] text-slate-400">
+                          Markdown supported • ⌘+Enter to save
+                        </span>
+                        <div class="flex gap-2">
+                          <button
+                            type="button"
+                            (click)="cancelEditComment()"
+                            class="px-2.5 py-1 rounded text-xs text-slate-600 hover:bg-slate-200 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            (click)="saveEditComment(item.id, cmt.id)"
+                            [disabled]="!editingCommentBody.trim()"
+                            class="px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="text-xs text-slate-700 leading-relaxed" [innerHTML]="cmt.body | markdown"></div>
+                  }
                 </div>
               } @empty {
                 <div class="text-xs text-slate-400">No comments yet. Start the technical discussion below.</div>
@@ -529,18 +615,53 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
             </div>
 
             @if (projectService.canEdit()) {
-              <div class="space-y-2">
-                <textarea
-                  rows="3"
-                  [(ngModel)]="newCommentBody"
-                  placeholder="Write a comment (Markdown supported)..."
-                  class="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-                ></textarea>
-                <div class="flex justify-end">
+              <div class="space-y-2 pt-2 border-t border-slate-200">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    New Comment (Markdown)
+                  </span>
+                  <button
+                    type="button"
+                    (click)="previewNewComment.set(!previewNewComment())"
+                    aria-label="Toggle comment markdown preview"
+                    class="text-[11px] text-sky-600 hover:underline"
+                  >
+                    {{ previewNewComment() ? 'Edit Markdown' : 'Preview Rendered' }}
+                  </button>
+                </div>
+
+                @if (previewNewComment()) {
+                  <div
+                    class="p-3 rounded-md bg-slate-50 border border-slate-200 min-h-[90px] max-h-[30vh] overflow-y-auto text-xs text-slate-800"
+                    [innerHTML]="newCommentBody | markdown"
+                  ></div>
+                } @else {
+                  <div
+                    class="growable-textarea text-xs font-mono leading-relaxed"
+                    [attr.data-replicated-value]="newCommentBody || ''"
+                  >
+                    <textarea
+                      rows="3"
+                      [(ngModel)]="newCommentBody"
+                      (input)="syncGrowableTextarea($event)"
+                      (keydown)="handleCommentKeydown($event, item.id)"
+                      aria-label="Work item comment"
+                      placeholder="Add a detailed Markdown comment... (⌘+Enter to submit)"
+                      class="auto-grow-comment w-full min-h-[90px] max-h-[30vh] p-2.5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
+                    ></textarea>
+                  </div>
+                }
+
+                <div class="flex items-center justify-between pt-1">
+                  <span class="text-[11px] text-slate-400">
+                    Markdown supported • ⌘+Enter to submit
+                  </span>
                   <button
                     type="button"
                     (click)="postComment(item.id)"
-                    class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+                    [disabled]="!newCommentBody.trim()"
+                    aria-label="Post comment"
+                    class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
                   >
                     Post Comment
                   </button>
@@ -598,6 +719,10 @@ export class WorkItemDetailPageComponent implements OnInit {
 
   newSubTitle = '';
   newCommentBody = '';
+  readonly previewNewComment = signal<boolean>(false);
+  readonly editingCommentId = signal<string | null>(null);
+  editingCommentBody = '';
+  readonly previewEditingComment = signal<boolean>(false);
 
   readonly currentItem = computed<WorkItem | null>(() => {
     const id = this.routeItemId();
@@ -755,5 +880,53 @@ export class WorkItemDetailPageComponent implements OnInit {
     if (!b) return;
     this.workItemService.addComment(itemId, b);
     this.newCommentBody = '';
+    this.previewNewComment.set(false);
+  }
+
+  handleCommentKeydown(event: KeyboardEvent, itemId: string): void {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      if (event.isComposing || event.keyCode === 229) {
+        return;
+      }
+      this.postComment(itemId);
+    }
+  }
+
+  startEditComment(cmt: Comment): void {
+    this.editingCommentId.set(cmt.id);
+    this.editingCommentBody = cmt.body;
+    this.previewEditingComment.set(false);
+  }
+
+  cancelEditComment(): void {
+    this.editingCommentId.set(null);
+    this.editingCommentBody = '';
+    this.previewEditingComment.set(false);
+  }
+
+  saveEditComment(itemId: string, commentId: string): void {
+    const b = this.editingCommentBody.trim();
+    if (!b) return;
+    this.workItemService.updateComment(itemId, commentId, b);
+    this.editingCommentId.set(null);
+    this.editingCommentBody = '';
+    this.previewEditingComment.set(false);
+  }
+
+  handleEditCommentKeydown(event: KeyboardEvent, itemId: string, commentId: string): void {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      if (event.isComposing || event.keyCode === 229) {
+        return;
+      }
+      this.saveEditComment(itemId, commentId);
+    }
+  }
+
+  deleteComment(itemId: string, commentId: string): void {
+    if (confirm('Delete this comment?')) {
+      this.workItemService.deleteComment(itemId, commentId);
+    }
   }
 }

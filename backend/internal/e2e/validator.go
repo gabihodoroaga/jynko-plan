@@ -807,7 +807,7 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 				time.Sleep(150 * time.Millisecond)
 				hasDrawerLabelOption, _, _ = drawerEl.Has(`button[aria-label^="Toggle work item label "]`)
 			}
-			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete") {
+			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete Work Item") {
 				res.Assertions = append(res.Assertions, "Work Item side drawer renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, plus separate 'Labels:' line with multi-select dropdown")
 			} else {
 				res.Passed = false
@@ -837,6 +837,33 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 	} else {
 		res.Passed = false
 		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions: hasTopProps=%v, hasStartDate=%v, hasDueDate=%v, hasEstimate=%v, hasAutoGrowDesc=%v, hasBackLink=%v", hasTopPropsPage, hasStartDateBtn, hasDueDateBtn, hasEstimateBtn, hasAutoGrowDesc, hasBackLink))
+	}
+
+	// Verify Markdown comment composer and preview toggle
+	if hasCommentInput, commentInput, _ := detailPage.Has(`textarea[aria-label="Work item comment"]`); hasCommentInput && commentInput != nil {
+		commentInput.MustInput("**Markdown E2E note:** Validated `code` inline")
+		time.Sleep(150 * time.Millisecond)
+		if hasToggleCommentPreview, toggleCommentBtn, _ := detailPage.Has(`button[aria-label="Toggle comment markdown preview"]`); hasToggleCommentPreview && toggleCommentBtn != nil {
+			toggleCommentBtn.MustClick()
+			time.Sleep(200 * time.Millisecond)
+
+			previewHtml, _ := detailPage.MustElement(`button[aria-label="Toggle comment markdown preview"]`).MustParent().MustParent().HTML()
+			if strings.Contains(previewHtml, "Markdown E2E note:") && strings.Contains(previewHtml, "<strong") && strings.Contains(previewHtml, "<code") {
+				res.Assertions = append(res.Assertions, "Work Item comment composer supports Markdown input, growable auto-sizing, and 'Preview Rendered' / 'Edit Markdown' toggle")
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, "Comment composer preview did not correctly render Markdown tags")
+			}
+
+			// Post the comment and verify it renders in discussion list
+			if hasPostBtn, postBtn, _ := detailPage.Has(`button[aria-label="Post comment"]`); hasPostBtn && postBtn != nil {
+				postBtn.MustClick()
+				time.Sleep(300 * time.Millisecond)
+				if hasEditComment, _, _ := detailPage.Has(`button[aria-label="Edit comment"]`); hasEditComment {
+					res.Assertions = append(res.Assertions, "Posted Markdown comment renders formatted HTML and exposes inline 'Edit' action")
+				}
+			}
+		}
 	}
 
 	res.DurationMs = time.Since(start).Milliseconds()

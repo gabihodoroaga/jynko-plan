@@ -242,6 +242,7 @@ func SetupRouter(
 		// Comments
 		projGroup.GET("/items/:itemId/comments", viewer, commentHandler.ListComments)
 		projGroup.POST("/items/:itemId/comments", member, commentHandler.CreateComment)
+		projGroup.PUT("/items/:itemId/comments/:commentId", member, commentHandler.UpdateComment)
 		projGroup.DELETE("/items/:itemId/comments/:commentId", member, commentHandler.DeleteComment)
 
 		// Wiki Pages & Versions
