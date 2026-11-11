@@ -1290,6 +1290,14 @@ export class AppComponent implements OnInit {
   readonly isUserMenuOpen = signal<boolean>(false);
 
   ngOnInit(): void {
+    if (typeof window !== 'undefined' && window.location.search.includes('ngsw-bypass')) {
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete('ngsw-bypass');
+        window.history.replaceState({}, document.title, u.pathname + (u.search ? u.search : '') + u.hash);
+      } catch {}
+    }
+
     this.authService.loadCurrentUser();
     this.projectService.loadProjects();
 
