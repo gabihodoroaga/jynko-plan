@@ -39,12 +39,14 @@ This file is the canonical reference for AI coding agents working on **Jynko**, 
 - **Database SDK**: Google Cloud Firestore (`cloud.google.com/go/firestore`)
 - **Structure**:
   - `cmd/server/main.go`: HTTP server entrypoint and dependency wiring
+  - `cmd/mcp-server/main.go`: Model Context Protocol (MCP) server entrypoint (STDIO & SSE transports)
   - `internal/config/`: Environment configuration loader
   - `internal/model/`: Domain structs (`domain.go`, `page.go`, `rbac.go`)
   - `internal/middleware/`: `auth.go` (IAP + dev fallback), `rbac.go` (`RequireProjectRole`), `cors.go`
-  - `internal/repository/`: Firestore repositories (`project`, `item`, `cycle`, `epic`, `module`, `label`, `page`, `sticky`)
+  - `internal/repository/`: Firestore repositories (`project`, `item`, `cycle`, `epic`, `module`, `label`, `page`, `sticky`, `attachment`)
   - `internal/service/`: Business logic and validation layer
   - `internal/handler/`: Gin HTTP handlers under `/api/v1`
+  - `internal/mcp/`: MCP server tool, resource, and prompt handlers (`github.com/mark3labs/mcp-go`)
   - `internal/e2e/`: Go-Rod end-to-end browser test suite (`validator.go`, `ui_e2e_test.go`)
   - `cmd/ui-validator/main.go`: Standalone CLI wrapper for running the E2E UI validator and generating `report.json` + screenshots
 
@@ -111,6 +113,12 @@ go mod tidy
 go build ./...
 go test ./...
 go run ./cmd/server/main.go
+
+# Run Jynko MCP Server (STDIO for AI coding agents / desktop clients)
+go run ./cmd/mcp-server/main.go --transport=stdio
+
+# Run Jynko MCP Server (SSE for network / remote agents)
+go run ./cmd/mcp-server/main.go --transport=sse --port=8085
 ```
 
 ### Frontend
