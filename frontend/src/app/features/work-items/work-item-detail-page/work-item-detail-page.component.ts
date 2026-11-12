@@ -1,12 +1,15 @@
-import { Component, HostListener, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpEvent, HttpEventType } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { WorkItemService } from '../../../core/services/work-item.service';
 import { ProjectService } from '../../../core/services/project.service';
+import { AttachmentService } from '../../../core/services/attachment.service';
 import {
   ALL_PRIORITIES,
   ALL_STATUSES,
+  Attachment,
   Comment,
   Label,
   SubWorkItem,
@@ -16,6 +19,7 @@ import {
 } from '../../../core/models/project.model';
 import { DropdownComponent, DropdownOption } from '../../../shared/components/dropdown.component';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
+import { WorkItemAttachmentsComponent } from '../work-item-attachments/work-item-attachments.component';
 
 const STATUS_DOT_COLORS: Record<WorkItemStatus, string> = {
   BACKLOG: '#94a3b8',
@@ -43,6 +47,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
     RouterLink,
     DropdownComponent,
     MarkdownPipe,
+    WorkItemAttachmentsComponent,
   ],
   template: `
     <div class="flex flex-col h-full bg-white" (click)="openPopover.set(null)">
@@ -416,13 +421,35 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
               <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 Description (Markdown)
               </span>
-              <button
-                type="button"
-                (click)="previewDesc.set(!previewDesc())"
-                class="text-[11px] text-sky-600 hover:underline"
-              >
-                {{ previewDesc() ? 'Edit Markdown' : 'Preview Rendered' }}
-              </button>
+              <div class="flex items-center gap-3">
+                @if (projectService.canEdit()) {
+                  <input
+                    #descFileInputRef
+                    type="file"
+                    multiple
+                    class="hidden"
+                    (change)="onFileInputChange($event, item.id, 'description')"
+                  />
+                  <button
+                    type="button"
+                    (click)="descFileInputRef.click()"
+                    aria-label="Attach file to description"
+                    class="text-[11px] text-slate-500 hover:text-sky-600 flex items-center gap-1 transition-colors"
+                  >
+                    <svg class="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                    <span>Attach file</span>
+                  </button>
+                }
+                <button
+                  type="button"
+                  (click)="previewDesc.set(!previewDesc())"
+                  class="text-[11px] text-sky-600 hover:underline"
+                >
+                  {{ previewDesc() ? 'Edit Markdown' : 'Preview Rendered' }}
+                </button>
+              </div>
             </div>
 
             @if (previewDesc()) {
@@ -440,14 +467,26 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                   [ngModelOptions]="{ updateOn: 'blur' }"
                   (ngModelChange)="workItemService.updateItem(item.id, { description: $event })"
                   (input)="syncGrowableTextarea($event)"
+                  (paste)="onPasteUpload($event, item.id, 'description')"
+                  (drop)="onDropUpload($event, item.id, 'description')"
+                  (dragover)="$event.preventDefault()"
                   [disabled]="!projectService.canEdit()"
                   aria-label="Work item description"
-                  placeholder="Add a detailed Markdown description..."
+                  placeholder="Add a detailed Markdown description... (Drop files or paste images here)"
                   class="auto-grow-description w-full min-h-[180px] max-h-[200vh] p-3 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
                 ></textarea>
               </div>
             }
           </div>
+
+          <!-- Attachments Section -->
+          <app-work-item-attachments
+            #attachmentsComp
+            [projectId]="item.project_id"
+            [itemId]="item.id"
+            [canEdit]="projectService.canEdit()"
+            (copySnippet)="onCopySnippet($event, item.id)"
+          ></app-work-item-attachments>
 
           <!-- 4. Sub-Work Items Section -->
           <div class="space-y-2.5">
@@ -575,6 +614,9 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                             [(ngModel)]="editingCommentBody"
                             (input)="syncGrowableTextarea($event)"
                             (keydown)="handleEditCommentKeydown($event, item.id, cmt.id)"
+                            (paste)="onPasteUpload($event, item.id, 'editComment')"
+                            (drop)="onDropUpload($event, item.id, 'editComment')"
+                            (dragover)="$event.preventDefault()"
                             aria-label="Edit comment markdown"
                             placeholder="Edit your Markdown comment..."
                             class="auto-grow-comment w-full min-h-[70px] max-h-[30vh] p-2 text-xs font-mono leading-relaxed text-slate-800 bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 resize-y"
@@ -620,14 +662,34 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                   <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     New Comment (Markdown)
                   </span>
-                  <button
-                    type="button"
-                    (click)="previewNewComment.set(!previewNewComment())"
-                    aria-label="Toggle comment markdown preview"
-                    class="text-[11px] text-sky-600 hover:underline"
-                  >
-                    {{ previewNewComment() ? 'Edit Markdown' : 'Preview Rendered' }}
-                  </button>
+                  <div class="flex items-center gap-3">
+                    <input
+                      #commentFileInputRef
+                      type="file"
+                      multiple
+                      class="hidden"
+                      (change)="onFileInputChange($event, item.id, 'comment')"
+                    />
+                    <button
+                      type="button"
+                      (click)="commentFileInputRef.click()"
+                      aria-label="Attach file to comment"
+                      class="text-[11px] text-slate-500 hover:text-sky-600 flex items-center gap-1 transition-colors"
+                    >
+                      <svg class="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                      <span>Attach file</span>
+                    </button>
+                    <button
+                      type="button"
+                      (click)="previewNewComment.set(!previewNewComment())"
+                      aria-label="Toggle comment markdown preview"
+                      class="text-[11px] text-sky-600 hover:underline"
+                    >
+                      {{ previewNewComment() ? 'Edit Markdown' : 'Preview Rendered' }}
+                    </button>
+                  </div>
                 </div>
 
                 @if (previewNewComment()) {
@@ -645,8 +707,11 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                       [(ngModel)]="newCommentBody"
                       (input)="syncGrowableTextarea($event)"
                       (keydown)="handleCommentKeydown($event, item.id)"
+                      (paste)="onPasteUpload($event, item.id, 'comment')"
+                      (drop)="onDropUpload($event, item.id, 'comment')"
+                      (dragover)="$event.preventDefault()"
                       aria-label="Work item comment"
-                      placeholder="Add a detailed Markdown comment... (⌘+Enter to submit)"
+                      placeholder="Add a detailed Markdown comment... (⌘+Enter to submit, drop or paste files)"
                       class="auto-grow-comment w-full min-h-[90px] max-h-[30vh] p-2.5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
                     ></textarea>
                   </div>
@@ -681,8 +746,11 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
 export class WorkItemDetailPageComponent implements OnInit {
   readonly workItemService = inject(WorkItemService);
   readonly projectService = inject(ProjectService);
+  private readonly attachmentService = inject(AttachmentService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+
+  readonly attachmentsComp = viewChild<WorkItemAttachmentsComponent>('attachmentsComp');
 
   readonly routeItemId = signal<string>('');
   readonly previewDesc = signal<boolean>(false);
@@ -927,6 +995,95 @@ export class WorkItemDetailPageComponent implements OnInit {
   deleteComment(itemId: string, commentId: string): void {
     if (confirm('Delete this comment?')) {
       this.workItemService.deleteComment(itemId, commentId);
+    }
+  }
+
+  onCopySnippet(markdown: string, itemId: string): void {
+    // Snippet copied to clipboard
+  }
+
+  onFileInputChange(event: Event, itemId: string, target: 'description' | 'comment' | 'editComment'): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.handleFilesUpload(Array.from(input.files), itemId, target);
+      input.value = '';
+    }
+  }
+
+  onPasteUpload(event: ClipboardEvent, itemId: string, target: 'description' | 'comment' | 'editComment'): void {
+    if (!this.projectService.canEdit()) return;
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file') {
+        const file = items[i].getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) {
+      event.preventDefault();
+      this.handleFilesUpload(files, itemId, target);
+    }
+  }
+
+  onDropUpload(event: DragEvent, itemId: string, target: 'description' | 'comment' | 'editComment'): void {
+    if (!this.projectService.canEdit()) return;
+    if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+      event.preventDefault();
+      this.handleFilesUpload(Array.from(event.dataTransfer.files), itemId, target);
+    }
+  }
+
+  handleFilesUpload(files: File[], itemId: string, target: 'description' | 'comment' | 'editComment'): void {
+    const projectId = this.currentItem()?.project_id || this.projectService.activeProjectId();
+    if (!projectId) return;
+
+    for (const file of files) {
+      const placeholder = `\n![Uploading ${file.name}...]()\n`;
+      this.insertSnippet(placeholder, itemId, target);
+
+      this.attachmentService.upload(projectId, file, itemId).subscribe({
+        next: (event: HttpEvent<Attachment>) => {
+          if (event.type === HttpEventType.Response && event.body) {
+            const att = event.body;
+            this.replaceSnippet(placeholder, `\n${att.markdown}\n`, itemId, target);
+            this.attachmentsComp()?.loadAttachments();
+          }
+        },
+        error: () => {
+          this.replaceSnippet(placeholder, `\n[Upload failed: ${file.name}]\n`, itemId, target);
+        },
+      });
+    }
+  }
+
+  private insertSnippet(snippet: string, itemId: string, target: 'description' | 'comment' | 'editComment'): void {
+    if (target === 'description') {
+      const item = this.currentItem();
+      if (!item) return;
+      const current = item.description || '';
+      const updated = current ? `${current}${snippet}` : snippet.trimStart();
+      this.workItemService.updateItem(itemId, { description: updated });
+    } else if (target === 'comment') {
+      this.newCommentBody = this.newCommentBody ? `${this.newCommentBody}${snippet}` : snippet.trimStart();
+    } else if (target === 'editComment') {
+      this.editingCommentBody = this.editingCommentBody ? `${this.editingCommentBody}${snippet}` : snippet.trimStart();
+    }
+  }
+
+  private replaceSnippet(placeholder: string, replacement: string, itemId: string, target: 'description' | 'comment' | 'editComment'): void {
+    if (target === 'description') {
+      const item = this.currentItem();
+      if (!item) return;
+      const current = item.description || '';
+      const updated = current.replace(placeholder, replacement);
+      this.workItemService.updateItem(itemId, { description: updated });
+    } else if (target === 'comment') {
+      this.newCommentBody = this.newCommentBody.replace(placeholder, replacement);
+    } else if (target === 'editComment') {
+      this.editingCommentBody = this.editingCommentBody.replace(placeholder, replacement);
     }
   }
 }

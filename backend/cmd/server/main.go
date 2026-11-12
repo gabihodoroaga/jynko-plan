@@ -20,6 +20,7 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/storage"
 	"github.com/gabihodoroaga/jynko-plan/internal/telemetry"
 )
 
@@ -77,6 +78,15 @@ func main() {
 	itemRepo := repository.NewItemRepository(firestoreClient)
 	pageRepo := repository.NewPageRepository(firestoreClient)
 	stickyRepo := repository.NewStickyRepository(firestoreClient)
+	attachmentRepo := repository.NewAttachmentRepository(firestoreClient)
+
+	// Storage Provider (local filesystem for dev/e2e, GCS for prd/stg)
+	storageProvider, err := storage.NewStorageProvider(ctx, cfg)
+	if err != nil {
+		slog.Error("failed to initialize storage provider", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer storageProvider.Close()
 
 	// Services
 	projectSvc := service.NewProjectService(projectRepo)
@@ -87,6 +97,7 @@ func main() {
 	itemSvc := service.NewItemService(itemRepo)
 	pageSvc := service.NewPageService(pageRepo)
 	stickySvc := service.NewStickyService(stickyRepo)
+	attachmentSvc := service.NewAttachmentService(attachmentRepo, storageProvider)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler()
@@ -99,6 +110,7 @@ func main() {
 	commentHandler := handler.NewCommentHandler(itemSvc)
 	pageHandler := handler.NewPageHandler(pageSvc)
 	stickyHandler := handler.NewStickyHandler(stickySvc)
+	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc)
 
 	router := SetupRouter(
 		cfg,
@@ -113,6 +125,7 @@ func main() {
 		commentHandler,
 		pageHandler,
 		stickyHandler,
+		attachmentHandler,
 	)
 
 	srv := &http.Server{
@@ -156,6 +169,7 @@ func SetupRouter(
 	commentHandler *handler.CommentHandler,
 	pageHandler *handler.PageHandler,
 	stickyHandler *handler.StickyHandler,
+	attachmentHandler *handler.AttachmentHandler,
 ) *gin.Engine {
 	r := gin.New()
 	r.Use(
@@ -266,6 +280,12 @@ func SetupRouter(
 		projGroup.POST("/stickies", member, stickyHandler.CreateSticky)
 		projGroup.PATCH("/stickies/:stickyId", member, stickyHandler.UpdateSticky)
 		projGroup.DELETE("/stickies/:stickyId", member, stickyHandler.DeleteSticky)
+
+		// Attachments
+		projGroup.GET("/attachments", viewer, attachmentHandler.ListAttachments)
+		projGroup.POST("/attachments", member, attachmentHandler.UploadAttachment)
+		projGroup.GET("/attachments/:attachmentId/content", viewer, attachmentHandler.GetAttachmentContent)
+		projGroup.DELETE("/attachments/:attachmentId", member, attachmentHandler.DeleteAttachment)
 	}
 
 	// Static SPA asset serving & HTML5 history routing fallback (when STATIC_DIR is configured)

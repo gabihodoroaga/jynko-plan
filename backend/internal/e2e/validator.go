@@ -800,6 +800,8 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 			hasStartBtn, _, _ := drawerEl.Has(`button[aria-label="Work item start date"]`)
 			hasDueBtn, _, _ := drawerEl.Has(`button[aria-label="Work item due date"]`)
 			hasEstBtn, _, _ := drawerEl.Has(`button[aria-label="Work item estimate"]`)
+			hasAttachmentsComp, _, _ := drawerEl.Has(`app-work-item-attachments`)
+			hasUploadBtn, _, _ := drawerEl.Has(`button[aria-label="Upload attachment"]`)
 			hasDrawerLabelBtn, labelDropBtn, _ := drawerEl.Has(`button[aria-label="Toggle work item label dropdown"]`)
 			hasDrawerLabelOption := false
 			if hasDrawerLabelBtn && labelDropBtn != nil {
@@ -807,11 +809,11 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 				time.Sleep(150 * time.Millisecond)
 				hasDrawerLabelOption, _, _ = drawerEl.Has(`button[aria-label^="Toggle work item label "]`)
 			}
-			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && !strings.Contains(drawerText, "Delete Work Item") {
-				res.Assertions = append(res.Assertions, "Work Item side drawer renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, plus separate 'Labels:' line with multi-select dropdown")
+			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && hasAttachmentsComp && hasUploadBtn && !strings.Contains(drawerText, "Delete Work Item") {
+				res.Assertions = append(res.Assertions, "Work Item side drawer renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, Attachments section, and separate 'Labels:' line with multi-select dropdown")
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side drawer failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption))
+				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side drawer failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v, hasAttachments=%v, hasUploadBtn=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption, hasAttachmentsComp, hasUploadBtn))
 			}
 		} else {
 			res.Passed = false
@@ -831,12 +833,13 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 	hasEstimateBtn, _, _ := detailPage.Has(`button[aria-label="Work item estimate"]`)
 	hasAutoGrowDesc, _, _ := detailPage.Has(`textarea.auto-grow-description[aria-label="Work item description"]`)
 	hasBackLink, _, _ := detailPage.Has(`a[aria-label="Back to Work Items"]`)
+	hasAttachmentsPage, _, _ := detailPage.Has(`app-work-item-attachments`)
 
-	if strings.Contains(detailMain, "HODO-1") && hasTopPropsPage && hasStartDateBtn && hasDueDateBtn && hasEstimateBtn && hasAutoGrowDesc && hasBackLink && strings.Contains(detailMain, "Sub-Work Items") {
-		res.Assertions = append(res.Assertions, "Full-page Work Item view renders single-column layout with top property pills, auto-growing Description, and sub-items checklist")
+	if strings.Contains(detailMain, "HODO-1") && hasTopPropsPage && hasStartDateBtn && hasDueDateBtn && hasEstimateBtn && hasAutoGrowDesc && hasBackLink && strings.Contains(detailMain, "Sub-Work Items") && hasAttachmentsPage {
+		res.Assertions = append(res.Assertions, "Full-page Work Item view renders single-column layout with top property pills, auto-growing Description, Attachments section, and sub-items checklist")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions: hasTopProps=%v, hasStartDate=%v, hasDueDate=%v, hasEstimate=%v, hasAutoGrowDesc=%v, hasBackLink=%v", hasTopPropsPage, hasStartDateBtn, hasDueDateBtn, hasEstimateBtn, hasAutoGrowDesc, hasBackLink))
+		res.Errors = append(res.Errors, fmt.Sprintf("Full-page Work Item view failed assertions: hasTopProps=%v, hasStartDate=%v, hasDueDate=%v, hasEstimate=%v, hasAutoGrowDesc=%v, hasBackLink=%v, hasAttachments=%v", hasTopPropsPage, hasStartDateBtn, hasDueDateBtn, hasEstimateBtn, hasAutoGrowDesc, hasBackLink, hasAttachmentsPage))
 	}
 
 	// Verify Markdown comment composer and preview toggle
@@ -847,7 +850,19 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 			toggleCommentBtn.MustClick()
 			time.Sleep(200 * time.Millisecond)
 
-			previewHtml, _ := detailPage.MustElement(`button[aria-label="Toggle comment markdown preview"]`).MustParent().MustParent().HTML()
+			btnEl := detailPage.MustElement(`button[aria-label="Toggle comment markdown preview"]`)
+			parent := btnEl
+			previewHtml := ""
+			for i := 0; i < 4; i++ {
+				if p, err := parent.Parent(); err == nil && p != nil {
+					parent = p
+					html, _ := parent.HTML()
+					if strings.Contains(html, "Markdown E2E note:") {
+						previewHtml = html
+						break
+					}
+				}
+			}
 			if strings.Contains(previewHtml, "Markdown E2E note:") && strings.Contains(previewHtml, "<strong") && strings.Contains(previewHtml, "<code") {
 				res.Assertions = append(res.Assertions, "Work Item comment composer supports Markdown input, growable auto-sizing, and 'Preview Rendered' / 'Edit Markdown' toggle")
 			} else {

@@ -22,6 +22,8 @@ type Config struct {
 	DevUserName             string
 	CORSAllowedOrigins      []string
 	StaticDir               string
+	AttachmentsGCSBucket    string
+	LocalStorageDir         string
 	LogLevel                string
 	LogFormat               string
 	EnableCloudTrace        bool
@@ -100,6 +102,8 @@ func Load() *Config {
 		DevUserName:             getEnv("DEV_USER_NAME", "Local Developer"),
 		CORSAllowedOrigins:      origins,
 		StaticDir:               getEnv("STATIC_DIR", ""),
+		AttachmentsGCSBucket:    getEnv("ATTACHMENTS_GCS_BUCKET", ""),
+		LocalStorageDir:         getEnv("LOCAL_STORAGE_DIR", "data/attachments"),
 		LogLevel:                getEnv("LOG_LEVEL", "info"),
 		LogFormat:               getEnv("LOG_FORMAT", defaultLogFormat),
 		EnableCloudTrace:        getEnvBool("ENABLE_CLOUD_TRACE", isPrd),

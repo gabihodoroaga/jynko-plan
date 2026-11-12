@@ -196,3 +196,20 @@ type Sticky struct {
 	CreatedAt time.Time `firestore:"created_at" json:"created_at"`
 	UpdatedAt time.Time `firestore:"updated_at" json:"updated_at"`
 }
+
+// Attachment represents an uploaded file attached to a Project (and optionally a WorkItem).
+type Attachment struct {
+	ID           string    `firestore:"id" json:"id"`
+	ProjectID    string    `firestore:"project_id" json:"project_id"`
+	WorkItemID   string    `firestore:"work_item_id,omitempty" json:"work_item_id,omitempty"`
+	FileName     string    `firestore:"file_name" json:"file_name"`
+	ContentType  string    `firestore:"content_type" json:"content_type"`
+	SizeBytes    int64     `firestore:"size_bytes" json:"size_bytes"`
+	StoragePath  string    `firestore:"storage_path" json:"storage_path"`
+	UploadedBy   string    `firestore:"uploaded_by" json:"uploaded_by"`
+	UploadedName string    `firestore:"uploaded_name" json:"uploaded_name"`
+	CreatedAt    time.Time `firestore:"created_at" json:"created_at"`
+	UpdatedAt    time.Time `firestore:"updated_at" json:"updated_at"`
+	URL          string    `firestore:"-" json:"url"`
+	Markdown     string    `firestore:"-" json:"markdown"`
+}

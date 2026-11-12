@@ -197,6 +197,22 @@ export interface StickyPaletteMeta {
   dotHex: string;
 }
 
+export interface Attachment {
+  id: string;
+  project_id: string;
+  work_item_id?: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  storage_path: string;
+  uploaded_by: string;
+  uploaded_name: string;
+  created_at: string;
+  updated_at: string;
+  url: string;
+  markdown: string;
+}
+
 export const STICKY_PALETTES: StickyPaletteMeta[] = [
   {
     color: 'BANANA',
