@@ -1,0 +1,40 @@
+# ==============================================================================
+# Jynko - Cloud Run Identity-Aware Proxy (IAP) Resource Settings
+# ==============================================================================
+# Usage:
+#   1. Copy this file to iap-settings.yaml
+#   2. Replace placeholder values with your GCP OAuth Client ID & Secret
+#   3. Apply with:
+#      gcloud iap settings set iap-settings.yaml \
+#        --project=$PROJECT_ID \
+#        --resource-type=cloud-run \
+#        --region=$REGION \
+#        --service=$SERVICE_NAME
+#
+#   4. Verify with:
+#      gcloud iap settings get \
+#        --project=$PROJECT_ID \
+#        --resource-type=cloud-run \
+#        --region=$REGION \
+#        --service=$SERVICE_NAME
+# ==============================================================================
+
+accessSettings:
+  oauthSettings:
+    # OAuth 2.0 Web Application credentials configured in Google Cloud Console
+    # (APIs & Services > Credentials).
+    # NOTE: Authorized redirect URI on this OAuth client must include:
+    # https://iap.googleapis.com/v1/oauth/clientIds/<CLIENT_ID>:handleRedirect
+    clientId: "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+    clientSecret: "YOUR_WEB_CLIENT_SECRET"
+
+    # Additional OAuth client IDs authorized for programmatic (non-browser) access.
+    # Enables CLI tools, MCP clients, scripts, and service-to-service calls
+    # passing OIDC ID tokens via 'Proxy-Authorization: Bearer <ID_TOKEN>'.
+    programmaticClients:
+      - "YOUR_PROGRAMMATIC_CLIENT_ID_1.apps.googleusercontent.com"
+      #- "YOUR_PROGRAMMATIC_CLIENT_ID_2.apps.googleusercontent.com"
+
+  corsSettings:
+    # Allow CORS preflight (OPTIONS) requests through to the backend without authentication
+    allowHttpOptions: true

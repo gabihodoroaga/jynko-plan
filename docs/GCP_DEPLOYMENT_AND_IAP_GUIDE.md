@@ -248,6 +248,11 @@ Choose either **Method 1 (Native Direct IAP on Cloud Run — No Load Balancer, N
 5. Navigate to **APIs & Services > Credentials** > **Create Credentials > OAuth client ID**:
    - **Application type**: `Web application`
    - **Name**: `Jynko IAP Client`
+   - **Authorized redirect URIs**:
+     ```text
+     https://iap.googleapis.com/v1/oauth/clientIds/YOUR_CLIENT_ID:handleRedirect
+     ```
+     *(Substitute your generated Client ID into this URI after creation, or create the client and edit its redirect URI).*
    - Click **Create**.
 6. Save the generated credentials:
    ```bash
@@ -262,7 +267,7 @@ Choose either **Method 1 (Native Direct IAP on Cloud Run — No Load Balancer, N
 Google Cloud Run natively supports direct Identity-Aware Proxy integration. This protects the service's default `https://<service>-<hash>.a.run.app` URL without requiring any Load Balancer, Serverless NEG, static IP, or custom domain!
 
 #### Step 1.1: Enable Native IAP on Cloud Run
-Run the following command to turn on direct IAP for your Cloud Run service:
+Run the following command to turn on direct IAP for your Cloud Run service (if not already enabled during `cloudbuild.yaml` deployment):
 ```bash
 gcloud run services update $SERVICE_NAME \
   --region=$REGION \
@@ -279,33 +284,125 @@ gcloud run services add-iam-policy-binding $SERVICE_NAME \
   --role="roles/run.invoker"
 ```
 
-#### Step 1.3: Grant End Users Access via IAP Role
-Grant access to specific users, domains, or Google Workspace groups by assigning the `roles/iap.httpsResourceAccessor` role scoped to the `cloud-run` resource type:
+#### Step 1.3: Configure Custom OAuth Credentials & Programmatic Clients (`iap-settings.yaml`)
+
+By default, Cloud Run IAP provisions a Google-managed OAuth client. While convenient for quick browser tests, configuring your own OAuth settings is essential for production:
+1. **Branded OAuth Consent Screen & Stable Audience**: Uses your custom `clientId` and `clientSecret`, matching the backend's `IAP_AUDIENCE` configuration.
+2. **Programmatic (Non-Browser) Clients**: Authorizes automated clients (such as the Jynko MCP server, CLI tools, automated integration tests, background daemons, or CI/CD pipelines) to authenticate using OpenID Connect (OIDC) ID tokens without requiring an interactive browser redirect.
+3. **CORS Preflight Support**: Allows unauthenticated browser preflight (`OPTIONS`) requests to reach the backend without being blocked by IAP.
+
+##### 1. Prepare `iap-settings.yaml`
+A template is provided in [`deploy/iap-settings.yaml.template`](file:///Users/gabrielhodoroaga/Projects/github/gabihodoroaga/jynko/deploy/iap-settings.yaml.template). Create `iap-settings.yaml`:
+
+```yaml
+accessSettings:
+  oauthSettings:
+    # Your custom OAuth 2.0 Web Application client ID and secret
+    # Ensure Authorized redirect URI in GCP Console contains:
+    # https://iap.googleapis.com/v1/oauth/clientIds/YOUR_CLIENT_ID.apps.googleusercontent.com:handleRedirect
+    clientId: "YOUR_CLIENT_ID.apps.googleusercontent.com"
+    clientSecret: "YOUR_CLIENT_SECRET"
+
+    # Authorized OAuth client IDs for programmatic (non-browser) clients
+    # (e.g. MCP clients, CLI tools, automated API callers)
+    programmaticClients:
+      - "YOUR_PROGRAMMATIC_CLIENT_ID_1.apps.googleusercontent.com"
+      - "YOUR_PROGRAMMATIC_CLIENT_ID_2.apps.googleusercontent.com"
+
+  corsSettings:
+    # Allow unauthenticated CORS preflight OPTIONS requests through to the backend
+    allowHttpOptions: true
+```
+
+> [!IMPORTANT]
+> The OAuth 2.0 client specified in `clientId` must have the redirect URI configured in GCP Console under **APIs & Services > Credentials**:
+> `https://iap.googleapis.com/v1/oauth/clientIds/<YOUR_CLIENT_ID>:handleRedirect`
+
+##### 2. Apply Settings via `gcloud iap settings set`
+Apply the YAML settings directly to your Cloud Run service:
 ```bash
-# Grant access to a single user
-gcloud beta iap web add-iam-policy-binding \
+gcloud iap settings set iap-settings.yaml \
+  --project=$PROJECT_ID \
+  --resource-type=cloud-run \
+  --region=$REGION \
+  --service=$SERVICE_NAME
+```
+
+##### 3. Verify Active Settings via `gcloud iap settings get`
+Confirm that Cloud Run has applied your custom OAuth client and programmatic clients:
+```bash
+gcloud iap settings get \
+  --project=$PROJECT_ID \
+  --resource-type=cloud-run \
+  --region=$REGION \
+  --service=$SERVICE_NAME
+```
+
+##### 4. How Programmatic Clients Authenticate (MCP / CLI / API)
+Non-browser clients configured in `programmaticClients` authenticate against IAP by obtaining an OIDC identity token with `audience` set to your OAuth `clientId` and sending it in the `Proxy-Authorization` header:
+
+```bash
+# 1. Fetch an OIDC ID token for your developer account or service account
+export ID_TOKEN=$(gcloud auth print-identity-token --audiences=$CLIENT_ID)
+
+# 2. Call the IAP-protected Cloud Run API endpoint
+curl -H "Proxy-Authorization: Bearer $ID_TOKEN" \
+  https://${SERVICE_URL}/api/v1/auth/me
+```
+
+When IAP receives the request:
+- It verifies that the bearer token is signed by Google.
+- It verifies that the token's audience matches `clientId` or one of the configured `programmaticClients`.
+- It verifies that the caller has been granted `roles/iap.httpsResourceAccessor`.
+- It strips `Proxy-Authorization` and forwards authenticated headers (`X-Goog-Authenticated-User-Email`, `X-Goog-Authenticated-User-Id`, `X-Goog-IAP-JWT-Assertion`) to Jynko.
+
+#### Step 1.4: Grant End Users & Programmatic Callers Access via IAP Role
+Grant access to specific users, Google Workspace groups, or service accounts using the `roles/iap.httpsResourceAccessor` role scoped to Cloud Run:
+```bash
+# Grant access to an interactive user
+gcloud iap web add-iam-policy-binding \
+  --project=$PROJECT_ID \
   --resource-type=cloud-run \
   --service=$SERVICE_NAME \
   --region=$REGION \
   --member="user:alice@yourcompany.com" \
   --role="roles/iap.httpsResourceAccessor"
 
-# Or grant access to an entire Google Workspace group
-gcloud beta iap web add-iam-policy-binding \
+# Grant access to an entire Google Workspace group
+gcloud iap web add-iam-policy-binding \
+  --project=$PROJECT_ID \
   --resource-type=cloud-run \
   --service=$SERVICE_NAME \
   --region=$REGION \
   --member="group:engineering@yourcompany.com" \
   --role="roles/iap.httpsResourceAccessor"
+
+# Grant access to a service account (for headless CI/CD, daemons, or programmatic agents)
+gcloud iap web add-iam-policy-binding \
+  --project=$PROJECT_ID \
+  --resource-type=cloud-run \
+  --service=$SERVICE_NAME \
+  --region=$REGION \
+  --member="serviceAccount:${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/iap.httpsResourceAccessor"
 ```
 
-#### Step 1.4: Accessing the Application
-1. Retrieve your Cloud Run service URL:
+#### Step 1.5: Accessing and Testing the Application
+1. **Interactive Web Browser Access**:
+   Retrieve the Cloud Run service URL and visit it in your browser:
    ```bash
-   gcloud run services describe $SERVICE_NAME --region=$REGION --format='value(status.url)'
+   export SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region=$REGION --format='value(status.url)')
+   echo "Open in browser: $SERVICE_URL"
    ```
-2. Open the URL in your browser.
-3. You will immediately see the official Google Sign-in screen enforced by IAP. Once signed in, Jynko extracts your identity and automatically grants you access!
+   You will see the Google Sign-in screen branded with your OAuth consent screen. Upon signing in, Jynko extracts your identity and automatically grants you access.
+
+2. **Programmatic / API Access (MCP Server, CLI, Curl)**:
+   Verify headless access using an OIDC ID token:
+   ```bash
+   export ID_TOKEN=$(gcloud auth print-identity-token --audiences=$CLIENT_ID)
+   curl -i -H "Proxy-Authorization: Bearer $ID_TOKEN" "${SERVICE_URL}/api/v1/auth/me"
+   ```
+   A successful response returns HTTP 200 with your user profile JSON.
 
 ---
 
@@ -425,4 +522,5 @@ gcloud iap web add-iam-policy-binding \
 | **DNS & SSL Setup** | None (Automatic Google Cloud SSL) | Required (DNS A record + Google-managed cert) |
 | **Ingress Mode** | Default / All | `internal-and-cloud-load-balancing` |
 | **IAM Command Scoping** | `--resource-type=cloud-run` | `--resource-type=backend-services` |
+| **Custom OAuth & Programmatic Clients** | Configured via `gcloud iap settings set iap-settings.yaml` (`--resource-type=cloud-run`) | Configured via `backend-services update` or `gcloud iap settings set` (`--resource-type=backend-services`) |
 | **Best For** | Internal teams, dev/staging, fast zero-cost setup | Enterprise custom domain, multi-region routing |
