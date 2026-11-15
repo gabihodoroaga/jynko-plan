@@ -1,12 +1,19 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"google.golang.org/api/idtoken"
 
+	"github.com/gabihodoroaga/jynko-plan/internal/config"
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
@@ -195,6 +202,77 @@ func TestServer_Initialization(t *testing.T) {
 	}
 	if s.MCPServer() == nil {
 		t.Fatalf("expected non-nil mcpServer")
+	}
+}
+
+func TestHTTPHandler_AuthenticationAndPerCallerRBAC(t *testing.T) {
+	projRepo := &testProjectRepo{
+		members: map[string]*model.ProjectMember{
+			"proj-1:uid-viewer": {
+				UserID: "uid-viewer",
+				Email:  "viewer@company.com",
+				Role:   model.RoleViewer,
+			},
+		},
+	}
+
+	appCfg := &config.Config{
+		Env:                "prd",
+		RawEnv:             "prd",
+		IAPAudience:        "/projects/123/apps/jynko-mcp",
+		IAPRequireJWT:      true,
+		CORSAllowedOrigins: []string{"https://jynko.company.com"},
+	}
+
+	mockValidator := func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+		if token == "viewer-jwt" && audience == "/projects/123/apps/jynko-mcp" {
+			return &idtoken.Payload{
+				Subject: "accounts.google.com:uid-viewer",
+				Claims:  map[string]interface{}{"email": "viewer@company.com"},
+			}, nil
+		}
+		return nil, errors.New("invalid token")
+	}
+
+	s := NewServer(ServerDeps{
+		Config:       Config{DefaultProjectID: "proj-1"}, // No static User in prd SSE!
+		AppConfig:    appCfg,
+		JWTValidator: mockValidator,
+		ProjectRepo:  projRepo,
+		ProjectSvc:   service.NewProjectService(projRepo),
+	})
+	handler := s.HTTPHandler()
+
+	// 1. Unauthenticated POST to /mcp -> 401 Unauthorized
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated SSE/HTTP MCP request, got %d", w.Code)
+	}
+
+	// 2. Disallowed cross-origin Origin header -> 403 Forbidden
+	req = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
+	req.Header.Set("Origin", "https://evil.attacker.com")
+	req.Header.Set("X-Goog-IAP-JWT-Assertion", "viewer-jwt")
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for disallowed Origin header, got %d", w.Code)
+	}
+
+	// 3. Per-request context overrides static User in CheckRole
+	reqCtx := WithUserContext(context.Background(), model.UserContext{
+		UserID: "uid-viewer",
+		Email:  "viewer@company.com",
+	})
+	if err := s.resolver.CheckRole(reqCtx, "proj-1", model.RoleViewer); err != nil {
+		t.Fatalf("expected viewer context to pass RoleViewer: %v", err)
+	}
+	err := s.resolver.CheckRole(reqCtx, "proj-1", model.RoleMember)
+	if err == nil || !strings.Contains(err.Error(), "insufficient permissions") {
+		t.Fatalf("expected viewer context to fail RoleMember, got %v", err)
 	}
 }
 

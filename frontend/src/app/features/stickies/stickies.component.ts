@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StickyService } from '../../core/services/sticky.service';
 import { ProjectService } from '../../core/services/project.service';
+import { AuthService } from '../../core/services/auth.service';
 import { WorkItemService } from '../../core/services/work-item.service';
 import { Sticky, StickyColor } from '../../core/models/project.model';
 
@@ -185,15 +186,17 @@ import { Sticky, StickyColor } from '../../core/models/project.model';
 
               @if (projectService.canEdit()) {
                 <div class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    (click)="stickyService.togglePin(sticky.id)"
-                    [attr.aria-label]="sticky.is_pinned ? 'Unpin sticky' : 'Pin sticky'"
-                    class="p-1 rounded hover:bg-black/10 text-xs transition-colors"
-                    [title]="sticky.is_pinned ? 'Unpin' : 'Pin to top'"
-                  >
-                    📌
-                  </button>
+                  @if (canManageSticky(sticky)) {
+                    <button
+                      type="button"
+                      (click)="stickyService.togglePin(sticky.id)"
+                      [attr.aria-label]="sticky.is_pinned ? 'Unpin sticky' : 'Pin sticky'"
+                      class="p-1 rounded hover:bg-black/10 text-xs transition-colors"
+                      [title]="sticky.is_pinned ? 'Unpin' : 'Pin to top'"
+                    >
+                      📌
+                    </button>
+                  }
                   <button
                     type="button"
                     (click)="convertToWorkItem(sticky)"
@@ -203,15 +206,17 @@ import { Sticky, StickyColor } from '../../core/models/project.model';
                   >
                     ↗ Task
                   </button>
-                  <button
-                    type="button"
-                    (click)="stickyService.deleteSticky(sticky.id)"
-                    aria-label="Delete sticky"
-                    class="p-1 rounded hover:bg-black/10 text-xs transition-colors"
-                    title="Delete sticky"
-                  >
-                    ✕
-                  </button>
+                  @if (canManageSticky(sticky)) {
+                    <button
+                      type="button"
+                      (click)="stickyService.deleteSticky(sticky.id)"
+                      aria-label="Delete sticky"
+                      class="p-1 rounded hover:bg-black/10 text-xs transition-colors"
+                      title="Delete sticky"
+                    >
+                      ✕
+                    </button>
+                  }
                 </div>
               }
             </div>
@@ -219,8 +224,9 @@ import { Sticky, StickyColor } from '../../core/models/project.model';
             <!-- Inline Auto-Sizing Content Textarea -->
             <textarea
               [ngModel]="sticky.content"
+              [ngModelOptions]="{ updateOn: 'blur' }"
               (ngModelChange)="stickyService.updateSticky(sticky.id, { content: $event })"
-              [disabled]="!projectService.canEdit()"
+              [disabled]="!canManageSticky(sticky)"
               rows="4"
               aria-label="Sticky note content"
               style="field-sizing: content; height: auto; width: 100%; min-block-size: 4lh; max-block-size: 12lh;"
@@ -235,7 +241,7 @@ import { Sticky, StickyColor } from '../../core/models/project.model';
                   <button
                     type="button"
                     (click)="stickyService.updateSticky(sticky.id, { color: swatch.color })"
-                    [disabled]="!projectService.canEdit()"
+                    [disabled]="!canManageSticky(sticky)"
                     [attr.aria-label]="'Change sticky color to ' + swatch.label"
                     [title]="swatch.label"
                     class="w-3.5 h-3.5 rounded-full border border-black/25 transition-transform"
@@ -258,11 +264,23 @@ import { Sticky, StickyColor } from '../../core/models/project.model';
 export class StickiesComponent {
   readonly stickyService = inject(StickyService);
   readonly projectService = inject(ProjectService);
+  private readonly authService = inject(AuthService);
   private readonly workItemService = inject(WorkItemService);
 
   readonly isComposerOpen = signal<boolean>(false);
   readonly newStickyColor = signal<StickyColor>('BANANA');
   newStickyContent = '';
+
+  canManageSticky(sticky: Sticky): boolean {
+    if (!this.projectService.canEdit()) return false;
+    if (this.projectService.isAdmin()) return true;
+    const user = this.authService.currentUser();
+    const author = (sticky.author_id || '').trim().toLowerCase();
+    return (
+      sticky.author_id === user.user_id ||
+      (!!user.email && author === user.email.trim().toLowerCase())
+    );
+  }
 
   submitNewSticky(): void {
     const text = this.newStickyContent.trim();
@@ -275,6 +293,7 @@ export class StickiesComponent {
   convertToWorkItem(sticky: Sticky): void {
     const title = sticky.content.split('\n')[0].slice(0, 90) || 'Work item from sticky';
     this.workItemService.createItem({
+      project_id: sticky.project_id,
       title,
       description: sticky.content,
       status: 'TODO',

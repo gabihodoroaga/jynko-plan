@@ -2,6 +2,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { ProjectService } from './project.service';
 import { AuthService } from './auth.service';
+import { SettingsService } from './settings.service';
 import {
   Comment,
   SubWorkItem,
@@ -19,8 +20,9 @@ export class WorkItemService {
   private readonly api = inject(ApiService);
   private readonly projectService = inject(ProjectService);
   private readonly authService = inject(AuthService);
+  private readonly settingsService = inject(SettingsService);
 
-  readonly activeView = signal<WorkItemViewMode>('BOARD');
+  readonly activeView = signal<WorkItemViewMode>(this.initialViewMode());
   readonly isQuickCreateOpen = signal<boolean>(false);
 
   readonly filter = signal<WorkItemFilterState>({
@@ -40,14 +42,61 @@ export class WorkItemService {
   readonly subItemsByItem = signal<Record<string, SubWorkItem[]>>({});
   readonly commentsByItem = signal<Record<string, Comment[]>>({});
   private readonly updateSeqByItem = new Map<string, number>();
+  private readonly loadedProjects = new Set<string>();
+  private readonly projectIdsKey = computed(() =>
+    this.projectService
+      .projects()
+      .map((p) => p.id)
+      .join(',')
+  );
 
   constructor() {
-    effect(() => {
-      const projects = this.projectService.projects();
-      for (const proj of projects) {
-        this.loadItems(proj.id);
-      }
+    this.authService.registerSessionLifecycle({
+      onReset: () => this.resetState(),
     });
+
+    effect(
+      () => {
+        const key = this.projectIdsKey();
+        const ids = key ? key.split(',').filter(Boolean) : [];
+        const currentSet = new Set(ids);
+
+        let pruned = false;
+        for (const existing of Array.from(this.loadedProjects)) {
+          if (!currentSet.has(existing)) {
+            this.loadedProjects.delete(existing);
+            pruned = true;
+          }
+        }
+        if (pruned) {
+          this.items.update((prev) => prev.filter((i) => currentSet.has(i.project_id)));
+        }
+        for (const id of ids) {
+          if (!this.loadedProjects.has(id)) {
+            this.loadedProjects.add(id);
+            this.loadItems(id);
+          }
+        }
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  resetState(): void {
+    this.loadedProjects.clear();
+    this.updateSeqByItem.clear();
+    this.items.set([]);
+    this.subItemsByItem.set({});
+    this.commentsByItem.set({});
+    this.selectedItemId.set(null);
+    this.isQuickCreateOpen.set(false);
+    this.clearProjectScopedFilters();
+  }
+
+  private initialViewMode(): WorkItemViewMode {
+    const raw = this.settingsService.generalSettings().defaultWorkItemView;
+    const valid: WorkItemViewMode[] = ['LIST', 'BOARD', 'CALENDAR', 'TIMELINE', 'SPREADSHEET'];
+    return valid.includes(raw as WorkItemViewMode) ? (raw as WorkItemViewMode) : 'BOARD';
   }
 
   readonly filteredItems = computed<WorkItem[]>(() => {
@@ -79,10 +128,15 @@ export class WorkItemService {
   });
 
   readonly myAssignedItems = computed<WorkItem[]>(() => {
-    const userId = this.authService.currentUser().user_id;
+    const user = this.authService.currentUser();
+    const userId = user.user_id;
+    const userEmail = (user.email || '').trim().toLowerCase();
     const q = this.filter().search.trim().toLowerCase();
     return this.items().filter((item) => {
-      if (item.assignee_id !== userId) return false;
+      const assignee = item.assignee_id || '';
+      const isMine =
+        assignee === userId || (!!userEmail && assignee.trim().toLowerCase() === userEmail);
+      if (!isMine) return false;
       if (q) {
         const hay = `${item.key} ${item.title} ${item.description}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -110,6 +164,17 @@ export class WorkItemService {
 
   updateFilter(patch: Partial<WorkItemFilterState>): void {
     this.filter.update((curr) => ({ ...curr, ...patch }));
+  }
+
+  clearProjectScopedFilters(): void {
+    this.filter.update((curr) => ({
+      ...curr,
+      module_id: '',
+      epic_id: '',
+      cycle_id: '',
+      assignee_id: '',
+      label_id: '',
+    }));
   }
 
   resetFilters(): void {
@@ -249,6 +314,11 @@ export class WorkItemService {
       next: (updated) => {
         if (this.updateSeqByItem.get(itemId) === seq) {
           this.items.update((list) => list.map((it) => (it.id === itemId ? updated : it)));
+        }
+      },
+      error: () => {
+        if (current && this.updateSeqByItem.get(itemId) === seq) {
+          this.items.update((list) => list.map((it) => (it.id === itemId ? current : it)));
         }
       },
     });

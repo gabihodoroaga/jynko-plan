@@ -23,16 +23,22 @@ func main() {
 
 	var (
 		transportFlag = flag.String("transport", getEnv("MCP_TRANSPORT", "stdio"), "Transport protocol: 'stdio' or 'sse'")
+		hostFlag      = flag.String("host", getEnv("MCP_HOST", ""), "Bind host for SSE transport (defaults to 127.0.0.1 in dev, 0.0.0.0 in prd/stg)")
 		portFlag      = flag.String("port", getEnv("MCP_PORT", "8085"), "Port for SSE transport")
 		projectFlag   = flag.String("project", getEnv("DEFAULT_PROJECT_ID", "proj-jynko-core"), "Default project ID fallback")
 	)
 	flag.Parse()
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		slog.Error("invalid server configuration", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 	ctx := context.Background()
 
 	slog.Info("initializing Jynko MCP Server",
 		slog.String("transport", *transportFlag),
+		slog.String("env", cfg.Env),
 		slog.String("default_project", *projectFlag),
 		slog.String("gcp_project", cfg.GoogleCloudProject),
 	)
@@ -70,15 +76,20 @@ func main() {
 	pageSvc := service.NewPageService(pageRepo)
 	stickySvc := service.NewStickyService(stickyRepo)
 
-	mcpUser := model.UserContext{
-		UserID: cfg.DevUserID,
-		Email:  cfg.DevUserEmail,
-		Name:   cfg.DevUserName,
-	}
-	if mcpUser.UserID == "" {
-		mcpUser.UserID = "mcp-agent"
-		mcpUser.Email = "agent@jynko.local"
-		mcpUser.Name = "Jynko AI Agent"
+	// Static fallback user is ONLY enabled for local STDIO transport or dev environment.
+	// In prd/stg SSE mode, every incoming HTTP request must carry authenticated IAP/OIDC credentials.
+	var mcpUser model.UserContext
+	if *transportFlag == "stdio" || cfg.AllowDevAuth() {
+		mcpUser = model.UserContext{
+			UserID: cfg.DevUserID,
+			Email:  cfg.DevUserEmail,
+			Name:   cfg.DevUserName,
+		}
+		if mcpUser.UserID == "" && *transportFlag == "stdio" {
+			mcpUser.UserID = "mcp-agent"
+			mcpUser.Email = "agent@jynko.local"
+			mcpUser.Name = "Jynko AI Agent"
+		}
 	}
 
 	mcpCfg := mcp.Config{
@@ -88,6 +99,7 @@ func main() {
 
 	serverDeps := mcp.ServerDeps{
 		Config:      mcpCfg,
+		AppConfig:   cfg,
 		ProjectRepo: projectRepo,
 		ProjectSvc:  projectSvc,
 		ItemSvc:     itemSvc,
@@ -102,8 +114,12 @@ func main() {
 
 	switch *transportFlag {
 	case "sse":
-		slog.Info(fmt.Sprintf("starting MCP Server on SSE port :%s ...", *portFlag))
-		if err := srv.ServeSSE(*portFlag); err != nil {
+		addr := *portFlag
+		if *hostFlag != "" {
+			addr = fmt.Sprintf("%s:%s", *hostFlag, *portFlag)
+		}
+		slog.Info(fmt.Sprintf("starting MCP Server on SSE %s ...", addr))
+		if err := srv.ServeSSE(addr); err != nil {
 			slog.Error("SSE server error", slog.String("error", err.Error()))
 			os.Exit(1)
 		}

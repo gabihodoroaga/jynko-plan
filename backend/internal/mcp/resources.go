@@ -28,10 +28,13 @@ func registerResources(
 		),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			uri := req.Params.URI
+			if !strings.HasPrefix(uri, "jynko://") {
+				return nil, fmt.Errorf("invalid work item URI: %s", uri)
+			}
 			path := strings.TrimPrefix(uri, "jynko://")
 			parts := strings.Split(path, "/")
-			// Expected: projects/{projectId}/items/{itemKey}
-			if len(parts) < 4 || parts[0] != "projects" || parts[2] != "items" {
+			// Expected strictly: projects/{projectId}/items/{itemKey}
+			if len(parts) != 4 || parts[0] != "projects" || parts[1] == "" || parts[2] != "items" || parts[3] == "" {
 				return nil, fmt.Errorf("invalid work item URI: %s", uri)
 			}
 			projID := parts[1]
@@ -41,24 +44,8 @@ func registerResources(
 				return nil, err
 			}
 
-			// Find item
-			var targetItem *model.WorkItem
-			item, err := itemSvc.GetByID(ctx, projID, keyOrID)
-			if err == nil && item != nil {
-				targetItem = item
-			} else {
-				allItems, lErr := itemSvc.List(ctx, projID, model.WorkItemFilter{})
-				if lErr == nil {
-					for i := range allItems {
-						if strings.EqualFold(allItems[i].Key, keyOrID) {
-							targetItem = &allItems[i]
-							break
-						}
-					}
-				}
-			}
-
-			if targetItem == nil {
+			targetItem, err := itemSvc.GetByIDOrKey(ctx, projID, keyOrID)
+			if err != nil || targetItem == nil {
 				return nil, fmt.Errorf("work item %s not found in project %s", keyOrID, projID)
 			}
 
@@ -122,10 +109,13 @@ func registerResources(
 		),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			uri := req.Params.URI
+			if !strings.HasPrefix(uri, "jynko://") {
+				return nil, fmt.Errorf("invalid wiki page URI: %s", uri)
+			}
 			path := strings.TrimPrefix(uri, "jynko://")
 			parts := strings.Split(path, "/")
-			// Expected: projects/{projectId}/pages/{pageId}
-			if len(parts) < 4 || parts[0] != "projects" || parts[2] != "pages" {
+			// Expected strictly: projects/{projectId}/pages/{pageId}
+			if len(parts) != 4 || parts[0] != "projects" || parts[1] == "" || parts[2] != "pages" || parts[3] == "" {
 				return nil, fmt.Errorf("invalid wiki page URI: %s", uri)
 			}
 			projID := parts[1]

@@ -105,11 +105,17 @@ func TestLoadProjectsCollectionDefaultsAndOverride(t *testing.T) {
 		t.Errorf("expected stg projects collection 'jp-stg-projects', got %q", cfgStg.ProjectsCollection)
 	}
 
-	// 5. Variation like 'production' is rejected and falls back to 'dev'
+	// 5. Variation like 'production' is rejected by ValidateEnv and blocks AllowDevAuth
 	_ = os.Setenv("ENV", "production")
 	cfgProdVariation := Load()
 	if cfgProdVariation.Env != "dev" {
 		t.Errorf("expected variation 'production' to fall back to 'dev', got %q", cfgProdVariation.Env)
+	}
+	if cfgProdVariation.AllowDevAuth() {
+		t.Errorf("expected AllowDevAuth() to be false when ENV='production'")
+	}
+	if err := cfgProdVariation.Validate(); err == nil {
+		t.Errorf("expected Validate() to return an error for invalid ENV='production'")
 	}
 
 	// 6. Custom override via PROJECTS_COLLECTION

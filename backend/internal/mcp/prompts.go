@@ -102,6 +102,11 @@ Structure the response into:
 			if projID == "" {
 				projID = r.cfg.DefaultProjectID
 			}
+			if projID != "" {
+				if err := r.CheckRole(ctx, projID, model.RoleViewer); err != nil {
+					return nil, err
+				}
+			}
 
 			promptText := fmt.Sprintf(`You are the Jynko project planning assistant. Break down the following feature specification into structured Jynko entities:
 

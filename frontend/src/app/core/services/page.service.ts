@@ -19,21 +19,86 @@ export class PageService {
   readonly activePageId = signal<string>('page-welcome');
   readonly versionsByPage = signal<Record<string, PageVersion[]>>({});
   private readonly updateSeqByPage = new Map<string, number>();
+  private readonly loadedProjects = new Set<string>();
+  private readonly loadingVersionsFor = new Set<string>();
+  private readonly projectIdsKey = computed(() =>
+    this.projectService
+      .projects()
+      .map((p) => p.id)
+      .join(',')
+  );
 
   constructor() {
+    this.authService.registerSessionLifecycle({
+      onReset: () => this.resetState(),
+    });
+
+    effect(
+      () => {
+        const key = this.projectIdsKey();
+        const ids = key ? key.split(',').filter(Boolean) : [];
+        const currentSet = new Set(ids);
+
+        let pruned = false;
+        for (const existing of Array.from(this.loadedProjects)) {
+          if (!currentSet.has(existing)) {
+            this.loadedProjects.delete(existing);
+            pruned = true;
+          }
+        }
+        if (pruned) {
+          this.collections.update((prev) => prev.filter((c) => currentSet.has(c.project_id)));
+          this.pages.update((prev) => prev.filter((p) => currentSet.has(p.project_id)));
+        }
+        for (const id of ids) {
+          if (!this.loadedProjects.has(id)) {
+            this.loadedProjects.add(id);
+            this.loadWiki(id);
+          }
+        }
+      },
+      { allowSignalWrites: true }
+    );
+
     effect(() => {
-      const projects = this.projectService.projects();
-      for (const proj of projects) {
-        this.loadWiki(proj.id);
+      if (this.authService.isSignedOut()) return;
+      const page = this.activePage();
+      if (!page) return;
+      const known = this.versionsByPage()[page.id];
+      if (known === undefined && !this.loadingVersionsFor.has(page.id)) {
+        this.loadingVersionsFor.add(page.id);
+        this.api.get<PageVersion[]>(`/projects/${page.project_id}/pages/${page.id}/versions`).subscribe({
+          next: (vers) => {
+            this.loadingVersionsFor.delete(page.id);
+            this.versionsByPage.update((m) => ({ ...m, [page.id]: vers ?? [] }));
+          },
+          error: () => {
+            this.loadingVersionsFor.delete(page.id);
+          },
+        });
       }
     });
+  }
+
+  resetState(): void {
+    this.loadedProjects.clear();
+    this.loadingVersionsFor.clear();
+    this.updateSeqByPage.clear();
+    this.collections.set([]);
+    this.pages.set([]);
+    this.versionsByPage.set({});
   }
 
   readonly projectPages = computed<Page[]>(() => {
     const projectId = this.projectService.activeProjectId();
     const colId = this.activeCollectionId();
     if (colId) {
-      return this.pages().filter((p) => (p.collection_id || 'col-general') === colId);
+      const col = this.collections().find((c) => c.id === colId);
+      return this.pages().filter(
+        (p) =>
+          (p.collection_id || 'col-general') === colId &&
+          (!col || p.project_id === col.project_id)
+      );
     }
     return this.pages().filter((p) => p.project_id === projectId);
   });
@@ -240,7 +305,11 @@ export class PageService {
     };
     this.pages.update((list) => list.map((p) => (p.id === pageId ? updatedLocal : p)));
 
-    this.api.put<Page>(`/projects/${current.project_id}/pages/${pageId}`, patch).subscribe({
+    const proj = this.projectService.getProjectById(current.project_id);
+    const createVersion = proj?.settings?.create_version_on_every_save ?? true;
+    const payload = { ...patch, create_version: createVersion };
+
+    this.api.put<Page>(`/projects/${current.project_id}/pages/${pageId}`, payload).subscribe({
       next: (saved) => {
         if (this.updateSeqByPage.get(pageId) !== seq) {
           return;
@@ -256,6 +325,11 @@ export class PageService {
               this.versionsByPage.update((m) => ({ ...m, [pageId]: vers ?? [] }));
             },
           });
+      },
+      error: () => {
+        if (this.updateSeqByPage.get(pageId) === seq) {
+          this.pages.update((list) => list.map((p) => (p.id === pageId ? current : p)));
+        }
       },
     });
   }

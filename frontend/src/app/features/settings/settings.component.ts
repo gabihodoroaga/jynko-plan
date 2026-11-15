@@ -72,7 +72,9 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                 <input
                   type="text"
                   [ngModel]="gen.instanceName"
+                  [ngModelOptions]="{ updateOn: 'blur' }"
                   (ngModelChange)="settingsService.updateGeneral('instanceName', $event)"
+                  (keydown.enter)="$any($event.target).blur()"
                   aria-label="Instance display name"
                   class="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
                 />
@@ -461,9 +463,12 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                   <input
                     type="text"
                     [ngModel]="proj.name"
+                    [ngModelOptions]="{ updateOn: 'blur' }"
                     (ngModelChange)="updateProjectField(proj.id, 'name', $event)"
+                    (keydown.enter)="$any($event.target).blur()"
+                    [disabled]="!projectService.isAdmin()"
                     aria-label="Project setting name"
-                    class="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                    class="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:opacity-60 disabled:bg-slate-50"
                   />
                 </div>
                 <div>
@@ -471,9 +476,12 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                   <input
                     type="text"
                     [ngModel]="proj.key_prefix"
+                    [ngModelOptions]="{ updateOn: 'blur' }"
                     (ngModelChange)="updateProjectField(proj.id, 'key_prefix', $event)"
+                    (keydown.enter)="$any($event.target).blur()"
+                    [disabled]="!projectService.isAdmin()"
                     aria-label="Project setting key prefix"
-                    class="w-full px-3 py-1.5 text-xs font-mono uppercase bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                    class="w-full px-3 py-1.5 text-xs font-mono uppercase bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:opacity-60 disabled:bg-slate-50"
                   />
                 </div>
                 <div>
@@ -481,9 +489,12 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                   <input
                     type="text"
                     [ngModel]="proj.description"
+                    [ngModelOptions]="{ updateOn: 'blur' }"
                     (ngModelChange)="updateProjectField(proj.id, 'description', $event)"
+                    (keydown.enter)="$any($event.target).blur()"
+                    [disabled]="!projectService.isAdmin()"
                     aria-label="Project setting description"
-                    class="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                    class="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:opacity-60 disabled:bg-slate-50"
                   />
                 </div>
               </div>
@@ -505,6 +516,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     [options]="defaultStatusOptions"
                     [value]="pset.defaultNewItemStatus"
                     (valueChange)="settingsService.updateActiveProjectSetting('defaultNewItemStatus', $event)"
+                    [disabled]="!projectService.isAdmin()"
                     [fullWidth]="true"
                     ariaLabel="Default new item status"
                   ></app-dropdown>
@@ -516,6 +528,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     [options]="defaultPriorityOptions"
                     [value]="pset.defaultNewItemPriority"
                     (valueChange)="settingsService.updateActiveProjectSetting('defaultNewItemPriority', $event)"
+                    [disabled]="!projectService.isAdmin()"
                     [fullWidth]="true"
                     ariaLabel="Default new item priority"
                   ></app-dropdown>
@@ -527,6 +540,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     [options]="estimationScaleOptions"
                     [value]="pset.estimationScale"
                     (valueChange)="settingsService.updateActiveProjectSetting('estimationScale', $event)"
+                    [disabled]="!projectService.isAdmin()"
                     [fullWidth]="true"
                     ariaLabel="Story point estimation scale"
                   ></app-dropdown>
@@ -538,6 +552,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     [options]="cycleDurationOptions"
                     [value]="pset.cycleDurationWeeks"
                     (valueChange)="settingsService.updateActiveProjectSetting('cycleDurationWeeks', $event)"
+                    [disabled]="!projectService.isAdmin()"
                     [fullWidth]="true"
                     ariaLabel="Default cycle duration"
                   ></app-dropdown>
@@ -559,6 +574,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     aria-label="Toggle auto-assign new work items to module lead"
                     class="jynko-switch"
                     [checked]="pset.autoAssignToLead"
+                    [disabled]="!projectService.isAdmin()"
                     (change)="settingsService.updateActiveProjectSetting('autoAssignToLead', $any($event.target).checked)"
                   />
                 </label>
@@ -577,6 +593,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     aria-label="Toggle auto-rollover unfinished cycle work items"
                     class="jynko-switch"
                     [checked]="pset.autoRolloverUnfinishedCycleItems"
+                    [disabled]="!projectService.isAdmin()"
                     (change)="settingsService.updateActiveProjectSetting('autoRolloverUnfinishedCycleItems', $any($event.target).checked)"
                   />
                 </label>
@@ -595,6 +612,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     aria-label="Toggle require point estimate before in progress"
                     class="jynko-switch"
                     [checked]="pset.requireEstimateBeforeInProgress"
+                    [disabled]="!projectService.isAdmin()"
                     (change)="settingsService.updateActiveProjectSetting('requireEstimateBeforeInProgress', $any($event.target).checked)"
                   />
                 </label>
@@ -614,15 +632,17 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                   <div class="flex items-center gap-2 text-[11px]">
                     <button
                       type="button"
+                      [disabled]="!projectService.isAdmin()"
                       (click)="settingsService.resetBoardColumnsToDefault()"
-                      class="px-2 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium"
+                      class="px-2 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium disabled:opacity-50"
                     >
                       Default (Hide Cancelled)
                     </button>
                     <button
                       type="button"
+                      [disabled]="!projectService.isAdmin()"
                       (click)="settingsService.showAllBoardColumns()"
-                      class="px-2 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sky-700 font-medium"
+                      class="px-2 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sky-700 font-medium disabled:opacity-50"
                     >
                       Show All
                     </button>
@@ -645,7 +665,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                         type="checkbox"
                         [attr.switch]="''"
                         [checked]="isColVisible"
-                        [disabled]="isColVisible && settingsService.visibleBoardStatuses().length <= 1"
+                        [disabled]="!projectService.isAdmin() || (isColVisible && settingsService.visibleBoardStatuses().length <= 1)"
                         (change)="settingsService.toggleBoardColumn(st.value)"
                         class="jynko-switch"
                       />
@@ -679,6 +699,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     aria-label="Toggle auto-lock published runbooks"
                     class="jynko-switch"
                     [checked]="pset.autoLockPublishedRunbooks"
+                    [disabled]="!projectService.isAdmin()"
                     (change)="settingsService.updateActiveProjectSetting('autoLockPublishedRunbooks', $any($event.target).checked)"
                   />
                 </label>
@@ -697,6 +718,7 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
                     aria-label="Toggle record immutable version snapshot on every save"
                     class="jynko-switch"
                     [checked]="pset.createVersionOnEverySave"
+                    [disabled]="!projectService.isAdmin()"
                     (change)="settingsService.updateActiveProjectSetting('createVersionOnEverySave', $any($event.target).checked)"
                   />
                 </label>

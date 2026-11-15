@@ -9,8 +9,10 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
 
-// ErrPageLocked is returned when attempting to update a locked Wiki Page.
-var ErrPageLocked = errors.New("page is locked and cannot be edited")
+// ErrPageLocked is returned when attempting to update or delete a locked Wiki Page.
+var ErrPageLocked = errors.New("page is locked and cannot be edited or deleted")
+
+const maxPageHierarchyDepth = 50
 
 // PageService handles business logic for Wiki Pages, Versions, and Collections.
 type PageService struct {
@@ -32,12 +34,13 @@ type CreatePageInput struct {
 }
 
 type UpdatePageInput struct {
-	Title        *string   `json:"title"`
-	Content      *string   `json:"content"`
-	CollectionID *string   `json:"collection_id"`
-	ParentPageID *string   `json:"parent_page_id"`
-	Order        *int      `json:"order"`
-	LabelIDs     *[]string `json:"label_ids"`
+	Title         *string   `json:"title"`
+	Content       *string   `json:"content"`
+	CollectionID  *string   `json:"collection_id"`
+	ParentPageID  *string   `json:"parent_page_id"`
+	Order         *int      `json:"order"`
+	LabelIDs      *[]string `json:"label_ids"`
+	CreateVersion *bool     `json:"create_version"`
 }
 
 type CreateCollectionInput struct {
@@ -63,6 +66,13 @@ func (s *PageService) CreatePage(ctx context.Context, projectID string, author m
 	if title == "" {
 		return nil, ErrInvalidInput
 	}
+	parentID := strings.TrimSpace(input.ParentPageID)
+	if parentID != "" {
+		if err := s.validateNoPageCycle(ctx, projectID, "", parentID); err != nil {
+			return nil, err
+		}
+	}
+
 	labelIDs := input.LabelIDs
 	if labelIDs == nil {
 		labelIDs = []string{}
@@ -71,7 +81,7 @@ func (s *PageService) CreatePage(ctx context.Context, projectID string, author m
 	page := &model.Page{
 		ProjectID:    projectID,
 		CollectionID: strings.TrimSpace(input.CollectionID),
-		ParentPageID: strings.TrimSpace(input.ParentPageID),
+		ParentPageID: parentID,
 		Title:        title,
 		Content:      input.Content,
 		Order:        input.Order,
@@ -119,8 +129,10 @@ func (s *PageService) UpdatePage(ctx context.Context, projectID, pageID string, 
 	}
 	if input.ParentPageID != nil {
 		parentID := strings.TrimSpace(*input.ParentPageID)
-		if parentID == page.ID {
-			return nil, errors.New("a page cannot be its own parent")
+		if parentID != "" {
+			if err := s.validateNoPageCycle(ctx, projectID, page.ID, parentID); err != nil {
+				return nil, err
+			}
 		}
 		page.ParentPageID = parentID
 	}
@@ -128,30 +140,89 @@ func (s *PageService) UpdatePage(ctx context.Context, projectID, pageID string, 
 		page.Order = *input.Order
 	}
 	if input.LabelIDs != nil {
-		page.LabelIDs = *input.LabelIDs
+		if *input.LabelIDs == nil {
+			page.LabelIDs = []string{}
+		} else {
+			page.LabelIDs = *input.LabelIDs
+		}
+	}
+
+	createVersion := contentChanged
+	if input.CreateVersion != nil && !*input.CreateVersion {
+		createVersion = false
 	}
 
 	page.UpdatedBy = editor.UserID
-	if err := s.repo.UpdatePage(ctx, page, contentChanged); err != nil {
+	if err := s.repo.UpdatePage(ctx, page, createVersion); err != nil {
+		if errors.Is(err, repository.ErrConflictLocked) {
+			return nil, ErrPageLocked
+		}
 		return nil, err
 	}
 	return page, nil
 }
 
-func (s *PageService) SetPageLock(ctx context.Context, projectID, pageID string, editor model.UserContext, isLocked bool) (*model.Page, error) {
+func (s *PageService) validateNoPageCycle(ctx context.Context, projectID, pageID, candidateParentID string) error {
+	if candidateParentID == "" {
+		return nil
+	}
+	if pageID != "" && candidateParentID == pageID {
+		return errors.New("a page cannot be its own parent")
+	}
+
+	visited := make(map[string]bool)
+	if pageID != "" {
+		visited[pageID] = true
+	}
+
+	curr := candidateParentID
+	for depth := 0; curr != "" && depth < maxPageHierarchyDepth; depth++ {
+		if visited[curr] {
+			return errors.New("circular page hierarchy detected")
+		}
+		visited[curr] = true
+
+		ancestor, err := s.repo.GetPage(ctx, projectID, curr)
+		if err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return errors.New("parent page not found in this project")
+			}
+			return err
+		}
+		curr = strings.TrimSpace(ancestor.ParentPageID)
+	}
+	if curr != "" {
+		return errors.New("page hierarchy exceeds maximum nesting depth")
+	}
+	return nil
+}
+
+func (s *PageService) SetPageLock(
+	ctx context.Context,
+	projectID, pageID string,
+	editor model.UserContext,
+	editorRole model.ProjectRole,
+	isLocked bool,
+) (*model.Page, error) {
 	page, err := s.repo.GetPage(ctx, projectID, pageID)
 	if err != nil {
 		return nil, err
 	}
-	page.IsLocked = isLocked
-	page.UpdatedBy = editor.UserID
-	if err := s.repo.UpdatePage(ctx, page, false); err != nil {
-		return nil, err
+	// Unlocking a locked page requires project ADMIN or the original page creator
+	if !isLocked && page.IsLocked && editorRole != model.RoleAdmin && !isSameActor(page.CreatedBy, editor) {
+		return nil, ErrForbidden
 	}
-	return page, nil
+	return s.repo.SetPageLock(ctx, projectID, pageID, editor.UserID, isLocked)
 }
 
 func (s *PageService) DeletePage(ctx context.Context, projectID, pageID string) error {
+	page, err := s.repo.GetPage(ctx, projectID, pageID)
+	if err != nil {
+		return err
+	}
+	if page.IsLocked {
+		return ErrPageLocked
+	}
 	return s.repo.DeletePage(ctx, projectID, pageID)
 }
 
@@ -175,6 +246,9 @@ func (s *PageService) RestoreVersion(ctx context.Context, projectID, pageID, ver
 	page.Content = ver.Content
 	page.UpdatedBy = editor.UserID
 	if err := s.repo.UpdatePage(ctx, page, true); err != nil {
+		if errors.Is(err, repository.ErrConflictLocked) {
+			return nil, ErrPageLocked
+		}
 		return nil, err
 	}
 	return page, nil
@@ -222,5 +296,14 @@ func (s *PageService) UpdateCollection(ctx context.Context, projectID, collectio
 }
 
 func (s *PageService) DeleteCollection(ctx context.Context, projectID, collectionID string) error {
+	pages, err := s.repo.ListPages(ctx, projectID, collectionID)
+	if err != nil {
+		return err
+	}
+	for _, p := range pages {
+		if p.IsLocked {
+			return ErrPageLocked
+		}
+	}
 	return s.repo.DeleteCollection(ctx, projectID, collectionID)
 }

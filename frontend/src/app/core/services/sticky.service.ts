@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { ProjectService } from './project.service';
+import { AuthService } from './auth.service';
 import {
   STICKY_PALETTES,
   Sticky,
@@ -23,20 +24,58 @@ const RANDOM_STICKY_THOUGHTS: string[] = [
 export class StickyService {
   private readonly api = inject(ApiService);
   private readonly projectService = inject(ProjectService);
+  private readonly authService = inject(AuthService);
 
   readonly palettes = STICKY_PALETTES;
 
   readonly stickies = signal<Sticky[]>([]);
   readonly searchQuery = signal<string>('');
   readonly selectedColor = signal<StickyColor | 'ALL'>('ALL');
+  private readonly loadedProjects = new Set<string>();
+  private readonly projectIdsKey = computed(() =>
+    this.projectService
+      .projects()
+      .map((p) => p.id)
+      .join(',')
+  );
 
   constructor() {
-    effect(() => {
-      const projects = this.projectService.projects();
-      for (const proj of projects) {
-        this.loadStickies(proj.id);
-      }
+    this.authService.registerSessionLifecycle({
+      onReset: () => this.resetState(),
     });
+
+    effect(
+      () => {
+        const key = this.projectIdsKey();
+        const ids = key ? key.split(',').filter(Boolean) : [];
+        const currentSet = new Set(ids);
+
+        let pruned = false;
+        for (const existing of Array.from(this.loadedProjects)) {
+          if (!currentSet.has(existing)) {
+            this.loadedProjects.delete(existing);
+            pruned = true;
+          }
+        }
+        if (pruned) {
+          this.stickies.update((prev) => prev.filter((s) => currentSet.has(s.project_id)));
+        }
+        for (const id of ids) {
+          if (!this.loadedProjects.has(id)) {
+            this.loadedProjects.add(id);
+            this.loadStickies(id);
+          }
+        }
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  resetState(): void {
+    this.loadedProjects.clear();
+    this.stickies.set([]);
+    this.searchQuery.set('');
+    this.selectedColor.set('ALL');
   }
 
   readonly filteredStickies = computed<Sticky[]>(() => {
@@ -123,6 +162,9 @@ export class StickyService {
       .subscribe({
         next: (saved) => {
           this.stickies.update((prev) => prev.map((s) => (s.id === stickyId ? saved : s)));
+        },
+        error: () => {
+          this.stickies.update((prev) => prev.map((s) => (s.id === stickyId ? current : s)));
         },
       });
   }

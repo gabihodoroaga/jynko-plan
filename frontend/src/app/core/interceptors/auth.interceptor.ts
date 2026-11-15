@@ -5,6 +5,21 @@ import { AuthService } from '../services/auth.service';
 import { environment } from '../../../environments/environment';
 
 let isRedirectingToLogin = false;
+const IAP_RELOAD_TS_KEY = 'jynko.iap.reload.ts';
+const IAP_RELOAD_COOLDOWN_MS = 15_000;
+
+function canTriggerIapReload(): boolean {
+  try {
+    const prev = Number(sessionStorage.getItem(IAP_RELOAD_TS_KEY) || '0');
+    if (prev > 0 && Date.now() - prev < IAP_RELOAD_COOLDOWN_MS) {
+      return false;
+    }
+    sessionStorage.setItem(IAP_RELOAD_TS_KEY, String(Date.now()));
+  } catch {
+    // Allow single attempt if sessionStorage is unavailable
+  }
+  return true;
+}
 
 /**
  * In production behind Google Cloud IAP, authentication headers are injected at the edge proxy.
@@ -40,7 +55,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   return next(cloned).pipe(
     catchError((error: unknown) => {
       if (error instanceof HttpErrorResponse && error.status === 401) {
-        if (!environment.devMode && typeof window !== 'undefined' && !isRedirectingToLogin) {
+        if (
+          !environment.devMode &&
+          !authService.isSignedOut() &&
+          typeof window !== 'undefined' &&
+          !isRedirectingToLogin &&
+          canTriggerIapReload()
+        ) {
           isRedirectingToLogin = true;
           try {
             const target = new URL(window.location.href);

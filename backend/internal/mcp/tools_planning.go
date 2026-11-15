@@ -137,7 +137,7 @@ func registerPlanningTools(
 				Color:   req.GetString("color", ""),
 			}
 
-			created, err := stickySvc.CreateSticky(ctx, projID, r.cfg.User, input)
+			created, err := stickySvc.CreateSticky(ctx, projID, r.UserFromContext(ctx), input)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to create sticky note: %v", err)), nil
 			}

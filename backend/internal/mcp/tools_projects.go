@@ -24,7 +24,11 @@ func registerProjectTools(s *server.MCPServer, r *Resolver, projSvc *service.Pro
 			mcp.WithDescription("List all projects accessible to the authenticated agent / user."),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			projects, err := projSvc.ListProjectsForUser(ctx, r.cfg.User)
+			user := r.UserFromContext(ctx)
+			if user.UserID == "" {
+				return mcp.NewToolResultError("unauthorized: missing agent/user context"), nil
+			}
+			projects, err := projSvc.ListProjectsForUser(ctx, user)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to list projects: %v", err)), nil
 			}

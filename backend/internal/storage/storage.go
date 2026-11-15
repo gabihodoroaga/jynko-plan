@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -141,6 +142,12 @@ func (p *GCSStorageProvider) Close() error {
 func NewStorageProvider(ctx context.Context, cfg *config.Config) (StorageProvider, error) {
 	if cfg.AttachmentsGCSBucket != "" {
 		return NewGCSStorageProvider(ctx, cfg.AttachmentsGCSBucket)
+	}
+	if cfg != nil && !cfg.AllowDevAuth() {
+		slog.Warn("ATTACHMENTS_GCS_BUCKET is not set in non-dev environment; falling back to ephemeral local container storage",
+			slog.String("env", cfg.Env),
+			slog.String("local_dir", cfg.LocalStorageDir),
+		)
 	}
 	return NewLocalStorageProvider(cfg.LocalStorageDir)
 }

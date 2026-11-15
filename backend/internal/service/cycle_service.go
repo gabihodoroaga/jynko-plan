@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -56,6 +57,9 @@ func (s *CycleService) Create(ctx context.Context, projectID string, input Creat
 	if end.IsZero() {
 		end = start.AddDate(0, 0, 14)
 	}
+	if end.Before(start) {
+		return nil, errors.New("end_date cannot be before start_date")
+	}
 
 	cycle := &model.Cycle{
 		ProjectID:   projectID,
@@ -91,6 +95,9 @@ func (s *CycleService) Update(ctx context.Context, projectID, cycleID string, in
 	}
 	if input.EndDate != nil {
 		cycle.EndDate = *input.EndDate
+	}
+	if cycle.EndDate.Before(cycle.StartDate) {
+		return nil, errors.New("end_date cannot be before start_date")
 	}
 	if input.IsActive != nil {
 		cycle.IsActive = *input.IsActive

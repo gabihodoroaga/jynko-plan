@@ -137,7 +137,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
                           type="checkbox"
                           [attr.switch]="''"
                           [checked]="isVisible"
-                          [disabled]="isVisible && settingsService.visibleBoardStatuses().length <= 1"
+                          [disabled]="!projectService.isAdmin() || (isVisible && settingsService.visibleBoardStatuses().length <= 1)"
                           (change)="settingsService.toggleBoardColumn(st.value)"
                           [attr.aria-label]="'Toggle board column ' + st.label"
                           class="jynko-switch"
@@ -149,17 +149,19 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
                   <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
                     <button
                       type="button"
+                      [disabled]="!projectService.isAdmin()"
                       (click)="settingsService.resetBoardColumnsToDefault()"
                       aria-label="Reset board columns to default"
-                      class="text-slate-600 hover:text-slate-900 font-medium"
+                      class="text-slate-600 hover:text-slate-900 font-medium disabled:opacity-50"
                     >
                       Default (No Cancelled)
                     </button>
                     <button
                       type="button"
+                      [disabled]="!projectService.isAdmin()"
                       (click)="settingsService.showAllBoardColumns()"
                       aria-label="Show all board columns"
-                      class="text-sky-600 hover:text-sky-700 font-medium"
+                      class="text-sky-600 hover:text-sky-700 font-medium disabled:opacity-50"
                     >
                       Show All ({{ allStatuses.length }})
                     </button>

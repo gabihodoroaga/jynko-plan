@@ -7,7 +7,9 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
+      - '${_AR_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}:$SHORT_SHA'
+      - '-t'
+      - '${_AR_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}:latest'
       - '.'
 
   # ----------------------------------------------------------------------------
@@ -18,7 +20,7 @@ steps:
     args:
       - 'push'
       - '--all-tags'
-      - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME'
+      - '${_AR_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}'
 
   # ----------------------------------------------------------------------------
   # Step 3: Deploy to Google Cloud Run
@@ -31,7 +33,7 @@ steps:
       - 'deploy'
       - '${_SERVICE_NAME}-${_ENV_PREFIX}'
       - '--image'
-      - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
+      - '${_AR_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}:$SHORT_SHA'
       - '--region'
       - '$_REGION'
       - '--platform'
@@ -39,20 +41,24 @@ steps:
       - '--iap'
       - '--service-account'
       - '$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--set-env-vars'
-      - 'ENV=$_ENV_PREFIX,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,IAP_AUDIENCE=$_IAP_AUDIENCE,STATIC_DIR=/app/web'
+      - '--update-env-vars'
+      - 'ENV=$_ENV_PREFIX,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,IAP_AUDIENCE=$_IAP_AUDIENCE,ATTACHMENTS_GCS_BUCKET=$_ATTACHMENTS_GCS_BUCKET,STATIC_DIR=/app/web'
       - '--no-allow-unauthenticated'
 
 substitutions:
   _ENV_PREFIX: 'prd'
   _SERVICE_NAME: 'jynko-plan'
   _REGION: 'europe-west3'
+  _AR_LOCATION: 'europe-west3'
+  _AR_REPOSITORY: 'jynko-plan'
   _SERVICE_ACCOUNT: 'jynko-plan-runner'
   _FIRESTORE_DB: '(default)'
   _IAP_AUDIENCE: ''
+  _ATTACHMENTS_GCS_BUCKET: ''
 
 images:
-  - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
+  - '${_AR_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}:$SHORT_SHA'
+  - '${_AR_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPOSITORY}/${_SERVICE_NAME}:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY

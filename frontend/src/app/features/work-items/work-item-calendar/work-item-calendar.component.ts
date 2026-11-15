@@ -40,9 +40,10 @@ interface CalendarDayCell {
           <button
             type="button"
             (click)="resetMonth()"
+            aria-label="Calendar jump to current month"
             class="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded hover:bg-slate-100 text-slate-700"
           >
-            Oct 2026
+            Today
           </button>
           <button
             type="button"
@@ -114,12 +115,13 @@ export class WorkItemCalendarComponent {
   readonly workItemService = inject(WorkItemService);
 
   readonly weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  readonly currentMonthDate = signal<Date>(new Date(2026, 9, 1)); // October 2026
+  readonly currentMonthDate = signal<Date>(this.startOfCurrentMonth());
 
   readonly calendarCells = computed<CalendarDayCell[]>(() => {
     const ref = this.currentMonthDate();
     const year = ref.getFullYear();
     const month = ref.getMonth();
+    const todayIso = this.toYMD(new Date());
 
     const firstDayOfMonth = new Date(year, month, 1);
     const startOffset = firstDayOfMonth.getDay();
@@ -147,12 +149,17 @@ export class WorkItemCalendarComponent {
         isoDate: isoPrefix,
         dayNumber: cellDate.getDate(),
         isCurrentMonth: cellDate.getMonth() === month,
-        isToday: isoPrefix === '2026-10-28',
+        isToday: isoPrefix === todayIso,
         items: dayItems,
       });
     }
     return cells;
   });
+
+  private startOfCurrentMonth(): Date {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
 
   changeMonth(delta: number): void {
     const curr = this.currentMonthDate();
@@ -160,7 +167,7 @@ export class WorkItemCalendarComponent {
   }
 
   resetMonth(): void {
-    this.currentMonthDate.set(new Date(2026, 9, 1));
+    this.currentMonthDate.set(this.startOfCurrentMonth());
   }
 
   itemPillClasses(item: WorkItem): string {

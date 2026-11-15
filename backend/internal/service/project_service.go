@@ -12,6 +12,7 @@ import (
 
 var (
 	ErrInvalidInput = errors.New("invalid input")
+	ErrForbidden    = errors.New("forbidden: insufficient permissions")
 	keyPrefixRegex  = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 )
 
@@ -62,19 +63,24 @@ func (s *ProjectService) CreateProject(ctx context.Context, creator model.UserCo
 		return nil, errors.New("key_prefix must be 2-10 uppercase alphanumeric characters starting with a letter")
 	}
 
+	memberIDs := []string{creator.UserID}
+	if email := strings.ToLower(strings.TrimSpace(creator.Email)); email != "" && email != creator.UserID {
+		memberIDs = append(memberIDs, email)
+	}
+
 	proj := &model.Project{
 		Name:        name,
 		KeyPrefix:   prefix,
 		Description: strings.TrimSpace(input.Description),
 		ItemSeq:     0,
-		MemberIDs:   []string{creator.UserID},
+		MemberIDs:   memberIDs,
 		Settings:    model.DefaultProjectSettings(),
 		CreatedBy:   creator.UserID,
 	}
 
 	adminMember := &model.ProjectMember{
 		UserID: creator.UserID,
-		Email:  creator.Email,
+		Email:  strings.ToLower(strings.TrimSpace(creator.Email)),
 		Name:   creator.Name,
 		Role:   model.RoleAdmin,
 	}
@@ -144,6 +150,9 @@ func (s *ProjectService) UpsertMember(ctx context.Context, projectID string, inp
 	if userID == "" && email == "" {
 		return nil, errors.New("either user_id or email is required")
 	}
+	if strings.Contains(userID, "/") || strings.Contains(email, "/") {
+		return nil, ErrInvalidInput
+	}
 	if userID == "" {
 		userID = email
 	}
@@ -170,7 +179,11 @@ func (s *ProjectService) UpsertMember(ctx context.Context, projectID string, inp
 }
 
 func (s *ProjectService) RemoveMember(ctx context.Context, projectID, userID string) error {
-	return s.repo.RemoveMember(ctx, projectID, userID)
+	trimmed := strings.TrimSpace(userID)
+	if trimmed == "" || strings.Contains(trimmed, "/") {
+		return ErrInvalidInput
+	}
+	return s.repo.RemoveMember(ctx, projectID, trimmed)
 }
 
 func (s *ProjectService) GetMemberRole(ctx context.Context, projectID string, user model.UserContext) (model.ProjectRole, error) {

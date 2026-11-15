@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -20,6 +21,7 @@ type PageRepository interface {
 	GetPage(ctx context.Context, projectID, pageID string) (*model.Page, error)
 	CreatePage(ctx context.Context, page *model.Page) error
 	UpdatePage(ctx context.Context, page *model.Page, createVersionSnapshot bool) error
+	SetPageLock(ctx context.Context, projectID, pageID, updatedBy string, isLocked bool) (*model.Page, error)
 	DeletePage(ctx context.Context, projectID, pageID string) error
 
 	ListVersions(ctx context.Context, projectID, pageID string) ([]model.PageVersion, error)
@@ -47,6 +49,7 @@ func (r *firestorePageRepository) ListPages(ctx context.Context, projectID strin
 	if collectionID != "" {
 		q = q.Where("collection_id", "==", collectionID)
 	}
+	q = q.Limit(2000)
 	pages := []model.Page{}
 	iter := q.Documents(ctx)
 	defer iter.Stop()
@@ -82,6 +85,9 @@ func (r *firestorePageRepository) ListPages(ctx context.Context, projectID strin
 }
 
 func (r *firestorePageRepository) GetPage(ctx context.Context, projectID, pageID string) (*model.Page, error) {
+	if strings.TrimSpace(pageID) == "" || strings.Contains(pageID, "/") {
+		return nil, ErrNotFound
+	}
 	snap, err := r.fc.ProjectDoc(projectID).Collection("pages").Doc(pageID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -135,45 +141,142 @@ func (r *firestorePageRepository) CreatePage(ctx context.Context, page *model.Pa
 	})
 }
 
+// UpdatePage atomically verifies inside the transaction that the page is NOT locked, updates the page,
+// and optionally writes an immutable PageVersion snapshot.
 func (r *firestorePageRepository) UpdatePage(ctx context.Context, page *model.Page, createVersionSnapshot bool) error {
 	docRef := r.fc.ProjectDoc(page.ProjectID).Collection("pages").Doc(page.ID)
 	now := time.Now().UTC()
-	page.UpdatedAt = now
 	if page.LabelIDs == nil {
 		page.LabelIDs = []string{}
 	}
 
-	if !createVersionSnapshot {
-		_, err := docRef.Set(ctx, page)
-		return err
-	}
-
-	versionRef := docRef.Collection("versions").NewDoc()
-	ver := &model.PageVersion{
-		ID:        versionRef.ID,
-		PageID:    page.ID,
-		Title:     page.Title,
-		Content:   page.Content,
-		CreatedBy: page.UpdatedBy,
-		CreatedAt: now,
-	}
-
 	return r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
+			}
+			return err
+		}
+		var live model.Page
+		if err := snap.DataTo(&live); err != nil {
+			return err
+		}
+		if live.IsLocked {
+			return ErrConflictLocked
+		}
+
+		page.IsLocked = false
+		if !live.CreatedAt.IsZero() {
+			page.CreatedAt = live.CreatedAt
+		}
+		if live.CreatedBy != "" {
+			page.CreatedBy = live.CreatedBy
+		}
+		page.UpdatedAt = now
+
 		if err := tx.Set(docRef, page); err != nil {
 			return err
 		}
-		return tx.Set(versionRef, ver)
+		if createVersionSnapshot {
+			versionRef := docRef.Collection("versions").NewDoc()
+			ver := &model.PageVersion{
+				ID:        versionRef.ID,
+				PageID:    page.ID,
+				Title:     page.Title,
+				Content:   page.Content,
+				CreatedBy: page.UpdatedBy,
+				CreatedAt: now,
+			}
+			if err := tx.Set(versionRef, ver); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
+// SetPageLock atomically toggles IsLocked on a Wiki Page inside a transaction.
+func (r *firestorePageRepository) SetPageLock(ctx context.Context, projectID, pageID, updatedBy string, isLocked bool) (*model.Page, error) {
+	docRef := r.fc.ProjectDoc(projectID).Collection("pages").Doc(pageID)
+	now := time.Now().UTC()
+
+	var updated model.Page
+	err := r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
+			}
+			return err
+		}
+		if err := snap.DataTo(&updated); err != nil {
+			return err
+		}
+		if updated.ID == "" {
+			updated.ID = snap.Ref.ID
+		}
+		if updated.LabelIDs == nil {
+			updated.LabelIDs = []string{}
+		}
+		updated.IsLocked = isLocked
+		updated.UpdatedBy = updatedBy
+		updated.UpdatedAt = now
+		return tx.Set(docRef, &updated)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &updated, nil
+}
+
+// DeletePage deletes all nested PageVersion snapshots, re-parents direct children to the deleted page's parent, and deletes the page.
 func (r *firestorePageRepository) DeletePage(ctx context.Context, projectID, pageID string) error {
-	_, err := r.fc.ProjectDoc(projectID).Collection("pages").Doc(pageID).Delete(ctx)
-	return err
+	pagesCol := r.fc.ProjectDoc(projectID).Collection("pages")
+	pageRef := pagesCol.Doc(pageID)
+	snap, err := pageRef.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return ErrNotFound
+		}
+		return err
+	}
+	var target model.Page
+	if err := snap.DataTo(&target); err != nil {
+		return err
+	}
+
+	bw := r.fc.Client.BulkWriter(ctx)
+	if err := enqueueCollectionDeletes(ctx, bw, pageRef.Collection("versions")); err != nil {
+		return err
+	}
+
+	// Re-parent direct children so they are not stranded in the page tree
+	childIter := pagesCol.Where("parent_page_id", "==", pageID).Documents(ctx)
+	for {
+		childDoc, err := childIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			childIter.Stop()
+			return err
+		}
+		_, _ = bw.Update(childDoc.Ref, []firestore.Update{
+			{Path: "parent_page_id", Value: target.ParentPageID},
+			{Path: "updated_at", Value: time.Now().UTC()},
+		})
+	}
+	childIter.Stop()
+
+	_, _ = bw.Delete(pageRef)
+	bw.End()
+	return nil
 }
 
 func (r *firestorePageRepository) ListVersions(ctx context.Context, projectID, pageID string) ([]model.PageVersion, error) {
 	versions := []model.PageVersion{}
-	iter := r.fc.ProjectDoc(projectID).Collection("pages").Doc(pageID).Collection("versions").OrderBy("created_at", firestore.Desc).Documents(ctx)
+	iter := r.fc.ProjectDoc(projectID).Collection("pages").Doc(pageID).Collection("versions").OrderBy("created_at", firestore.Desc).Limit(100).Documents(ctx)
 	defer iter.Stop()
 	for {
 		doc, err := iter.Next()
@@ -215,7 +318,7 @@ func (r *firestorePageRepository) GetVersion(ctx context.Context, projectID, pag
 
 func (r *firestorePageRepository) ListCollections(ctx context.Context, projectID string) ([]model.PageCollection, error) {
 	collections := []model.PageCollection{}
-	iter := r.fc.ProjectDoc(projectID).Collection("collections").Documents(ctx)
+	iter := r.fc.ProjectDoc(projectID).Collection("collections").Limit(500).Documents(ctx)
 	defer iter.Stop()
 	for {
 		doc, err := iter.Next()
@@ -285,6 +388,35 @@ func (r *firestorePageRepository) UpdateCollection(ctx context.Context, collecti
 }
 
 func (r *firestorePageRepository) DeleteCollection(ctx context.Context, projectID, collectionID string) error {
-	_, err := r.fc.ProjectDoc(projectID).Collection("collections").Doc(collectionID).Delete(ctx)
-	return err
+	projRef := r.fc.ProjectDoc(projectID)
+	colRef := projRef.Collection("collections").Doc(collectionID)
+	if _, err := colRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	bw := r.fc.Client.BulkWriter(ctx)
+	pgIter := projRef.Collection("pages").Where("collection_id", "==", collectionID).Documents(ctx)
+	for {
+		pgDoc, err := pgIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			pgIter.Stop()
+			return err
+		}
+		if err := enqueueCollectionDeletes(ctx, bw, pgDoc.Ref.Collection("versions")); err != nil {
+			pgIter.Stop()
+			return err
+		}
+		_, _ = bw.Delete(pgDoc.Ref)
+	}
+	pgIter.Stop()
+
+	_, _ = bw.Delete(colRef)
+	bw.End()
+	return nil
 }

@@ -63,13 +63,13 @@ export class VersionHistoryComponent {
   readonly projectService = inject(ProjectService);
 
   readonly versions = computed<PageVersion[]>(() => {
-    const pageId = this.pageService.activePageId();
+    const pageId = this.pageService.activePage()?.id;
     if (!pageId) return [];
     return this.pageService.versionsByPage()[pageId] ?? [];
   });
 
   restore(ver: PageVersion): void {
-    const pageId = this.pageService.activePageId();
+    const pageId = this.pageService.activePage()?.id;
     if (!pageId) return;
     this.pageService.restoreVersion(pageId, ver);
   }

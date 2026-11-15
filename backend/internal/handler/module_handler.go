@@ -24,7 +24,7 @@ func (h *ModuleHandler) ListModules(c *gin.Context) {
 	projectID := c.Param("projectId")
 	modules, err := h.svc.List(c.Request.Context(), projectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list modules", err)
 		return
 	}
 	c.JSON(http.StatusOK, modules)
@@ -71,7 +71,11 @@ func (h *ModuleHandler) DeleteModule(c *gin.Context) {
 	projectID := c.Param("projectId")
 	moduleID := c.Param("moduleId")
 	if err := h.svc.Delete(c.Request.Context(), projectID, moduleID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "module not found"})
+			return
+		}
+		respondInternalError(c, "failed to delete module", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

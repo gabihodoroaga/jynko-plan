@@ -20,6 +20,7 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 | `/wiki` | `PageDetailComponent` | `Wiki` | Dedicated Wiki workspace. Left secondary panel shows `+ New page`, `Home`, `Collections -> General / <project> -> Pages tree`, `Shared`, `Private`, `Archives`. Right main pane shows only the Page View & Editor (`Welcome to Company's Wiki`, formatting toolbar). |
 | `/settings` | `SettingsComponent` | `Settings` | Dedicated Settings section with **General App Settings** (Appearance & Defaults, Notifications, IAP Identity) and **Per-Project Settings** (`hodo`, `cloud-infra`, etc. — Metadata, Work Item & Cycle Defaults, Wiki Collection Policy, Per-Project RBAC Members). |
 | `/profile` | `ProfileComponent` | `Work` | User Profile page with Photo/Avatar uploader & URL/color picker, editable Display Name, and read-only Google Cloud IAP Email (`input[aria-label="Profile email"][readonly]`). |
+| `/signed-out` | `SignedOutComponent` | Standalone | Dedicated signed-out & account-chooser screen (`[data-testid="signed-out-card"]`), hiding the 3-column workspace shell while signed out and exposing IAP re-login / Google account chooser links (`!devMode`) or local `X-Dev-User-*` persona switchers (`devMode`). |
 
 ---
 
@@ -79,6 +80,10 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - Popover dialog: `[role="dialog"][aria-label="Kanban Board Columns Configuration"]`
     - Per-status switch: `input[aria-label="Toggle board column <StatusLabel>"]`
     - Board column container: `[data-board-column="<STATUS>"]`
+  - Calendar & Timeline View Navigation (`/work-items` in `CALENDAR` / `TIMELINE` modes):
+    - View switcher buttons: `button[aria-label="Switch to <List|Board|Calendar|Timeline|Spreadsheet> view"]`
+    - Calendar jump to current month: `button[aria-label="Calendar jump to current month"]`
+    - Timeline window controls: `button[aria-label="Timeline previous window"]`, `button[aria-label="Timeline jump to today"]`, `button[aria-label="Timeline next window"]`
 - **Styled Custom Dropdowns (`frontend/src/app/shared/components/dropdown/dropdown.component.ts`)**:
   - Component selector: `app-dropdown`
   - Trigger button: `button[aria-haspopup="listbox"]`
@@ -91,7 +96,7 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - New Work Item modal selectors: `button[aria-label="New work item status"]`, `button[aria-label="New work item priority"]`, `textarea[aria-label="New work item description"]`, `input[aria-label="New work item start date"]`, `input[aria-label="New work item due date"]`
     - Work Item detail drawer & full page selectors: `button[aria-label="Open work item full page"]`, `a[aria-label="Back to Work Items"]`, `input[aria-label="Work item start date"]`, `input[aria-label="Work item due date"]`, `input[aria-label="Work item estimate"]`, `textarea[aria-label="Work item comment"]`, `button[aria-label="Toggle comment markdown preview"]`, `button[aria-label="Post comment"]`, `button[aria-label="Edit comment"]`, `textarea[aria-label="Edit comment markdown"]`, `button[aria-label="Toggle editing comment preview"]`, `button[aria-label="Delete comment"]`
     - Project member role selector: `button[aria-label="Select member role"]`
-    - User account card & profile selectors: `button[aria-label="Open user menu"]`, `[data-testid="user-dropdown-card"]`, `button[aria-label="Open user profile"]`, `button[aria-label="Sign out"]`, `input[aria-label="Profile display name"]`, `input[aria-label="Profile email"][readonly]`, `input[aria-label="Profile avatar URL"]`
+    - User account card, switcher & profile selectors: `button[aria-label="Open user menu"]`, `[data-testid="user-dropdown-card"]`, `button[aria-label="Open user profile"]`, `button[aria-label="Switch user account"]`, `[data-testid="dev-account-switcher-list"]`, `button[aria-label^="Switch to account "]`, `button[aria-label="Use another account"]`, `button[aria-label="Sign out"]`, `[data-testid="signed-out-card"]`, `button[aria-label="Sign in with Google Cloud IAP"]`, `button[aria-label^="Sign in as "]`, `input[aria-label="Profile display name"]`, `input[aria-label="Profile email"][readonly]`, `input[aria-label="Profile avatar URL"]`
     - Project Overview edit selector: `button[aria-label="Edit project"]`
     - Project Labels CRUD selectors: `input[aria-label^="Edit label name "]`, `input[aria-label^="Edit label color "]`, `button[aria-label^="Remove label "]`, `input[aria-label="New label name"]`
     - Wiki toolbar selectors: `button[aria-label="Text block style"]`, `button[aria-label="Text color"]`, `button[aria-label="Save wiki page"]`

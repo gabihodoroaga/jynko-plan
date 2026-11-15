@@ -37,7 +37,7 @@ func (h *ItemHandler) ListItems(c *gin.Context) {
 
 	items, err := h.svc.List(c.Request.Context(), projectID, filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list work items", err)
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -52,7 +52,7 @@ func (h *ItemHandler) GetItem(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "work item not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to get work item", err)
 		return
 	}
 	c.JSON(http.StatusOK, item)
@@ -104,7 +104,11 @@ func (h *ItemHandler) DeleteItem(c *gin.Context) {
 	projectID := c.Param("projectId")
 	itemID := c.Param("itemId")
 	if err := h.svc.Delete(c.Request.Context(), projectID, itemID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "work item not found"})
+			return
+		}
+		respondInternalError(c, "failed to delete work item", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -115,7 +119,7 @@ func (h *ItemHandler) ListSubItems(c *gin.Context) {
 	itemID := c.Param("itemId")
 	subItems, err := h.svc.ListSubItems(c.Request.Context(), projectID, itemID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list sub-items", err)
 		return
 	}
 	c.JSON(http.StatusOK, subItems)
@@ -173,7 +177,7 @@ func (h *ItemHandler) DeleteSubItem(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "sub-item not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to delete sub-item", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

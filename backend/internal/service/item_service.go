@@ -1,13 +1,43 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
+
+// OptionalInt distinguishes an omitted JSON field (Set=false) from explicit null or integer (Set=true).
+type OptionalInt struct {
+	Set   bool
+	Value *int
+}
+
+func (o *OptionalInt) UnmarshalJSON(data []byte) error {
+	o.Set = true
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		o.Value = nil
+		return nil
+	}
+	var v int
+	if err := json.Unmarshal(trimmed, &v); err != nil {
+		return err
+	}
+	if v < 0 {
+		return ErrInvalidInput
+	}
+	if v == 0 {
+		o.Value = nil
+		return nil
+	}
+	o.Value = &v
+	return nil
+}
 
 // ItemService handles business logic for WorkItems, SubWorkItems, and Comments.
 type ItemService struct {
@@ -20,33 +50,33 @@ func NewItemService(repo repository.ItemRepository) *ItemService {
 }
 
 type CreateWorkItemInput struct {
-	Title       string     `json:"title" binding:"required"`
-	Description string     `json:"description"`
-	Status      string     `json:"status"`
-	Priority    string     `json:"priority"`
-	ModuleID    string     `json:"module_id"`
-	EpicID      string     `json:"epic_id"`
-	CycleID     string     `json:"cycle_id"`
-	AssigneeID  string     `json:"assignee_id"`
-	LabelIDs    []string   `json:"label_ids"`
-	Estimate    *int       `json:"estimate"`
-	StartDate   *time.Time `json:"start_date"`
-	DueDate     *time.Time `json:"due_date"`
+	Title       string   `json:"title" binding:"required"`
+	Description string   `json:"description"`
+	Status      string   `json:"status"`
+	Priority    string   `json:"priority"`
+	ModuleID    string   `json:"module_id"`
+	EpicID      string   `json:"epic_id"`
+	CycleID     string   `json:"cycle_id"`
+	AssigneeID  string   `json:"assignee_id"`
+	LabelIDs    []string `json:"label_ids"`
+	Estimate    *int     `json:"estimate"`
+	StartDate   *string  `json:"start_date"`
+	DueDate     *string  `json:"due_date"`
 }
 
 type UpdateWorkItemInput struct {
-	Title       *string   `json:"title"`
-	Description *string   `json:"description"`
-	Status      *string   `json:"status"`
-	Priority    *string   `json:"priority"`
-	ModuleID    *string   `json:"module_id"`
-	EpicID      *string   `json:"epic_id"`
-	CycleID     *string   `json:"cycle_id"`
-	AssigneeID  *string   `json:"assignee_id"`
-	LabelIDs    *[]string `json:"label_ids"`
-	Estimate    *int      `json:"estimate"`
-	StartDate   *string   `json:"start_date"`
-	DueDate     *string   `json:"due_date"`
+	Title       *string     `json:"title"`
+	Description *string     `json:"description"`
+	Status      *string     `json:"status"`
+	Priority    *string     `json:"priority"`
+	ModuleID    *string     `json:"module_id"`
+	EpicID      *string     `json:"epic_id"`
+	CycleID     *string     `json:"cycle_id"`
+	AssigneeID  *string     `json:"assignee_id"`
+	LabelIDs    *[]string   `json:"label_ids"`
+	Estimate    OptionalInt `json:"estimate"`
+	StartDate   *string     `json:"start_date"`
+	DueDate     *string     `json:"due_date"`
 }
 
 type CreateSubItemInput struct {
@@ -77,6 +107,22 @@ func (s *ItemService) GetByID(ctx context.Context, projectID, itemID string) (*m
 	return s.repo.GetByID(ctx, projectID, itemID)
 }
 
+func (s *ItemService) GetByKey(ctx context.Context, projectID, key string) (*model.WorkItem, error) {
+	return s.repo.GetByKey(ctx, projectID, key)
+}
+
+func (s *ItemService) GetByIDOrKey(ctx context.Context, projectID, idOrKey string) (*model.WorkItem, error) {
+	trimmed := strings.TrimSpace(idOrKey)
+	if trimmed == "" {
+		return nil, ErrInvalidInput
+	}
+	item, err := s.repo.GetByID(ctx, projectID, trimmed)
+	if err == nil && item != nil {
+		return item, nil
+	}
+	return s.repo.GetByKey(ctx, projectID, trimmed)
+}
+
 func (s *ItemService) Create(ctx context.Context, projectID string, reporter model.UserContext, input CreateWorkItemInput) (*model.WorkItem, error) {
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
@@ -91,6 +137,35 @@ func (s *ItemService) Create(ctx context.Context, projectID string, reporter mod
 		labelIDs = []string{}
 	}
 
+	var estimate *int
+	if input.Estimate != nil {
+		if *input.Estimate < 0 {
+			return nil, ErrInvalidInput
+		}
+		if *input.Estimate > 0 {
+			est := *input.Estimate
+			estimate = &est
+		}
+	}
+
+	var startDate *time.Time
+	if input.StartDate != nil {
+		parsed, err := parseOptionalDate(*input.StartDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		startDate = parsed
+	}
+
+	var dueDate *time.Time
+	if input.DueDate != nil {
+		parsed, err := parseOptionalDate(*input.DueDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		dueDate = parsed
+	}
+
 	item := &model.WorkItem{
 		ProjectID:   projectID,
 		Title:       title,
@@ -103,9 +178,9 @@ func (s *ItemService) Create(ctx context.Context, projectID string, reporter mod
 		AssigneeID:  strings.TrimSpace(input.AssigneeID),
 		ReporterID:  reporter.UserID,
 		LabelIDs:    labelIDs,
-		Estimate:    input.Estimate,
-		StartDate:   input.StartDate,
-		DueDate:     input.DueDate,
+		Estimate:    estimate,
+		StartDate:   startDate,
+		DueDate:     dueDate,
 	}
 
 	if err := s.repo.Create(ctx, item); err != nil {
@@ -149,10 +224,17 @@ func (s *ItemService) Update(ctx context.Context, projectID, itemID string, inpu
 		item.AssigneeID = strings.TrimSpace(*input.AssigneeID)
 	}
 	if input.LabelIDs != nil {
-		item.LabelIDs = *input.LabelIDs
+		if *input.LabelIDs == nil {
+			item.LabelIDs = []string{}
+		} else {
+			item.LabelIDs = *input.LabelIDs
+		}
 	}
-	if input.Estimate != nil {
-		item.Estimate = input.Estimate
+	if input.Estimate.Set {
+		if input.Estimate.Value != nil && *input.Estimate.Value < 0 {
+			return nil, ErrInvalidInput
+		}
+		item.Estimate = input.Estimate.Value
 	}
 	if input.StartDate != nil {
 		parsed, err := parseOptionalDate(*input.StartDate)
@@ -249,16 +331,54 @@ func (s *ItemService) CreateComment(ctx context.Context, projectID, itemID strin
 	return comment, nil
 }
 
-func (s *ItemService) UpdateComment(ctx context.Context, projectID, itemID, commentID string, input UpdateCommentInput) (*model.Comment, error) {
+func (s *ItemService) UpdateComment(
+	ctx context.Context,
+	projectID, itemID, commentID string,
+	actor model.UserContext,
+	actorRole model.ProjectRole,
+	input UpdateCommentInput,
+) (*model.Comment, error) {
 	body := strings.TrimSpace(input.Body)
 	if body == "" {
 		return nil, ErrInvalidInput
 	}
+	existing, err := s.repo.GetCommentByID(ctx, projectID, itemID, commentID)
+	if err != nil {
+		return nil, err
+	}
+	if actorRole != model.RoleAdmin && !isSameActor(existing.AuthorID, actor) {
+		return nil, ErrForbidden
+	}
 	return s.repo.UpdateComment(ctx, projectID, itemID, commentID, body)
 }
 
-func (s *ItemService) DeleteComment(ctx context.Context, projectID, itemID, commentID string) error {
+func (s *ItemService) DeleteComment(
+	ctx context.Context,
+	projectID, itemID, commentID string,
+	actor model.UserContext,
+	actorRole model.ProjectRole,
+) error {
+	existing, err := s.repo.GetCommentByID(ctx, projectID, itemID, commentID)
+	if err != nil {
+		return err
+	}
+	if actorRole != model.RoleAdmin && !isSameActor(existing.AuthorID, actor) {
+		return ErrForbidden
+	}
 	return s.repo.DeleteComment(ctx, projectID, itemID, commentID)
+}
+
+func isSameActor(authorID string, actor model.UserContext) bool {
+	if authorID == "" {
+		return false
+	}
+	if actor.UserID != "" && authorID == actor.UserID {
+		return true
+	}
+	if actor.Email != "" && strings.EqualFold(authorID, actor.Email) {
+		return true
+	}
+	return false
 }
 
 func normalizeStatus(raw string) string {

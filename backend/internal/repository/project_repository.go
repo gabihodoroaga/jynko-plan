@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -15,8 +16,20 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 )
 
-// ErrNotFound is returned when a requested Firestore document does not exist.
-var ErrNotFound = errors.New("resource not found")
+var (
+	// ErrNotFound is returned when a requested Firestore document does not exist.
+	ErrNotFound = errors.New("resource not found")
+	// ErrLastAdmin is returned when attempting to remove or demote the sole ADMIN of a project.
+	ErrLastAdmin = errors.New("cannot remove or demote the last project ADMIN")
+	// ErrConflictLocked is returned when attempting to edit a locked resource inside a transaction.
+	ErrConflictLocked = errors.New("resource is locked")
+)
+
+// BlobDeleter is satisfied by storage.StorageProvider to clean up attachment blobs without circular imports.
+type BlobDeleter interface {
+	Delete(ctx context.Context, storagePath string) error
+	Open(ctx context.Context, storagePath string) (io.ReadCloser, error)
+}
 
 // ProjectRepository defines persistence operations for Projects and ProjectMembers.
 type ProjectRepository interface {
@@ -34,12 +47,18 @@ type ProjectRepository interface {
 }
 
 type firestoreProjectRepository struct {
-	fc *FirestoreClient
+	fc      *FirestoreClient
+	blobs   BlobDeleter
 }
 
 // NewProjectRepository creates a Firestore-backed ProjectRepository.
 func NewProjectRepository(fc *FirestoreClient) ProjectRepository {
 	return &firestoreProjectRepository{fc: fc}
+}
+
+// NewProjectRepositoryWithBlobs creates a Firestore-backed ProjectRepository that also cleans up attachment blobs on project deletion.
+func NewProjectRepositoryWithBlobs(fc *FirestoreClient, blobs BlobDeleter) ProjectRepository {
+	return &firestoreProjectRepository{fc: fc, blobs: blobs}
 }
 
 func (r *firestoreProjectRepository) Create(ctx context.Context, project *model.Project, initialAdmin *model.ProjectMember) error {
@@ -56,8 +75,14 @@ func (r *firestoreProjectRepository) Create(ctx context.Context, project *model.
 	if project.MemberIDs == nil {
 		project.MemberIDs = []string{}
 	}
-	if initialAdmin != nil && !containsString(project.MemberIDs, initialAdmin.UserID) {
-		project.MemberIDs = append(project.MemberIDs, initialAdmin.UserID)
+	if initialAdmin != nil {
+		initialAdmin.Email = strings.ToLower(strings.TrimSpace(initialAdmin.Email))
+		if initialAdmin.UserID != "" && !containsString(project.MemberIDs, initialAdmin.UserID) {
+			project.MemberIDs = append(project.MemberIDs, initialAdmin.UserID)
+		}
+		if initialAdmin.Email != "" && !containsString(project.MemberIDs, initialAdmin.Email) {
+			project.MemberIDs = append(project.MemberIDs, initialAdmin.Email)
+		}
 	}
 
 	return r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -121,6 +146,9 @@ func (r *firestoreProjectRepository) Create(ctx context.Context, project *model.
 }
 
 func (r *firestoreProjectRepository) GetByID(ctx context.Context, projectID string) (*model.Project, error) {
+	if strings.TrimSpace(projectID) == "" || strings.Contains(projectID, "/") {
+		return nil, ErrNotFound
+	}
 	snap, err := r.fc.ProjectDoc(projectID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -145,21 +173,7 @@ func (r *firestoreProjectRepository) GetByID(ctx context.Context, projectID stri
 }
 
 func (r *firestoreProjectRepository) ListByUser(ctx context.Context, userID string, userEmail string) ([]model.Project, error) {
-	projects, err := r.queryProjectsByUser(ctx, userID, userEmail)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(projects) == 0 && userID == "dev-user-1" {
-		if seedErr := EnsureSeedData(ctx, r.fc); seedErr == nil {
-			projects, err = r.queryProjectsByUser(ctx, userID, userEmail)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return projects, nil
+	return r.queryProjectsByUser(ctx, userID, userEmail)
 }
 
 func (r *firestoreProjectRepository) queryProjectsByUser(ctx context.Context, userID string, userEmail string) ([]model.Project, error) {
@@ -195,9 +209,9 @@ func (r *firestoreProjectRepository) queryProjectsByUser(ctx context.Context, us
 		}
 	}
 
-	// Also check if user was added by email (where user_id in member_ids might be their email)
-	if userEmail != "" && userEmail != userID {
-		iter := r.fc.Projects().Where("member_ids", "array-contains", userEmail).Documents(ctx)
+	normalizedEmail := strings.ToLower(strings.TrimSpace(userEmail))
+	if normalizedEmail != "" && normalizedEmail != userID {
+		iter := r.fc.Projects().Where("member_ids", "array-contains", normalizedEmail).Documents(ctx)
 		defer iter.Stop()
 		for {
 			doc, err := iter.Next()
@@ -237,34 +251,143 @@ func (r *firestoreProjectRepository) queryProjectsByUser(ctx context.Context, us
 	return projects, nil
 }
 
+// Update atomically updates mutable project metadata/settings while preserving live ItemSeq and MemberIDs.
 func (r *firestoreProjectRepository) Update(ctx context.Context, project *model.Project) error {
-	project.UpdatedAt = time.Now().UTC()
-	_, err := r.fc.ProjectDoc(project.ID).Set(ctx, project)
-	return err
+	projRef := r.fc.ProjectDoc(project.ID)
+	now := time.Now().UTC()
+
+	return r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(projRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
+			}
+			return err
+		}
+		var live model.Project
+		if err := snap.DataTo(&live); err != nil {
+			return err
+		}
+		if live.ID == "" {
+			live.ID = snap.Ref.ID
+		}
+
+		live.Name = project.Name
+		live.KeyPrefix = project.KeyPrefix
+		live.Description = project.Description
+		live.Settings = project.Settings
+		live.UpdatedAt = now
+		if live.MemberIDs == nil {
+			live.MemberIDs = []string{}
+		}
+
+		// Sync live authoritative counters back to caller struct
+		project.ItemSeq = live.ItemSeq
+		project.MemberIDs = live.MemberIDs
+		project.CreatedAt = live.CreatedAt
+		project.CreatedBy = live.CreatedBy
+		project.UpdatedAt = now
+
+		return tx.Set(projRef, &live)
+	})
 }
 
 func (r *firestoreProjectRepository) Delete(ctx context.Context, projectID string) error {
 	projRef := r.fc.ProjectDoc(projectID)
-	subcols := []string{"members", "modules", "epics", "cycles", "labels", "work_items", "collections", "pages", "stickies"}
-	for _, sub := range subcols {
-		iter := projRef.Collection(sub).Documents(ctx)
-		for {
-			doc, err := iter.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			if err != nil {
-				break
-			}
-			_, _ = doc.Ref.Delete(ctx)
+	bw := r.fc.Client.BulkWriter(ctx)
+
+	// 1. Delete nested subcollections under work_items (sub_items, comments)
+	wiIter := projRef.Collection("work_items").Documents(ctx)
+	for {
+		wiDoc, err := wiIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
 		}
-		iter.Stop()
+		if err != nil {
+			wiIter.Stop()
+			return err
+		}
+		for _, nested := range []string{"sub_items", "comments"} {
+			if err := enqueueCollectionDeletes(ctx, bw, wiDoc.Ref.Collection(nested)); err != nil {
+				wiIter.Stop()
+				return err
+			}
+		}
+		_, _ = bw.Delete(wiDoc.Ref)
 	}
-	_, err := projRef.Delete(ctx)
-	return err
+	wiIter.Stop()
+
+	// 2. Delete nested versions under pages
+	pgIter := projRef.Collection("pages").Documents(ctx)
+	for {
+		pgDoc, err := pgIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			pgIter.Stop()
+			return err
+		}
+		if err := enqueueCollectionDeletes(ctx, bw, pgDoc.Ref.Collection("versions")); err != nil {
+			pgIter.Stop()
+			return err
+		}
+		_, _ = bw.Delete(pgDoc.Ref)
+	}
+	pgIter.Stop()
+
+	// 3. Delete attachments and underlying storage blobs
+	attIter := projRef.Collection("attachments").Documents(ctx)
+	for {
+		attDoc, err := attIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			attIter.Stop()
+			return err
+		}
+		if r.blobs != nil {
+			var att model.Attachment
+			if err := attDoc.DataTo(&att); err == nil && att.StoragePath != "" {
+				_ = r.blobs.Delete(ctx, att.StoragePath)
+			}
+		}
+		_, _ = bw.Delete(attDoc.Ref)
+	}
+	attIter.Stop()
+
+	// 4. Delete remaining flat subcollections
+	for _, sub := range []string{"members", "modules", "epics", "cycles", "labels", "collections", "stickies"} {
+		if err := enqueueCollectionDeletes(ctx, bw, projRef.Collection(sub)); err != nil {
+			return err
+		}
+	}
+
+	_, _ = bw.Delete(projRef)
+	bw.End()
+	return nil
+}
+
+func enqueueCollectionDeletes(ctx context.Context, bw *firestore.BulkWriter, col *firestore.CollectionRef) error {
+	iter := col.Documents(ctx)
+	defer iter.Stop()
+	for {
+		doc, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		_, _ = bw.Delete(doc.Ref)
+	}
 }
 
 func (r *firestoreProjectRepository) GetMember(ctx context.Context, projectID, userID string) (*model.ProjectMember, error) {
+	if strings.TrimSpace(userID) == "" || strings.Contains(userID, "/") {
+		return nil, ErrNotFound
+	}
 	snap, err := r.fc.ProjectDoc(projectID).Collection("members").Doc(userID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -280,10 +403,11 @@ func (r *firestoreProjectRepository) GetMember(ctx context.Context, projectID, u
 }
 
 func (r *firestoreProjectRepository) GetMemberByEmail(ctx context.Context, projectID, email string) (*model.ProjectMember, error) {
-	if email == "" {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if normalized == "" {
 		return nil, ErrNotFound
 	}
-	iter := r.fc.ProjectDoc(projectID).Collection("members").Where("email", "==", strings.ToLower(strings.TrimSpace(email))).Limit(1).Documents(ctx)
+	iter := r.fc.ProjectDoc(projectID).Collection("members").Where("email", "==", normalized).Limit(1).Documents(ctx)
 	defer iter.Stop()
 	doc, err := iter.Next()
 	if errors.Is(err, iterator.Done) {
@@ -315,17 +439,24 @@ func (r *firestoreProjectRepository) ListMembers(ctx context.Context, projectID 
 		if err := doc.DataTo(&m); err != nil {
 			return nil, err
 		}
+		if m.UserID == "" {
+			m.UserID = doc.Ref.ID
+		}
 		members = append(members, m)
 	}
 	return members, nil
 }
 
+// UpsertMember atomically adds/updates a member, deduplicates prior email-invited placeholder records,
+// prevents demoting the sole project ADMIN, and rebuilds Project.MemberIDs cleanly.
 func (r *firestoreProjectRepository) UpsertMember(ctx context.Context, projectID string, member *model.ProjectMember) error {
 	projRef := r.fc.ProjectDoc(projectID)
-	memberRef := projRef.Collection("members").Doc(member.UserID)
+	membersCol := projRef.Collection("members")
+	memberRef := membersCol.Doc(member.UserID)
 
+	now := time.Now().UTC()
 	if member.JoinedAt.IsZero() {
-		member.JoinedAt = time.Now().UTC()
+		member.JoinedAt = now
 	}
 	member.Email = strings.ToLower(strings.TrimSpace(member.Email))
 
@@ -341,23 +472,80 @@ func (r *firestoreProjectRepository) UpsertMember(ctx context.Context, projectID
 		if err := snap.DataTo(&proj); err != nil {
 			return err
 		}
-		if !containsString(proj.MemberIDs, member.UserID) {
-			proj.MemberIDs = append(proj.MemberIDs, member.UserID)
+
+		// Read existing members inside transaction to deduplicate by email and enforce >= 1 ADMIN
+		iter := tx.Documents(membersCol)
+		defer iter.Stop()
+
+		var activeMembers []model.ProjectMember
+		var staleRefs []*firestore.DocumentRef
+		for {
+			doc, err := iter.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			var existing model.ProjectMember
+			if err := doc.DataTo(&existing); err != nil {
+				return err
+			}
+			if existing.UserID == "" {
+				existing.UserID = doc.Ref.ID
+			}
+			existingEmail := strings.ToLower(strings.TrimSpace(existing.Email))
+
+			if doc.Ref.ID == member.UserID || existing.UserID == member.UserID {
+				if !existing.JoinedAt.IsZero() {
+					member.JoinedAt = existing.JoinedAt
+				}
+				continue
+			}
+			// Deduplicate email-invited record when real IAP numeric UserID is upserted/reconciled
+			if member.Email != "" && existingEmail == member.Email {
+				if !existing.JoinedAt.IsZero() {
+					member.JoinedAt = existing.JoinedAt
+				}
+				staleRefs = append(staleRefs, doc.Ref)
+				continue
+			}
+			activeMembers = append(activeMembers, existing)
 		}
-		if member.Email != "" && !containsString(proj.MemberIDs, member.Email) {
-			proj.MemberIDs = append(proj.MemberIDs, member.Email)
+
+		activeMembers = append(activeMembers, *member)
+
+		adminCount := 0
+		for _, m := range activeMembers {
+			if m.Role == model.RoleAdmin {
+				adminCount++
+			}
 		}
-		proj.UpdatedAt = time.Now().UTC()
-		if err := tx.Set(projRef, proj); err != nil {
+		if adminCount == 0 {
+			return ErrLastAdmin
+		}
+
+		proj.MemberIDs = buildMemberIDsSlice(activeMembers)
+		proj.UpdatedAt = now
+
+		if err := tx.Set(projRef, &proj); err != nil {
 			return err
+		}
+		for _, staleRef := range staleRefs {
+			if err := tx.Delete(staleRef); err != nil {
+				return err
+			}
 		}
 		return tx.Set(memberRef, member)
 	})
 }
 
+// RemoveMember atomically deletes all member records matching userID (by UserID or Email),
+// prevents removing the sole project ADMIN, and rebuilds Project.MemberIDs cleanly.
 func (r *firestoreProjectRepository) RemoveMember(ctx context.Context, projectID, userID string) error {
 	projRef := r.fc.ProjectDoc(projectID)
-	memberRef := projRef.Collection("members").Doc(userID)
+	membersCol := projRef.Collection("members")
+	targetLower := strings.ToLower(strings.TrimSpace(userID))
 
 	return r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(projRef)
@@ -372,29 +560,77 @@ func (r *firestoreProjectRepository) RemoveMember(ctx context.Context, projectID
 			return err
 		}
 
-		// Also check member's email to remove from MemberIDs if present
-		var memberEmail string
-		if mSnap, err := tx.Get(memberRef); err == nil {
-			var m model.ProjectMember
-			if err := mSnap.DataTo(&m); err == nil {
-				memberEmail = m.Email
+		iter := tx.Documents(membersCol)
+		defer iter.Stop()
+
+		var remaining []model.ProjectMember
+		var deleteRefs []*firestore.DocumentRef
+		for {
+			doc, err := iter.Next()
+			if errors.Is(err, iterator.Done) {
+				break
 			}
+			if err != nil {
+				return err
+			}
+			var existing model.ProjectMember
+			if err := doc.DataTo(&existing); err != nil {
+				return err
+			}
+			if existing.UserID == "" {
+				existing.UserID = doc.Ref.ID
+			}
+			existingEmail := strings.ToLower(strings.TrimSpace(existing.Email))
+
+			if doc.Ref.ID == userID || existing.UserID == userID || (targetLower != "" && existingEmail == targetLower) {
+				deleteRefs = append(deleteRefs, doc.Ref)
+				continue
+			}
+			remaining = append(remaining, existing)
 		}
 
-		filtered := make([]string, 0, len(proj.MemberIDs))
-		for _, id := range proj.MemberIDs {
-			if id != userID && (memberEmail == "" || id != memberEmail) {
-				filtered = append(filtered, id)
+		if len(deleteRefs) == 0 {
+			return ErrNotFound
+		}
+
+		adminCount := 0
+		for _, m := range remaining {
+			if m.Role == model.RoleAdmin {
+				adminCount++
 			}
 		}
-		proj.MemberIDs = filtered
+		if adminCount == 0 {
+			return ErrLastAdmin
+		}
+
+		proj.MemberIDs = buildMemberIDsSlice(remaining)
 		proj.UpdatedAt = time.Now().UTC()
 
-		if err := tx.Set(projRef, proj); err != nil {
+		if err := tx.Set(projRef, &proj); err != nil {
 			return err
 		}
-		return tx.Delete(memberRef)
+		for _, ref := range deleteRefs {
+			if err := tx.Delete(ref); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
+}
+
+func buildMemberIDsSlice(members []model.ProjectMember) []string {
+	out := make([]string, 0, len(members)*2)
+	for _, m := range members {
+		uid := strings.TrimSpace(m.UserID)
+		if uid != "" && !containsString(out, uid) {
+			out = append(out, uid)
+		}
+		email := strings.ToLower(strings.TrimSpace(m.Email))
+		if email != "" && !containsString(out, email) {
+			out = append(out, email)
+		}
+	}
+	return out
 }
 
 func containsString(slice []string, target string) bool {

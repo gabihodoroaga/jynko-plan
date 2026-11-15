@@ -10,6 +10,16 @@ jobs:
   e2e:
     name: Backend, Frontend & Go-Rod UI E2E Tests
     runs-on: ubuntu-latest
+    services:
+      firestore-emulator:
+        image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+        ports:
+          - 8086:8086
+        options: >-
+          --entrypoint gcloud
+        env:
+          CLOUDSDK_CORE_PROJECT: jynko-ci
+        # Start Cloud Firestore emulator on 0.0.0.0:8086
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
       - name: Setup Node.js
@@ -37,9 +47,26 @@ jobs:
         working-directory: backend
         run: |
           go build ./...
-          go test ./internal/middleware/... ./internal/service/... ./internal/agent/...
+          go test $(go list ./... | grep -v '/internal/e2e')
+
+      - name: Start Local Firestore Emulator (Fallback if service not listening)
+        run: |
+          if ! nc -z 127.0.0.1 8086 2>/dev/null; then
+            docker run -d --name jynko-firestore-emulator -p 8086:8086 \
+              gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+              gcloud beta emulators firestore start --host-port=0.0.0.0:8086
+            for _ in $(seq 1 30); do
+              if nc -z 127.0.0.1 8086 2>/dev/null; then break; fi
+              sleep 1
+            done
+          fi
 
       - name: Run Go-Rod End-to-End UI Tests
+        env:
+          ENV: dev
+          GOOGLE_CLOUD_PROJECT: jynko-ci
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8086
+          SEED_ON_STARTUP: "true"
         run: ./scripts/run-e2e.sh "${{ runner.temp }}/jynko-e2e-artifacts"
 
       - name: Upload E2E Screenshots & Validation Report

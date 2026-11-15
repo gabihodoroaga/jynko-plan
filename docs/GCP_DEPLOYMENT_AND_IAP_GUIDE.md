@@ -128,6 +128,25 @@ gcloud iam service-accounts create $RUNNER_SA \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/datastore.user"
+
+# Grant permission to export OpenTelemetry traces & metrics in production (ENV=prd)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/cloudtrace.agent"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/monitoring.metricWriter"
+
+# Create GCS bucket for persistent Work Item & Comment attachments and grant object access
+export ATTACHMENTS_BUCKET="${PROJECT_ID}-jynko-attachments"
+gcloud storage buckets create "gs://${ATTACHMENTS_BUCKET}" \
+  --location=$REGION \
+  --uniform-bucket-level-access
+
+gcloud storage buckets add-iam-policy-binding "gs://${ATTACHMENTS_BUCKET}" \
+  --member="serviceAccount:${RUNNER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/storage.objectUser"
 ```
 
 ### 3.2 Cloud Build Service Account Permissions
@@ -171,8 +190,10 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 To test the deployment manually from your local terminal:
 ```bash
+export IAP_AUDIENCE="/projects/${PROJECT_NUM}/locations/${REGION}/services/${SERVICE_NAME}-prd"
+
 gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions=_REGION=$REGION,_AR_LOCATION=$REGION,_AR_REPOSITORY=$AR_REPO,_SERVICE_NAME=$SERVICE_NAME,_SERVICE_ACCOUNT=$RUNNER_SA
+  --substitutions=_REGION=$REGION,_AR_LOCATION=$REGION,_AR_REPOSITORY=$AR_REPO,_SERVICE_NAME=$SERVICE_NAME,_SERVICE_ACCOUNT=$RUNNER_SA,_ATTACHMENTS_GCS_BUCKET=$ATTACHMENTS_BUCKET,_IAP_AUDIENCE=$IAP_AUDIENCE
 ```
 
 ---
@@ -502,10 +523,9 @@ gcloud iap web add-iam-policy-binding \
 2. **Authentication Flow**:
    - You will see the Google Sign-in screen enforced by IAP.
    - Enter your authorized Google Workspace or Gmail account.
-3. **Automatic Project Creation & Seed**:
-   - Jynko's backend automatically extracts your identity from `X-Goog-Authenticated-User-Email` and `X-Goog-Authenticated-User-Id`.
-   - The initial project `proj-jynko-core` ("hodo") will be seeded in Firestore inside the environment-scoped collection (`jp-prd-projects`) with your user assigned as initial `ADMIN`.
-   - You can click the `+` button in the left sidebar to create new projects and manage your team.
+3. **First Project Creation (or Optional Demo Seed)**:
+   - Jynko's backend verifies `X-Goog-IAP-JWT-Assertion` (and extracts your identity from `X-Goog-Authenticated-User-Email` and `X-Goog-Authenticated-User-Id`).
+   - In `prd` and `stg`, `SEED_ON_STARTUP` defaults to `false` so demo data is never injected automatically into production (`jp-prd-projects`). Click the `+` button next to **Projects** in the left sidebar to create your first project and automatically become its `ADMIN` (or temporarily set `SEED_ON_STARTUP=true` if you want the `hodo` starter project seeded).
 4. **Team Collaboration**:
    - Invite coworkers by entering their emails in **Project Settings > Members**.
    - Ensure their Google email or group has been granted the `roles/iap.httpsResourceAccessor` role in GCP IAM using either Method 1 or Method 2 above.

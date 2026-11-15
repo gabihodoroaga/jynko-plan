@@ -24,7 +24,7 @@ func (h *CycleHandler) ListCycles(c *gin.Context) {
 	projectID := c.Param("projectId")
 	cycles, err := h.svc.List(c.Request.Context(), projectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list cycles", err)
 		return
 	}
 	c.JSON(http.StatusOK, cycles)
@@ -71,7 +71,11 @@ func (h *CycleHandler) DeleteCycle(c *gin.Context) {
 	projectID := c.Param("projectId")
 	cycleID := c.Param("cycleId")
 	if err := h.svc.Delete(c.Request.Context(), projectID, cycleID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "cycle not found"})
+			return
+		}
+		respondInternalError(c, "failed to delete cycle", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

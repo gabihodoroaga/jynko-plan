@@ -97,7 +97,7 @@ function loadInitialGeneralSettings(): GeneralAppSettings {
   const defaults: GeneralAppSettings = {
     instanceName: 'Jynko Engineering',
     defaultLandingRoute: '/home',
-    defaultWorkItemView: 'LIST',
+    defaultWorkItemView: 'BOARD',
     compactTableRows: true,
     showSubItemProgressOnCards: true,
     enableKeyboardShortcuts: true,

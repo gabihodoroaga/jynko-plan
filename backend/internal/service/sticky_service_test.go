@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
@@ -51,32 +52,47 @@ func (m *mockStickyRepo) Delete(_ context.Context, _, stickyID string) error {
 	return nil
 }
 
-func TestStickyService_CRUDAndRandomColor(t *testing.T) {
+func TestStickyService_CRUDAndOwnership(t *testing.T) {
 	repo := &mockStickyRepo{items: map[string]*model.Sticky{}}
 	svc := NewStickyService(repo)
 	ctx := context.Background()
-	user := model.UserContext{UserID: "dev-user-1"}
+	author := model.UserContext{UserID: "dev-user-1"}
+	otherMember := model.UserContext{UserID: "dev-user-2"}
+	admin := model.UserContext{UserID: "dev-admin"}
 
-	created, err := svc.CreateSticky(ctx, "proj-1", user, CreateStickyInput{
+	created, err := svc.CreateSticky(ctx, "proj-1", author, CreateStickyInput{
 		Content: "Brainstorming Gemini agent prompts",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error creating sticky: %v", err)
 	}
 	if created.Color == "" {
-		t.Fatalf("expected random funny color to be assigned when color is omitted")
+		t.Fatalf("expected random color to be assigned when color is omitted")
 	}
 
 	pinned := true
 	newColor := model.StickyColorFlamingo
-	updated, err := svc.UpdateSticky(ctx, "proj-1", created.ID, UpdateStickyInput{
+	updated, err := svc.UpdateSticky(ctx, "proj-1", created.ID, author, model.RoleMember, UpdateStickyInput{
 		Color:    &newColor,
 		IsPinned: &pinned,
 	})
 	if err != nil {
-		t.Fatalf("unexpected error updating sticky: %v", err)
+		t.Fatalf("unexpected error updating own sticky: %v", err)
 	}
 	if updated.Color != model.StickyColorFlamingo || !updated.IsPinned {
 		t.Fatalf("expected updated color FLAMINGO and pinned=true, got color=%s pinned=%v", updated.Color, updated.IsPinned)
+	}
+
+	// Non-author MEMBER cannot edit or delete someone else's sticky
+	if _, err := svc.UpdateSticky(ctx, "proj-1", created.ID, otherMember, model.RoleMember, UpdateStickyInput{IsPinned: &pinned}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden when non-author MEMBER edits sticky, got %v", err)
+	}
+	if err := svc.DeleteSticky(ctx, "proj-1", created.ID, otherMember, model.RoleMember); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden when non-author MEMBER deletes sticky, got %v", err)
+	}
+
+	// ADMIN can delete any sticky
+	if err := svc.DeleteSticky(ctx, "proj-1", created.ID, admin, model.RoleAdmin); err != nil {
+		t.Fatalf("expected ADMIN to delete sticky, got %v", err)
 	}
 }

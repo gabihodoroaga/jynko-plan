@@ -17,6 +17,7 @@ NG_LOG="${TMPDIR:-/tmp}/jynko-ng-e2e-$$.log"
 cleanup() {
   if [[ -n "${SERVER_PID}" ]] && kill -0 "${SERVER_PID}" 2>/dev/null; then
     echo "==> Stopping background Angular dev server (PID ${SERVER_PID})..."
+    pkill -P "${SERVER_PID}" 2>/dev/null || true
     kill "${SERVER_PID}" 2>/dev/null || true
   fi
   if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
@@ -27,15 +28,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if lsof -ti :8082 >/dev/null 2>&1; then
-  echo "==> Restarting existing Go backend process on :8082..."
-  kill $(lsof -ti :8082) 2>/dev/null || true
+EXISTING_LISTEN_PIDS="$(lsof -tiTCP:8082 -sTCP:LISTEN 2>/dev/null || true)"
+if [[ -n "${EXISTING_LISTEN_PIDS}" ]]; then
+  echo "==> Restarting existing Go backend listener on :8082..."
+  # shellcheck disable=SC2086
+  kill ${EXISTING_LISTEN_PIDS} 2>/dev/null || true
   sleep 1
 fi
 
 echo "==> Building and starting Go backend server at ${API_HEALTH_URL}..."
 go -C "${REPO_ROOT}/backend" build -o /tmp/jynko-server-e2e ./cmd/server/main.go
-(cd "${REPO_ROOT}/backend" && exec /tmp/jynko-server-e2e) >"${BACKEND_LOG}" 2>&1 &
+(cd "${REPO_ROOT}/backend" && ENV=dev SEED_ON_STARTUP=true exec /tmp/jynko-server-e2e) >"${BACKEND_LOG}" 2>&1 &
 BACKEND_PID=$!
 
 echo "==> Waiting for Go backend server at ${API_HEALTH_URL}..."
@@ -59,7 +62,7 @@ fi
 
 if ! curl -fsS "${BASE_URL}" >/dev/null 2>&1; then
   echo "==> Frontend not detected at ${BASE_URL}; starting Angular dev server..."
-  CI=true NG_CLI_ANALYTICS=false npm --prefix "${REPO_ROOT}/frontend" run start -- --host 127.0.0.1 --port 4202 >"${NG_LOG}" 2>&1 &
+  (cd "${REPO_ROOT}/frontend" && CI=true NG_CLI_ANALYTICS=false exec ./node_modules/.bin/ng serve --project jynko-frontend --host 127.0.0.1 --port 4202) >"${NG_LOG}" 2>&1 &
   SERVER_PID=$!
 
   echo "==> Waiting for Angular dev server at ${BASE_URL}..."

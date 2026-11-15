@@ -1,9 +1,10 @@
-import { Component, EventEmitter, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Output, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PageService } from '../../../core/services/page.service';
 import { ProjectService } from '../../../core/services/project.service';
 import { SettingsService } from '../../../core/services/settings.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 
 interface SlashBlockCommand {
@@ -58,10 +59,11 @@ interface SlashBlockCommand {
           <!-- Right: Author Avatar, Save, Mode Toggle, Lock, History, Delete -->
           <div class="flex items-center gap-2 shrink-0">
             <span
-              class="w-5 h-5 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center"
-              title="Author"
+              class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center"
+              [style.backgroundColor]="authService.avatarColor()"
+              [title]="authService.currentUser().name"
             >
-              G
+              {{ authService.userInitial() }}
             </span>
 
             @if (projectService.canEdit()) {
@@ -108,8 +110,9 @@ interface SlashBlockCommand {
               <!-- Lock / Unlock Button -->
               <button
                 type="button"
+                [disabled]="page.is_locked && !canUnlockPage(page.created_by)"
                 (click)="pageService.toggleLock(page.id)"
-                class="p-1.5 rounded-md hover:bg-slate-100 text-slate-600"
+                class="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-40"
                 [ngClass]="page.is_locked ? 'text-amber-600 bg-amber-50' : ''"
                 [title]="page.is_locked ? 'Unlock page' : 'Lock page'"
               >
@@ -137,8 +140,9 @@ interface SlashBlockCommand {
               <!-- Delete Page Button -->
               <button
                 type="button"
+                [disabled]="page.is_locked"
                 (click)="pageService.deletePage(page.id)"
-                class="p-1.5 rounded-md hover:bg-rose-50 text-slate-500 hover:text-rose-600"
+                class="p-1.5 rounded-md hover:bg-rose-50 text-slate-500 hover:text-rose-600 disabled:opacity-40"
                 title="Delete page"
               >
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -152,7 +156,10 @@ interface SlashBlockCommand {
         <!-- 2. Rich Formatting & Block Toolbar Row + "AI summary" button on right -->
         <div class="h-10 px-5 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0 bg-white select-none">
           <!-- Formatting Controls -->
-          <div class="flex items-center gap-1 text-xs text-slate-700 overflow-x-auto">
+          <div
+            class="flex items-center gap-1 text-xs text-slate-700 overflow-x-auto"
+            (mousedown)="$event.preventDefault()"
+          >
             <button
               type="button"
               (click)="insertBlockSnippet(page.id, page.content, '\n## Section Heading\n')"
@@ -161,18 +168,6 @@ interface SlashBlockCommand {
               title="Insert Heading"
             >
               <span>Text</span>
-              <span class="text-[10px] text-slate-400">⌄</span>
-            </button>
-
-            <span class="h-4 w-px bg-slate-200 mx-1"></span>
-
-            <button
-              type="button"
-              [disabled]="page.is_locked || !projectService.canEdit()"
-              class="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 font-medium text-slate-700 disabled:opacity-40"
-              title="Text Color"
-            >
-              <span>Color</span>
               <span class="text-[10px] text-slate-400">⌄</span>
             </button>
 
@@ -199,7 +194,7 @@ interface SlashBlockCommand {
             </button>
             <button
               type="button"
-              (click)="insertBlockSnippet(page.id, page.content, ' <u>underlined</u> ')"
+              (click)="insertBlockSnippet(page.id, page.content, ' __underlined__ ')"
               [disabled]="page.is_locked || !projectService.canEdit()"
               class="w-7 h-7 rounded hover:bg-slate-100 underline text-slate-700 disabled:opacity-40"
               title="Underline"
@@ -308,6 +303,7 @@ interface SlashBlockCommand {
                   @for (cmd of slashCommands; track cmd.cmd) {
                     <button
                       type="button"
+                      (mousedown)="$event.preventDefault()"
                       (click)="insertBlockSnippet(page.id, page.content, cmd.snippet)"
                       class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200/80 border border-slate-200 font-mono text-slate-700"
                       [title]="cmd.description"
@@ -339,6 +335,7 @@ interface SlashBlockCommand {
                     @for (cmd of slashCommands; track cmd.cmd) {
                       <button
                         type="button"
+                        (mousedown)="$event.preventDefault()"
                         (click)="applySlashCommand(page.id, page.content, cmd)"
                         class="w-full flex items-center justify-between px-2.5 py-1.5 rounded text-left text-xs hover:bg-slate-100"
                       >
@@ -389,6 +386,7 @@ export class PageEditorComponent {
   readonly pageService = inject(PageService);
   readonly projectService = inject(ProjectService);
   readonly settingsService = inject(SettingsService);
+  readonly authService = inject(AuthService);
 
   readonly editorMode = signal<'SPLIT' | 'EDIT' | 'PREVIEW'>('PREVIEW');
   readonly showSlashMenu = signal<boolean>(false);
@@ -396,6 +394,28 @@ export class PageEditorComponent {
   readonly codeBlockSnippet = '\n```\n// code block\n```\n';
   private draftTitle: string | null = null;
   private draftContent: string | null = null;
+  private lastActivePageId = '';
+
+  constructor() {
+    effect(
+      () => {
+        const pageId = this.pageService.activePage()?.id ?? '';
+        if (pageId !== this.lastActivePageId) {
+          this.lastActivePageId = pageId;
+          this.draftTitle = null;
+          this.draftContent = null;
+          this.showSlashMenu.set(false);
+        }
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  canUnlockPage(createdBy?: string): boolean {
+    if (this.projectService.isAdmin()) return true;
+    const user = this.authService.currentUser();
+    return Boolean(createdBy && (createdBy === user.user_id || createdBy === user.email));
+  }
 
   readonly slashCommands: SlashBlockCommand[] = [
     { cmd: '/h1', label: 'Heading 1', description: 'Large section heading', snippet: '\n# Heading 1\n' },
@@ -447,13 +467,17 @@ export class PageEditorComponent {
   }
 
   insertBlockSnippet(pageId: string, currentContent: string, snippet: string): void {
-    const next = (currentContent || '') + snippet;
+    const base = this.draftContent !== null ? this.draftContent : (currentContent || '');
+    const next = base + snippet;
+    this.draftContent = null;
     this.showSlashMenu.set(false);
     this.pageService.updatePage(pageId, { content: next });
   }
 
   applySlashCommand(pageId: string, currentContent: string, cmd: SlashBlockCommand): void {
-    const cleaned = currentContent.replace(/\/(\s*)$/, '');
+    const base = this.draftContent !== null ? this.draftContent : (currentContent || '');
+    const cleaned = base.replace(/\/(\s*)$/, '');
+    this.draftContent = null;
     this.showSlashMenu.set(false);
     this.pageService.updatePage(pageId, { content: cleaned + cmd.snippet.trimStart() });
   }

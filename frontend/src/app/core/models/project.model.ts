@@ -118,7 +118,7 @@ export interface WorkItem {
   assignee_id?: string;
   reporter_id: string;
   label_ids: string[];
-  estimate?: number;
+  estimate?: number | null;
   start_date?: string;
   due_date?: string;
   sub_item_count: number;

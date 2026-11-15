@@ -68,11 +68,22 @@ export class ProjectService {
 
   readonly currentUserRole = computed<ProjectRole>(() => {
     const user = this.auth.currentUser();
+    const userEmail = (user.email || '').trim().toLowerCase();
     const list = this.members();
     const match = list.find(
-      (m) => m.user_id === user.user_id || m.email.toLowerCase() === user.email.toLowerCase()
+      (m) =>
+        m.user_id === user.user_id ||
+        (!!userEmail && (m.email || '').trim().toLowerCase() === userEmail) ||
+        (!!userEmail && m.user_id.trim().toLowerCase() === userEmail)
     );
-    return match ? match.role : 'ADMIN';
+    if (match) {
+      return match.role;
+    }
+    const active = this.activeProject();
+    if (active && active.created_by && active.created_by === user.user_id) {
+      return 'ADMIN';
+    }
+    return 'VIEWER';
   });
 
   readonly canEdit = computed<boolean>(() => {
@@ -84,6 +95,24 @@ export class ProjectService {
 
   readonly isProjectModalOpen = signal<boolean>(false);
   readonly editingProject = signal<Project | null>(null);
+
+  constructor() {
+    this.auth.registerSessionLifecycle({
+      onReset: () => this.resetState(),
+      onReload: () => this.loadProjects(),
+    });
+  }
+
+  resetState(): void {
+    this.projects.set([]);
+    this.members.set([]);
+    this.modules.set([]);
+    this.epics.set([]);
+    this.cycles.set([]);
+    this.labels.set([]);
+    this.pendingRouteProject = null;
+    this.closeProjectModal();
+  }
 
   openCreateProjectModal(): void {
     this.editingProject.set(null);
@@ -101,6 +130,9 @@ export class ProjectService {
   }
 
   loadProjects(): void {
+    if (this.auth.isSignedOut()) {
+      return;
+    }
     this.api.get<Project[]>('/projects').subscribe({
       next: (list) => {
         const projects = list ?? [];
@@ -109,6 +141,12 @@ export class ProjectService {
           const targetKey = this.pendingRouteProject || this.activeProjectId();
           const matched = this.resolveProject(targetKey, projects) ?? projects[0];
           this.selectProject(matched.id);
+        } else {
+          this.members.set([]);
+          this.modules.set([]);
+          this.epics.set([]);
+          this.cycles.set([]);
+          this.labels.set([]);
         }
       },
     });
@@ -116,26 +154,49 @@ export class ProjectService {
 
   selectProject(projectId: string): void {
     this.pendingRouteProject = projectId;
+    const changed = this.activeProjectId() !== projectId;
     this.activeProjectId.set(projectId);
+    if (changed) {
+      this.members.set([]);
+      this.modules.set([]);
+      this.epics.set([]);
+      this.cycles.set([]);
+      this.labels.set([]);
+    }
     this.loadProjectMetadata(projectId);
   }
 
   loadProjectMetadata(projectId: string): void {
-    if (!projectId) return;
+    if (!projectId || this.auth.isSignedOut()) return;
     this.api.get<ProjectMember[]>(`/projects/${projectId}/members`).subscribe({
-      next: (res) => this.members.set(res ?? []),
+      next: (res) => {
+        if (this.activeProjectId() !== projectId) return;
+        this.members.set(res ?? []);
+      },
     });
     this.api.get<Module[]>(`/projects/${projectId}/modules`).subscribe({
-      next: (res) => this.modules.set(res ?? []),
+      next: (res) => {
+        if (this.activeProjectId() !== projectId) return;
+        this.modules.set(res ?? []);
+      },
     });
     this.api.get<Epic[]>(`/projects/${projectId}/epics`).subscribe({
-      next: (res) => this.epics.set(res ?? []),
+      next: (res) => {
+        if (this.activeProjectId() !== projectId) return;
+        this.epics.set(res ?? []);
+      },
     });
     this.api.get<Cycle[]>(`/projects/${projectId}/cycles`).subscribe({
-      next: (res) => this.cycles.set(res ?? []),
+      next: (res) => {
+        if (this.activeProjectId() !== projectId) return;
+        this.cycles.set(res ?? []);
+      },
     });
     this.api.get<Label[]>(`/projects/${projectId}/labels`).subscribe({
-      next: (res) => this.labels.set(res ?? []),
+      next: (res) => {
+        if (this.activeProjectId() !== projectId) return;
+        this.labels.set(res ?? []);
+      },
     });
   }
 
@@ -207,17 +268,25 @@ export class ProjectService {
           onUpdated(saved);
         }
       },
+      error: () => {
+        this.projects.update((prev) => prev.map((p) => (p.id === projectId ? current : p)));
+      },
     });
   }
 
   upsertMember(email: string, name: string, role: ProjectRole): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
-    const payload = { user_id: email, email, name, role };
+    const cleanEmail = email.trim();
+    const payload = { user_id: cleanEmail, email: cleanEmail, name: name.trim(), role };
     this.api.post<ProjectMember>(`/projects/${projectId}/members`, payload).subscribe({
       next: (m) => {
         this.members.update((list) => {
-          const filtered = list.filter((x) => x.user_id !== m.user_id && x.email !== m.email);
+          const filtered = list.filter(
+            (x) =>
+              x.user_id !== m.user_id &&
+              (x.email || '').toLowerCase() !== (m.email || '').toLowerCase()
+          );
           return [...filtered, m];
         });
       },
@@ -226,12 +295,16 @@ export class ProjectService {
 
   removeMember(userId: string): void {
     const projectId = this.activeProjectId();
-    if (!projectId) return;
-    this.api.delete(`/projects/${projectId}/members/${userId}`).subscribe({
-      next: () => {
-        this.members.update((list) => list.filter((m) => m.user_id !== userId));
-      },
-    });
+    if (!projectId || !userId) return;
+    const prevMembers = this.members();
+    this.members.update((list) => list.filter((m) => m.user_id !== userId));
+    this.api
+      .delete(`/projects/${projectId}/members/${encodeURIComponent(userId)}`)
+      .subscribe({
+        error: () => {
+          this.members.set(prevMembers);
+        },
+      });
   }
 
   createModule(name: string, description: string, leadUserId: string): void {
@@ -285,14 +358,20 @@ export class ProjectService {
       next: (saved) => {
         this.modules.update((prev) => prev.map((m) => (m.id === moduleId ? saved : m)));
       },
+      error: () => {
+        this.modules.update((prev) => prev.map((m) => (m.id === moduleId ? current : m)));
+      },
     });
   }
 
   deleteModule(moduleId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
+    const snapshot = this.modules();
     this.modules.update((prev) => prev.filter((m) => m.id !== moduleId));
-    this.api.delete(`/projects/${projectId}/modules/${moduleId}`).subscribe();
+    this.api.delete(`/projects/${projectId}/modules/${moduleId}`).subscribe({
+      error: () => this.modules.set(snapshot),
+    });
   }
 
   createEpic(
@@ -382,14 +461,20 @@ export class ProjectService {
       next: (saved) => {
         this.epics.update((prev) => prev.map((e) => (e.id === epicId ? saved : e)));
       },
+      error: () => {
+        this.epics.update((prev) => prev.map((e) => (e.id === epicId ? current : e)));
+      },
     });
   }
 
   deleteEpic(epicId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
+    const snapshot = this.epics();
     this.epics.update((prev) => prev.filter((e) => e.id !== epicId));
-    this.api.delete(`/projects/${projectId}/epics/${epicId}`).subscribe();
+    this.api.delete(`/projects/${projectId}/epics/${epicId}`).subscribe({
+      error: () => this.epics.set(snapshot),
+    });
   }
 
   createCycle(
@@ -469,14 +554,20 @@ export class ProjectService {
       next: (saved) => {
         this.cycles.update((prev) => prev.map((c) => (c.id === cycleId ? saved : c)));
       },
+      error: () => {
+        this.cycles.update((prev) => prev.map((c) => (c.id === cycleId ? current : c)));
+      },
     });
   }
 
   deleteCycle(cycleId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
+    const snapshot = this.cycles();
     this.cycles.update((prev) => prev.filter((c) => c.id !== cycleId));
-    this.api.delete(`/projects/${projectId}/cycles/${cycleId}`).subscribe();
+    this.api.delete(`/projects/${projectId}/cycles/${cycleId}`).subscribe({
+      error: () => this.cycles.set(snapshot),
+    });
   }
 
   createLabel(name: string, color: string): void {
@@ -511,13 +602,19 @@ export class ProjectService {
         next: (saved) => {
           this.labels.update((prev) => prev.map((l) => (l.id === labelId ? saved : l)));
         },
+        error: () => {
+          this.labels.update((prev) => prev.map((l) => (l.id === labelId ? current : l)));
+        },
       });
   }
 
   deleteLabel(labelId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
+    const snapshot = this.labels();
     this.labels.update((prev) => prev.filter((l) => l.id !== labelId));
-    this.api.delete(`/projects/${projectId}/labels/${labelId}`).subscribe();
+    this.api.delete(`/projects/${projectId}/labels/${labelId}`).subscribe({
+      error: () => this.labels.set(snapshot),
+    });
   }
 }

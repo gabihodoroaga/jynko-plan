@@ -12,9 +12,14 @@ import { PageDetailComponent } from './features/wiki/page-detail/page-detail.com
 import { ProjectsComponent } from './features/projects/projects.component';
 import { SettingsComponent } from './features/settings/settings.component';
 import { ProfileComponent } from './features/profile/profile.component';
+import { SignedOutComponent } from './features/auth/signed-out.component';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'work-items' },
+  {
+    path: 'signed-out',
+    component: SignedOutComponent,
+  },
   {
     path: 'home',
     component: HomeComponent,

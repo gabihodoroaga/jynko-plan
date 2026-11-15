@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ProjectService } from '../../core/services/project.service';
 import { WorkItemService } from '../../core/services/work-item.service';
+import { SettingsService } from '../../core/services/settings.service';
 import { Cycle } from '../../core/models/project.model';
 import { ModalComponent } from '../../shared/components/modal.component';
 
@@ -300,6 +301,7 @@ import { ModalComponent } from '../../shared/components/modal.component';
 export class CyclesComponent {
   readonly projectService = inject(ProjectService);
   readonly workItemService = inject(WorkItemService);
+  private readonly settingsService = inject(SettingsService);
   private readonly router = inject(Router);
 
   readonly isCreateOpen = signal(false);
@@ -347,10 +349,11 @@ export class CyclesComponent {
   }
 
   openCreateModal(): void {
+    const weeks = Number(this.settingsService.activeProjectSettings().cycleDurationWeeks) || 2;
     this.newName = '';
     this.newDesc = '';
     this.newStart = this.getOffsetDateString(0);
-    this.newEnd = this.getOffsetDateString(14);
+    this.newEnd = this.getOffsetDateString(weeks * 7);
     this.newIsActive = true;
     this.dateValidationError.set('');
     this.isCreateOpen.set(true);

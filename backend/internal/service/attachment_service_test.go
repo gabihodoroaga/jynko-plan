@@ -158,4 +158,35 @@ func TestAttachmentService_UploadAndRetrieve(t *testing.T) {
 	if !errors.Is(err, repository.ErrNotFound) {
 		t.Errorf("expected ErrNotFound after deletion, got: %v", err)
 	}
+
+	// 7. SVG / HTML XSS protection and Markdown bracket escaping
+	svgPayload := []byte(`<svg onload="alert(1)"></svg>`)
+	svgAtt, err := svc.UploadAttachment(
+		ctx,
+		"proj-1",
+		uploader,
+		"item-99",
+		"exploit[v2].svg",
+		"image/png", // Spoofed raster MIME with .svg extension!
+		int64(len(svgPayload)),
+		bytes.NewReader(svgPayload),
+	)
+	if err != nil {
+		t.Fatalf("SVG UploadAttachment failed: %v", err)
+	}
+	if IsSafeInlineMIME(svgAtt.ContentType) {
+		t.Errorf("expected .svg with spoofed image/png MIME to NOT be safe inline, got ContentType=%q", svgAtt.ContentType)
+	}
+	if strings.HasPrefix(svgAtt.Markdown, "![") {
+		t.Errorf("expected .svg to NOT generate inline image markdown, got %q", svgAtt.Markdown)
+	}
+	if strings.Contains(svgAtt.Markdown, "[v2]") {
+		t.Errorf("expected brackets in filename to be escaped in markdown label, got %q", svgAtt.Markdown)
+	}
+	if IsSafeInlineMIME("text/html; charset=utf-8") || IsSafeInlineMIME("image/svg+xml") {
+		t.Errorf("expected text/html and image/svg+xml to be rejected by IsSafeInlineMIME")
+	}
+	if !IsSafeInlineMIME("image/png") || !IsSafeInlineMIME("application/pdf") {
+		t.Errorf("expected image/png and application/pdf to be allowed by IsSafeInlineMIME")
+	}
 }

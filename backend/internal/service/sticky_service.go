@@ -61,10 +61,19 @@ func (s *StickyService) CreateSticky(ctx context.Context, projectID string, auth
 	return sticky, nil
 }
 
-func (s *StickyService) UpdateSticky(ctx context.Context, projectID, stickyID string, input UpdateStickyInput) (*model.Sticky, error) {
+func (s *StickyService) UpdateSticky(
+	ctx context.Context,
+	projectID, stickyID string,
+	actor model.UserContext,
+	actorRole model.ProjectRole,
+	input UpdateStickyInput,
+) (*model.Sticky, error) {
 	sticky, err := s.repo.GetByID(ctx, projectID, stickyID)
 	if err != nil {
 		return nil, err
+	}
+	if sticky.AuthorID != "" && actorRole != model.RoleAdmin && !isSameActor(sticky.AuthorID, actor) {
+		return nil, ErrForbidden
 	}
 	if input.Content != nil {
 		sticky.Content = *input.Content
@@ -81,7 +90,19 @@ func (s *StickyService) UpdateSticky(ctx context.Context, projectID, stickyID st
 	return sticky, nil
 }
 
-func (s *StickyService) DeleteSticky(ctx context.Context, projectID, stickyID string) error {
+func (s *StickyService) DeleteSticky(
+	ctx context.Context,
+	projectID, stickyID string,
+	actor model.UserContext,
+	actorRole model.ProjectRole,
+) error {
+	sticky, err := s.repo.GetByID(ctx, projectID, stickyID)
+	if err != nil {
+		return err
+	}
+	if sticky.AuthorID != "" && actorRole != model.RoleAdmin && !isSameActor(sticky.AuthorID, actor) {
+		return ErrForbidden
+	}
 	return s.repo.Delete(ctx, projectID, stickyID)
 }
 

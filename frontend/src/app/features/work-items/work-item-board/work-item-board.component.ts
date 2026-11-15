@@ -83,7 +83,7 @@ import { PriorityBadgeComponent } from '../../../shared/components/priority-badg
                     </span>
                   }
 
-                  @if (item.sub_item_count > 0) {
+                  @if (item.sub_item_count > 0 && settingsService.generalSettings().showSubItemProgressOnCards) {
                     <span
                       class="px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-600"
                     >

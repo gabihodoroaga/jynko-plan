@@ -83,6 +83,10 @@ export interface AvatarColorOption {
               }
             </div>
 
+            @if (photoError()) {
+              <p class="text-[11px] text-rose-600">{{ photoError() }}</p>
+            }
+
             <div class="max-w-md">
               <label class="block text-[11px] font-medium text-slate-600 mb-1">
                 Photo / Avatar Image URL <span class="font-normal text-slate-400">(optional)</span>
@@ -185,6 +189,7 @@ export class ProfileComponent implements OnInit {
   readonly displayName = signal<string>('');
   readonly avatarUrl = signal<string>('');
   readonly avatarColor = signal<string>('#ea580c');
+  readonly photoError = signal<string>('');
 
   readonly colorOptions: AvatarColorOption[] = [
     { hex: '#ea580c', label: 'Orange' },
@@ -203,15 +208,18 @@ export class ProfileComponent implements OnInit {
   private initializedUserId = '';
 
   constructor() {
-    effect(() => {
-      const user = this.authService.currentUser();
-      if (user.user_id && this.initializedUserId !== user.user_id) {
-        this.initializedUserId = user.user_id;
-        this.displayName.set(user.name);
-        this.avatarUrl.set(user.avatar_url ?? '');
-        this.avatarColor.set(user.avatar_color || '#ea580c');
-      }
-    });
+    effect(
+      () => {
+        const user = this.authService.currentUser();
+        if (user.user_id && this.initializedUserId !== user.user_id) {
+          this.initializedUserId = user.user_id;
+          this.displayName.set(user.name);
+          this.avatarUrl.set(user.avatar_url ?? '');
+          this.avatarColor.set(user.avatar_color || '#ea580c');
+        }
+      },
+      { allowSignalWrites: true }
+    );
   }
 
   ngOnInit(): void {
@@ -225,6 +233,18 @@ export class ProfileComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input?.files?.[0];
     if (!file) return;
+    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+    if (!allowedTypes.has(file.type)) {
+      this.photoError.set('Please select a PNG, JPEG, GIF, or WebP image.');
+      input.value = '';
+      return;
+    }
+    if (file.size > 384 * 1024) {
+      this.photoError.set('Avatar image must be 384 KB or smaller.');
+      input.value = '';
+      return;
+    }
+    this.photoError.set('');
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -235,15 +255,27 @@ export class ProfileComponent implements OnInit {
   }
 
   clearPhoto(): void {
+    this.photoError.set('');
     this.avatarUrl.set('');
   }
 
   saveProfile(): void {
     const trimmedName = this.displayName().trim();
     if (!trimmedName) return;
+    const cleanAvatar = this.avatarUrl().trim();
+    if (
+      cleanAvatar &&
+      !/^https?:\/\//i.test(cleanAvatar) &&
+      !/^\/(?!\/)/.test(cleanAvatar) &&
+      !/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(cleanAvatar)
+    ) {
+      this.photoError.set('Avatar URL must start with https://, /, or be a raster image upload.');
+      return;
+    }
+    this.photoError.set('');
     this.authService.updateProfile({
       name: trimmedName,
-      avatar_url: this.avatarUrl().trim(),
+      avatar_url: cleanAvatar,
       avatar_color: this.avatarColor(),
     });
   }

@@ -12,29 +12,38 @@ func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	allowAll := false
 	originMap := make(map[string]bool, len(allowedOrigins))
 	for _, o := range allowedOrigins {
-		if o == "*" {
+		trimmed := strings.TrimSpace(strings.TrimRight(o, "/"))
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "*" {
 			allowAll = true
 		}
-		originMap[strings.TrimRight(o, "/")] = true
+		originMap[trimmed] = true
 	}
 
 	return func(c *gin.Context) {
-		origin := strings.TrimRight(c.GetHeader("Origin"), "/")
+		origin := strings.TrimSpace(strings.TrimRight(c.GetHeader("Origin"), "/"))
+		if !allowAll {
+			c.Writer.Header().Add("Vary", "Origin")
+		}
+
 		if allowAll {
 			c.Header("Access-Control-Allow-Origin", "*")
 		} else if origin != "" && originMap[origin] {
 			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Vary", "Origin")
-		} else if len(allowedOrigins) > 0 {
-			c.Header("Access-Control-Allow-Origin", allowedOrigins[0])
+			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-Goog-Authenticated-User-Id, X-Goog-Authenticated-User-Email, X-Goog-IAP-JWT-Assertion, X-Dev-User-Id, X-Dev-User-Email, X-Dev-User-Name")
-		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "86400")
 
 		if c.Request.Method == http.MethodOptions {
+			if !allowAll && origin != "" && !originMap[origin] {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}

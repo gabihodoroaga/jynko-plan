@@ -20,6 +20,7 @@ import (
 type ItemRepository interface {
 	List(ctx context.Context, projectID string, filter model.WorkItemFilter) ([]model.WorkItem, error)
 	GetByID(ctx context.Context, projectID, itemID string) (*model.WorkItem, error)
+	GetByKey(ctx context.Context, projectID, key string) (*model.WorkItem, error)
 	Create(ctx context.Context, item *model.WorkItem) error
 	Update(ctx context.Context, item *model.WorkItem) error
 	Delete(ctx context.Context, projectID, itemID string) error
@@ -31,18 +32,25 @@ type ItemRepository interface {
 	DeleteSubItem(ctx context.Context, projectID, itemID, subItemID string) error
 
 	ListComments(ctx context.Context, projectID, itemID string) ([]model.Comment, error)
+	GetCommentByID(ctx context.Context, projectID, itemID, commentID string) (*model.Comment, error)
 	CreateComment(ctx context.Context, projectID string, comment *model.Comment) error
 	UpdateComment(ctx context.Context, projectID, itemID, commentID, body string) (*model.Comment, error)
 	DeleteComment(ctx context.Context, projectID, itemID, commentID string) error
 }
 
 type firestoreItemRepository struct {
-	fc *FirestoreClient
+	fc    *FirestoreClient
+	blobs BlobDeleter
 }
 
 // NewItemRepository creates a Firestore-backed ItemRepository.
 func NewItemRepository(fc *FirestoreClient) ItemRepository {
 	return &firestoreItemRepository{fc: fc}
+}
+
+// NewItemRepositoryWithBlobs creates a Firestore-backed ItemRepository that cleans up associated attachment blobs on item delete.
+func NewItemRepositoryWithBlobs(fc *FirestoreClient, blobs BlobDeleter) ItemRepository {
+	return &firestoreItemRepository{fc: fc, blobs: blobs}
 }
 
 func (r *firestoreItemRepository) List(ctx context.Context, projectID string, filter model.WorkItemFilter) ([]model.WorkItem, error) {
@@ -69,6 +77,7 @@ func (r *firestoreItemRepository) List(ctx context.Context, projectID string, fi
 	if filter.LabelID != "" {
 		q = q.Where("label_ids", "array-contains", filter.LabelID)
 	}
+	q = q.Limit(2000)
 
 	items := []model.WorkItem{}
 	iter := q.Documents(ctx)
@@ -114,6 +123,9 @@ func (r *firestoreItemRepository) List(ctx context.Context, projectID string, fi
 }
 
 func (r *firestoreItemRepository) GetByID(ctx context.Context, projectID, itemID string) (*model.WorkItem, error) {
+	if strings.TrimSpace(itemID) == "" || strings.Contains(itemID, "/") {
+		return nil, ErrNotFound
+	}
 	snap, err := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -127,6 +139,34 @@ func (r *firestoreItemRepository) GetByID(ctx context.Context, projectID, itemID
 	}
 	if item.ID == "" {
 		item.ID = snap.Ref.ID
+	}
+	if item.LabelIDs == nil {
+		item.LabelIDs = []string{}
+	}
+	return &item, nil
+}
+
+func (r *firestoreItemRepository) GetByKey(ctx context.Context, projectID, key string) (*model.WorkItem, error) {
+	normalized := strings.ToUpper(strings.TrimSpace(key))
+	if normalized == "" {
+		return nil, ErrNotFound
+	}
+	iter := r.fc.ProjectDoc(projectID).Collection("work_items").Where("key", "==", normalized).Limit(1).Documents(ctx)
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if errors.Is(err, iterator.Done) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var item model.WorkItem
+	if err := doc.DataTo(&item); err != nil {
+		return nil, err
+	}
+	if item.ID == "" {
+		item.ID = doc.Ref.ID
 	}
 	if item.LabelIDs == nil {
 		item.LabelIDs = []string{}
@@ -180,23 +220,91 @@ func (r *firestoreItemRepository) Create(ctx context.Context, item *model.WorkIt
 	})
 }
 
+// Update atomically updates mutable WorkItem fields while preserving authoritative SubItemCount and CompletedSubCount.
 func (r *firestoreItemRepository) Update(ctx context.Context, item *model.WorkItem) error {
-	item.UpdatedAt = time.Now().UTC()
+	itemRef := r.fc.ProjectDoc(item.ProjectID).Collection("work_items").Doc(item.ID)
+	now := time.Now().UTC()
 	if item.LabelIDs == nil {
 		item.LabelIDs = []string{}
 	}
-	_, err := r.fc.ProjectDoc(item.ProjectID).Collection("work_items").Doc(item.ID).Set(ctx, item)
-	return err
+
+	return r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(itemRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
+			}
+			return err
+		}
+		var live model.WorkItem
+		if err := snap.DataTo(&live); err != nil {
+			return err
+		}
+
+		item.SequenceID = live.SequenceID
+		if live.Key != "" {
+			item.Key = live.Key
+		}
+		if !live.CreatedAt.IsZero() {
+			item.CreatedAt = live.CreatedAt
+		}
+		if live.ReporterID != "" {
+			item.ReporterID = live.ReporterID
+		}
+		item.SubItemCount = live.SubItemCount
+		item.CompletedSubCount = live.CompletedSubCount
+		item.UpdatedAt = now
+
+		return tx.Set(itemRef, item)
+	})
 }
 
 func (r *firestoreItemRepository) Delete(ctx context.Context, projectID, itemID string) error {
-	_, err := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Delete(ctx)
-	return err
+	projRef := r.fc.ProjectDoc(projectID)
+	itemRef := projRef.Collection("work_items").Doc(itemID)
+	if _, err := itemRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	bw := r.fc.Client.BulkWriter(ctx)
+	for _, sub := range []string{"sub_items", "comments"} {
+		if err := enqueueCollectionDeletes(ctx, bw, itemRef.Collection(sub)); err != nil {
+			return err
+		}
+	}
+
+	// Clean up attachments linked to this work item
+	attIter := projRef.Collection("attachments").Where("work_item_id", "==", itemID).Documents(ctx)
+	for {
+		attDoc, err := attIter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			attIter.Stop()
+			return err
+		}
+		if r.blobs != nil {
+			var att model.Attachment
+			if err := attDoc.DataTo(&att); err == nil && att.StoragePath != "" {
+				_ = r.blobs.Delete(ctx, att.StoragePath)
+			}
+		}
+		_, _ = bw.Delete(attDoc.Ref)
+	}
+	attIter.Stop()
+
+	_, _ = bw.Delete(itemRef)
+	bw.End()
+	return nil
 }
 
 func (r *firestoreItemRepository) ListSubItems(ctx context.Context, projectID, itemID string) ([]model.SubWorkItem, error) {
 	subItems := []model.SubWorkItem{}
-	iter := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("sub_items").Documents(ctx)
+	iter := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("sub_items").Limit(500).Documents(ctx)
 	defer iter.Stop()
 	for {
 		doc, err := iter.Next()
@@ -293,17 +401,25 @@ func (r *firestoreItemRepository) UpdateSubItem(ctx context.Context, projectID s
 		}
 
 		itemSnap, err := tx.Get(itemRef)
-		if err == nil {
-			var item model.WorkItem
-			if err := itemSnap.DataTo(&item); err == nil {
-				if !oldSub.IsCompleted && subItem.IsCompleted {
-					item.CompletedSubCount++
-				} else if oldSub.IsCompleted && !subItem.IsCompleted && item.CompletedSubCount > 0 {
-					item.CompletedSubCount--
-				}
-				item.UpdatedAt = now
-				_ = tx.Set(itemRef, item)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
 			}
+			return err
+		}
+		var item model.WorkItem
+		if err := itemSnap.DataTo(&item); err != nil {
+			return err
+		}
+
+		if !oldSub.IsCompleted && subItem.IsCompleted {
+			item.CompletedSubCount++
+		} else if oldSub.IsCompleted && !subItem.IsCompleted && item.CompletedSubCount > 0 {
+			item.CompletedSubCount--
+		}
+		item.UpdatedAt = now
+		if err := tx.Set(itemRef, item); err != nil {
+			return err
 		}
 
 		subItem.UpdatedAt = now
@@ -325,19 +441,29 @@ func (r *firestoreItemRepository) DeleteSubItem(ctx context.Context, projectID, 
 			return err
 		}
 		var oldSub model.SubWorkItem
-		_ = oldSnap.DataTo(&oldSub)
+		if err := oldSnap.DataTo(&oldSub); err != nil {
+			return err
+		}
 
-		if itemSnap, err := tx.Get(itemRef); err == nil {
+		itemSnap, err := tx.Get(itemRef)
+		if err != nil {
+			if status.Code(err) != codes.NotFound {
+				return err
+			}
+		} else {
 			var item model.WorkItem
-			if err := itemSnap.DataTo(&item); err == nil {
-				if item.SubItemCount > 0 {
-					item.SubItemCount--
-				}
-				if oldSub.IsCompleted && item.CompletedSubCount > 0 {
-					item.CompletedSubCount--
-				}
-				item.UpdatedAt = now
-				_ = tx.Set(itemRef, item)
+			if err := itemSnap.DataTo(&item); err != nil {
+				return err
+			}
+			if item.SubItemCount > 0 {
+				item.SubItemCount--
+			}
+			if oldSub.IsCompleted && item.CompletedSubCount > 0 {
+				item.CompletedSubCount--
+			}
+			item.UpdatedAt = now
+			if err := tx.Set(itemRef, item); err != nil {
+				return err
 			}
 		}
 		return tx.Delete(subRef)
@@ -346,7 +472,7 @@ func (r *firestoreItemRepository) DeleteSubItem(ctx context.Context, projectID, 
 
 func (r *firestoreItemRepository) ListComments(ctx context.Context, projectID, itemID string) ([]model.Comment, error) {
 	comments := []model.Comment{}
-	iter := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").OrderBy("created_at", firestore.Asc).Documents(ctx)
+	iter := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").OrderBy("created_at", firestore.Asc).Limit(1000).Documents(ctx)
 	defer iter.Stop()
 	for {
 		doc, err := iter.Next()
@@ -368,8 +494,34 @@ func (r *firestoreItemRepository) ListComments(ctx context.Context, projectID, i
 	return comments, nil
 }
 
+func (r *firestoreItemRepository) GetCommentByID(ctx context.Context, projectID, itemID, commentID string) (*model.Comment, error) {
+	snap, err := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").Doc(commentID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	var c model.Comment
+	if err := snap.DataTo(&c); err != nil {
+		return nil, err
+	}
+	if c.ID == "" {
+		c.ID = snap.Ref.ID
+	}
+	return &c, nil
+}
+
 func (r *firestoreItemRepository) CreateComment(ctx context.Context, projectID string, comment *model.Comment) error {
-	col := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(comment.WorkItemID).Collection("comments")
+	itemRef := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(comment.WorkItemID)
+	if _, err := itemRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	col := itemRef.Collection("comments")
 	docRef := col.NewDoc()
 	if comment.ID == "" {
 		comment.ID = docRef.ID
@@ -385,23 +537,41 @@ func (r *firestoreItemRepository) CreateComment(ctx context.Context, projectID s
 
 func (r *firestoreItemRepository) UpdateComment(ctx context.Context, projectID, itemID, commentID, body string) (*model.Comment, error) {
 	docRef := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").Doc(commentID)
-	doc, err := docRef.Get(ctx)
+	now := time.Now().UTC()
+
+	var updated model.Comment
+	err := r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		doc, err := tx.Get(docRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
+			}
+			return err
+		}
+		if err := doc.DataTo(&updated); err != nil {
+			return err
+		}
+		if updated.ID == "" {
+			updated.ID = doc.Ref.ID
+		}
+		updated.Body = body
+		updated.UpdatedAt = now
+		return tx.Set(docRef, &updated)
+	})
 	if err != nil {
 		return nil, err
 	}
-	var comment model.Comment
-	if err := doc.DataTo(&comment); err != nil {
-		return nil, err
-	}
-	comment.Body = body
-	comment.UpdatedAt = time.Now().UTC()
-	if _, err := docRef.Set(ctx, &comment); err != nil {
-		return nil, err
-	}
-	return &comment, nil
+	return &updated, nil
 }
 
 func (r *firestoreItemRepository) DeleteComment(ctx context.Context, projectID, itemID, commentID string) error {
-	_, err := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").Doc(commentID).Delete(ctx)
+	docRef := r.fc.ProjectDoc(projectID).Collection("work_items").Doc(itemID).Collection("comments").Doc(commentID)
+	if _, err := docRef.Get(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return ErrNotFound
+		}
+		return err
+	}
+	_, err := docRef.Delete(ctx)
 	return err
 }

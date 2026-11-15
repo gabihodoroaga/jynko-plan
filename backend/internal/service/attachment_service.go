@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	// MaxAttachmentSize is 25 Megabytes
+	// MaxAttachmentSize is 25 Megabytes.
 	MaxAttachmentSize = 25 * 1024 * 1024
 )
 
@@ -26,6 +26,41 @@ var (
 	ErrAttachmentTooLarge = errors.New("file exceeds maximum size of 25MB")
 	ErrInvalidFileName    = errors.New("invalid or empty file name")
 )
+
+// SafeInlineMIMETypes lists non-scriptable MIME types safe to render inline (excludes text/html and image/svg+xml).
+var safeInlineMIMETypes = map[string]bool{
+	"image/png":       true,
+	"image/jpeg":      true,
+	"image/gif":       true,
+	"image/webp":      true,
+	"image/avif":      true,
+	"application/pdf": true,
+	"text/plain":      true,
+}
+
+// safeMarkdownImageMIMETypes lists raster image MIME types safe to embed via ![alt](url).
+var safeMarkdownImageMIMETypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/gif":  true,
+	"image/webp": true,
+	"image/avif": true,
+}
+
+// IsSafeInlineMIME returns true if contentType (ignoring charset parameters) can be safely rendered inline.
+func IsSafeInlineMIME(contentType string) bool {
+	mediaType := normalizeMediaType(contentType)
+	return safeInlineMIMETypes[mediaType]
+}
+
+func normalizeMediaType(contentType string) string {
+	mt, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err != nil || mt == "" {
+		base := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+		return base
+	}
+	return strings.ToLower(mt)
+}
 
 // AttachmentService handles business logic for project attachments.
 type AttachmentService struct {
@@ -49,13 +84,29 @@ func generateAttachmentID() string {
 
 func sanitizeFileName(name string) string {
 	base := filepath.Base(name)
-	base = strings.ReplaceAll(base, "/", "_")
-	base = strings.ReplaceAll(base, "\\", "_")
-	base = strings.TrimSpace(base)
-	if base == "" || base == "." {
+	replacer := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		"\r", "",
+		"\n", "",
+		"\x00", "",
+		`"`, "_",
+	)
+	base = strings.TrimSpace(replacer.Replace(base))
+	if base == "" || base == "." || base == ".." {
 		return "attachment"
 	}
 	return base
+}
+
+func escapeMarkdownLabel(label string) string {
+	replacer := strings.NewReplacer(
+		"[", "(",
+		"]", ")",
+		"\r", "",
+		"\n", " ",
+	)
+	return replacer.Replace(label)
 }
 
 // PopulateURLAndMarkdown sets URL and Markdown fields on an Attachment.
@@ -65,14 +116,39 @@ func (s *AttachmentService) PopulateURLAndMarkdown(att *model.Attachment) {
 	}
 	url := fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content", att.ProjectID, att.ID)
 	att.URL = url
-	if strings.HasPrefix(strings.ToLower(att.ContentType), "image/") {
-		att.Markdown = fmt.Sprintf("![%s](%s)", att.FileName, url)
+	safeLabel := escapeMarkdownLabel(att.FileName)
+	mediaType := normalizeMediaType(att.ContentType)
+	if safeMarkdownImageMIMETypes[mediaType] {
+		att.Markdown = fmt.Sprintf("![%s](%s)", safeLabel, url)
 	} else {
-		att.Markdown = fmt.Sprintf("[%s](%s)", att.FileName, url)
+		att.Markdown = fmt.Sprintf("[%s](%s)", safeLabel, url)
 	}
 }
 
-// UploadAttachment validates, stores the blob, and saves attachment metadata.
+type countingLimitReader struct {
+	r     io.Reader
+	limit int64
+	n     int64
+}
+
+func (c *countingLimitReader) Read(p []byte) (int, error) {
+	if c.n > c.limit {
+		return 0, ErrAttachmentTooLarge
+	}
+	maxRead := int64(len(p))
+	remaining := (c.limit + 1) - c.n
+	if maxRead > remaining {
+		p = p[:remaining]
+	}
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	if c.n > c.limit {
+		return n, ErrAttachmentTooLarge
+	}
+	return n, err
+}
+
+// UploadAttachment validates, stores the blob with strict stream size enforcement, and saves metadata.
 func (s *AttachmentService) UploadAttachment(
 	ctx context.Context,
 	projectID string,
@@ -88,36 +164,55 @@ func (s *AttachmentService) UploadAttachment(
 	}
 
 	cleanFileName := sanitizeFileName(fileName)
-	if contentType == "" || contentType == "application/octet-stream" {
-		ext := filepath.Ext(cleanFileName)
-		if detected := mime.TypeByExtension(ext); detected != "" {
-			contentType = detected
+	ext := strings.ToLower(filepath.Ext(cleanFileName))
+	detectedByExt := mime.TypeByExtension(ext)
+
+	mediaType := normalizeMediaType(contentType)
+	if mediaType == "" || mediaType == "application/octet-stream" {
+		if detectedByExt != "" {
+			contentType = detectedByExt
 		} else {
 			contentType = "application/octet-stream"
 		}
+	} else if (ext == ".html" || ext == ".htm" || ext == ".svg" || ext == ".xml" || ext == ".xhtml") && safeInlineMIMETypes[mediaType] {
+		// Prevent extension/MIME mismatch tricks (e.g., uploading payload.svg with Content-Type: image/png)
+		contentType = "application/octet-stream"
 	}
 
 	attachmentID := generateAttachmentID()
 	storagePath := fmt.Sprintf("projects/%s/attachments/%s/%s", projectID, attachmentID, cleanFileName)
 
-	if err := s.storage.Save(ctx, storagePath, contentType, reader); err != nil {
+	limitedReader := &countingLimitReader{
+		r:     reader,
+		limit: MaxAttachmentSize,
+	}
+
+	if err := s.storage.Save(ctx, storagePath, contentType, limitedReader); err != nil {
+		_ = s.storage.Delete(ctx, storagePath)
+		if errors.Is(err, ErrAttachmentTooLarge) {
+			return nil, ErrAttachmentTooLarge
+		}
 		return nil, fmt.Errorf("failed to save attachment to storage: %w", err)
+	}
+
+	actualSize := limitedReader.n
+	if actualSize == 0 && sizeBytes > 0 {
+		actualSize = sizeBytes
 	}
 
 	att := &model.Attachment{
 		ID:           attachmentID,
 		ProjectID:    projectID,
-		WorkItemID:   workItemID,
+		WorkItemID:   strings.TrimSpace(workItemID),
 		FileName:     cleanFileName,
 		ContentType:  contentType,
-		SizeBytes:    sizeBytes,
+		SizeBytes:    actualSize,
 		StoragePath:  storagePath,
 		UploadedBy:   uploader.UserID,
 		UploadedName: uploader.Name,
 	}
 
 	if err := s.repo.Create(ctx, att); err != nil {
-		// Attempt rollback in storage if DB fails
 		_ = s.storage.Delete(ctx, storagePath)
 		return nil, fmt.Errorf("failed to save attachment metadata: %w", err)
 	}
@@ -160,9 +255,6 @@ func (s *AttachmentService) DeleteAttachment(ctx context.Context, projectID, att
 		return err
 	}
 
-	if err := s.storage.Delete(ctx, att.StoragePath); err != nil {
-		// Log error, continue removing Firestore metadata
-	}
-
+	_ = s.storage.Delete(ctx, att.StoragePath)
 	return s.repo.Delete(ctx, projectID, attachmentID)
 }

@@ -221,14 +221,16 @@ export class WorkItemSpreadsheetComponent {
     this.workItemService.updateItem(item.id, { priority });
   }
 
-  updateEstimate(item: WorkItem, val: number | null): void {
+  updateEstimate(item: WorkItem, val: number | string | null): void {
+    const cleaned =
+      val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null;
     this.workItemService.updateItem(item.id, {
-      estimate: val !== null && !isNaN(Number(val)) ? Number(val) : undefined,
+      estimate: cleaned,
     });
   }
 
   updateDate(item: WorkItem, field: 'start_date' | 'due_date', value: string): void {
-    const iso = value ? new Date(value + 'T00:00:00Z').toISOString() : undefined;
+    const iso = value ? new Date(value + 'T00:00:00Z').toISOString() : '';
     this.workItemService.updateItem(item.id, { [field]: iso });
   }
 

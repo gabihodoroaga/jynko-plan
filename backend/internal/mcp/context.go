@@ -13,7 +13,14 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 )
 
-// Config holds runtime configuration and active user identity for the MCP server.
+type mcpUserCtxKey struct{}
+
+// WithUserContext attaches a per-request authenticated UserContext to ctx (used in HTTP/SSE mode).
+func WithUserContext(ctx context.Context, user model.UserContext) context.Context {
+	return context.WithValue(ctx, mcpUserCtxKey{}, user)
+}
+
+// Config holds runtime configuration and fallback user identity (for STDIO mode) for the MCP server.
 type Config struct {
 	DefaultProjectID string
 	User             model.UserContext
@@ -33,6 +40,16 @@ func NewResolver(cfg Config, projectRepo repository.ProjectRepository) *Resolver
 	}
 }
 
+// UserFromContext returns the per-request UserContext from ctx if present, falling back to Config.User.
+func (r *Resolver) UserFromContext(ctx context.Context) model.UserContext {
+	if ctx != nil {
+		if u, ok := ctx.Value(mcpUserCtxKey{}).(model.UserContext); ok && u.UserID != "" {
+			return u
+		}
+	}
+	return r.cfg.User
+}
+
 // ResolveProjectID extracts the project_id argument or falls back to Config.DefaultProjectID.
 func (r *Resolver) ResolveProjectID(req mcp.CallToolRequest) (string, error) {
 	projID := req.GetString("project_id", "")
@@ -47,7 +64,7 @@ func (r *Resolver) ResolveProjectID(req mcp.CallToolRequest) (string, error) {
 
 // CheckRole verifies the authenticated user has at least minRole in the specified project.
 func (r *Resolver) CheckRole(ctx context.Context, projectID string, minRole model.ProjectRole) error {
-	user := r.cfg.User
+	user := r.UserFromContext(ctx)
 	if user.UserID == "" {
 		return errors.New("unauthorized: missing agent/user context")
 	}

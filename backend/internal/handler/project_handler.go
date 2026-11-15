@@ -25,7 +25,7 @@ func (h *ProjectHandler) ListProjects(c *gin.Context) {
 	userCtx, _ := middleware.GetUserContext(c)
 	projects, err := h.svc.ListProjectsForUser(c.Request.Context(), userCtx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list projects", err)
 		return
 	}
 	c.JSON(http.StatusOK, projects)
@@ -55,7 +55,7 @@ func (h *ProjectHandler) GetProject(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to get project", err)
 		return
 	}
 	c.JSON(http.StatusOK, proj)
@@ -84,7 +84,11 @@ func (h *ProjectHandler) UpdateProject(c *gin.Context) {
 func (h *ProjectHandler) DeleteProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 	if err := h.svc.DeleteProject(c.Request.Context(), projectID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+			return
+		}
+		respondInternalError(c, "failed to delete project", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -94,7 +98,7 @@ func (h *ProjectHandler) ListMembers(c *gin.Context) {
 	projectID := c.Param("projectId")
 	members, err := h.svc.ListMembers(c.Request.Context(), projectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list project members", err)
 		return
 	}
 	c.JSON(http.StatusOK, members)
@@ -114,6 +118,10 @@ func (h *ProjectHandler) UpsertMember(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
 			return
 		}
+		if errors.Is(err, repository.ErrLastAdmin) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -124,7 +132,15 @@ func (h *ProjectHandler) RemoveMember(c *gin.Context) {
 	projectID := c.Param("projectId")
 	userID := c.Param("userId")
 	if err := h.svc.RemoveMember(c.Request.Context(), projectID, userID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "member not found"})
+			return
+		}
+		if errors.Is(err, repository.ErrLastAdmin) || errors.Is(err, service.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		respondInternalError(c, "failed to remove project member", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "removed"})

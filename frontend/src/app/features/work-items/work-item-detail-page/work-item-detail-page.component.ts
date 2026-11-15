@@ -1,10 +1,11 @@
-import { Component, HostListener, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpEvent, HttpEventType } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { WorkItemService } from '../../../core/services/work-item.service';
 import { ProjectService } from '../../../core/services/project.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { AttachmentService } from '../../../core/services/attachment.service';
 import {
   ALL_PRIORITIES,
@@ -463,6 +464,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                 [attr.data-replicated-value]="item.description || ''"
               >
                 <textarea
+                  #descTextareaRef
                   [ngModel]="item.description"
                   [ngModelOptions]="{ updateOn: 'blur' }"
                   (ngModelChange)="workItemService.updateItem(item.id, { description: $event })"
@@ -561,7 +563,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                       <span class="text-[10px] font-mono text-slate-400">
                         {{ cmt.created_at | date: 'MMM d, HH:mm' }}
                       </span>
-                      @if (projectService.canEdit() && editingCommentId() !== cmt.id) {
+                      @if (canManageComment(cmt) && editingCommentId() !== cmt.id) {
                         <button
                           type="button"
                           (click)="startEditComment(cmt)"
@@ -746,11 +748,13 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
 export class WorkItemDetailPageComponent implements OnInit {
   readonly workItemService = inject(WorkItemService);
   readonly projectService = inject(ProjectService);
+  readonly authService = inject(AuthService);
   private readonly attachmentService = inject(AttachmentService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   readonly attachmentsComp = viewChild<WorkItemAttachmentsComponent>('attachmentsComp');
+  readonly descTextareaRef = viewChild<ElementRef<HTMLTextAreaElement>>('descTextareaRef');
 
   readonly routeItemId = signal<string>('');
   readonly previewDesc = signal<boolean>(false);
@@ -854,8 +858,19 @@ export class WorkItemDetailPageComponent implements OnInit {
   }
 
   onEstimateChange(itemId: string, val: string): void {
-    const parsed = val === '' ? undefined : Number(val);
+    const parsed = val === '' ? null : Number(val);
     this.workItemService.updateItem(itemId, { estimate: parsed });
+  }
+
+  canManageComment(cmt: Comment): boolean {
+    if (!this.projectService.canEdit()) return false;
+    if (this.projectService.isAdmin()) return true;
+    const user = this.authService.currentUser();
+    const author = (cmt.author_id || '').trim().toLowerCase();
+    return (
+      cmt.author_id === user.user_id ||
+      (!!user.email && author === user.email.trim().toLowerCase())
+    );
   }
 
   onStatusChange(itemId: string, status: string): void {
@@ -1063,8 +1078,12 @@ export class WorkItemDetailPageComponent implements OnInit {
     if (target === 'description') {
       const item = this.currentItem();
       if (!item) return;
-      const current = item.description || '';
+      const textareaEl = this.descTextareaRef()?.nativeElement;
+      const current = textareaEl ? textareaEl.value : item.description || '';
       const updated = current ? `${current}${snippet}` : snippet.trimStart();
+      if (textareaEl) {
+        textareaEl.value = updated;
+      }
       this.workItemService.updateItem(itemId, { description: updated });
     } else if (target === 'comment') {
       this.newCommentBody = this.newCommentBody ? `${this.newCommentBody}${snippet}` : snippet.trimStart();
@@ -1077,8 +1096,12 @@ export class WorkItemDetailPageComponent implements OnInit {
     if (target === 'description') {
       const item = this.currentItem();
       if (!item) return;
-      const current = item.description || '';
+      const textareaEl = this.descTextareaRef()?.nativeElement;
+      const current = textareaEl ? textareaEl.value : item.description || '';
       const updated = current.replace(placeholder, replacement);
+      if (textareaEl) {
+        textareaEl.value = updated;
+      }
       this.workItemService.updateItem(itemId, { description: updated });
     } else if (target === 'comment') {
       this.newCommentBody = this.newCommentBody.replace(placeholder, replacement);

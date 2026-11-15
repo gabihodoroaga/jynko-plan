@@ -24,7 +24,7 @@ func (h *LabelHandler) ListLabels(c *gin.Context) {
 	projectID := c.Param("projectId")
 	labels, err := h.svc.List(c.Request.Context(), projectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list labels", err)
 		return
 	}
 	c.JSON(http.StatusOK, labels)
@@ -71,7 +71,11 @@ func (h *LabelHandler) DeleteLabel(c *gin.Context) {
 	projectID := c.Param("projectId")
 	labelID := c.Param("labelId")
 	if err := h.svc.Delete(c.Request.Context(), projectID, labelID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "label not found"})
+			return
+		}
+		respondInternalError(c, "failed to delete label", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

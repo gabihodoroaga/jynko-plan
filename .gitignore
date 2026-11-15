@@ -1,0 +1,43 @@
+# Environment & Secret Files
+.env
+.env.*
+!.env.example
+!backend/.env.example
+iap-settings.yaml
+deploy/iap-settings.yaml
+*service-account*.json
+*credentials*.json
+
+# Local Storage & Runtime Data
+data/
+backend/data/
+tmp/
+/tmp/
+
+# Go Build Artifacts & Test Outputs
+backend/server
+backend/jynko-server
+backend/mcp-server
+backend/ui-validator
+*.exe
+*.test
+*.out
+coverage.txt
+
+# Node / Angular / Firebase Build Artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+.firebase/
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*.log

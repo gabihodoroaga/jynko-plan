@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -20,11 +21,11 @@ func NewEpicService(repo repository.EpicRepository) *EpicService {
 }
 
 type CreateEpicInput struct {
-	Name        string     `json:"name" binding:"required"`
-	Description string     `json:"description"`
-	Status      string     `json:"status"`
-	StartDate   *time.Time `json:"start_date"`
-	TargetDate  *time.Time `json:"target_date"`
+	Name        string  `json:"name" binding:"required"`
+	Description string  `json:"description"`
+	Status      string  `json:"status"`
+	StartDate   *string `json:"start_date"`
+	TargetDate  *string `json:"target_date"`
 }
 
 type UpdateEpicInput struct {
@@ -48,9 +49,31 @@ func (s *EpicService) Create(ctx context.Context, projectID string, input Create
 	if name == "" {
 		return nil, ErrInvalidInput
 	}
-	status := strings.ToUpper(strings.TrimSpace(input.Status))
-	if status == "" {
-		status = model.EpicStatusPlanned
+	status, err := normalizeEpicStatus(input.Status)
+	if err != nil {
+		return nil, err
+	}
+
+	var startDate *time.Time
+	if input.StartDate != nil {
+		parsed, err := parseOptionalDate(*input.StartDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		startDate = parsed
+	}
+
+	var targetDate *time.Time
+	if input.TargetDate != nil {
+		parsed, err := parseOptionalDate(*input.TargetDate)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		targetDate = parsed
+	}
+
+	if startDate != nil && targetDate != nil && targetDate.Before(*startDate) {
+		return nil, errors.New("target_date cannot be before start_date")
 	}
 
 	epic := &model.Epic{
@@ -58,8 +81,8 @@ func (s *EpicService) Create(ctx context.Context, projectID string, input Create
 		Name:        name,
 		Description: strings.TrimSpace(input.Description),
 		Status:      status,
-		StartDate:   input.StartDate,
-		TargetDate:  input.TargetDate,
+		StartDate:   startDate,
+		TargetDate:  targetDate,
 	}
 	if err := s.repo.Create(ctx, epic); err != nil {
 		return nil, err
@@ -83,7 +106,11 @@ func (s *EpicService) Update(ctx context.Context, projectID, epicID string, inpu
 		epic.Description = strings.TrimSpace(*input.Description)
 	}
 	if input.Status != nil {
-		epic.Status = strings.ToUpper(strings.TrimSpace(*input.Status))
+		status, err := normalizeEpicStatus(*input.Status)
+		if err != nil {
+			return nil, err
+		}
+		epic.Status = status
 	}
 	if input.StartDate != nil {
 		parsed, err := parseOptionalDate(*input.StartDate)
@@ -99,6 +126,9 @@ func (s *EpicService) Update(ctx context.Context, projectID, epicID string, inpu
 		}
 		epic.TargetDate = parsed
 	}
+	if epic.StartDate != nil && epic.TargetDate != nil && epic.TargetDate.Before(*epic.StartDate) {
+		return nil, errors.New("target_date cannot be before start_date")
+	}
 	if err := s.repo.Update(ctx, epic); err != nil {
 		return nil, err
 	}
@@ -107,4 +137,17 @@ func (s *EpicService) Update(ctx context.Context, projectID, epicID string, inpu
 
 func (s *EpicService) Delete(ctx context.Context, projectID, epicID string) error {
 	return s.repo.Delete(ctx, projectID, epicID)
+}
+
+func normalizeEpicStatus(raw string) (string, error) {
+	upper := strings.ToUpper(strings.TrimSpace(raw))
+	if upper == "" {
+		return model.EpicStatusPlanned, nil
+	}
+	switch upper {
+	case model.EpicStatusPlanned, model.EpicStatusInProgress, model.EpicStatusCompleted, model.EpicStatusCancelled:
+		return upper, nil
+	default:
+		return "", errors.New("status must be PLANNED, IN_PROGRESS, COMPLETED, or CANCELLED")
+	}
 }

@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
-import { AuthService } from './core/services/auth.service';
+import { AuthService, DevAccountPreset } from './core/services/auth.service';
 import { ProjectService } from './core/services/project.service';
 import { WorkItemService } from './core/services/work-item.service';
 import { PageService } from './core/services/page.service';
@@ -32,6 +32,9 @@ import {
     DropdownComponent,
   ],
   template: `
+    @if (authService.isSignedOut() || isSignedOutRoute()) {
+      <router-outlet />
+    } @else {
     <div class="flex flex-col h-dvh w-full overflow-hidden bg-[#f0f4f9] text-slate-900">
       <!-- Global Top Application Bar (Jynko App Icon on left, Search in center, User on right) -->
       <header class="h-11 px-3 sm:px-3.5 bg-[#f0f4f9] flex items-center justify-between gap-2 sm:gap-4 shrink-0 select-none">
@@ -144,7 +147,7 @@ import {
             <!-- Backdrop to dismiss on outside click -->
             <div
               class="fixed inset-0 z-40"
-              (click)="isUserMenuOpen.set(false)"
+              (click)="isUserMenuOpen.set(false); isSwitchAccountOpen.set(false)"
             ></div>
 
             <!-- Google-Style Account Card Dropdown -->
@@ -178,16 +181,80 @@ import {
                     {{ authService.currentUser().email }}
                   </div>
 
-                  <button
-                    type="button"
-                    (click)="openProfilePage()"
-                    aria-label="Open user profile"
-                    class="mt-3 inline-flex items-center px-4 py-1.5 rounded-full bg-[#1a73e8] hover:bg-[#1557b0] text-white text-xs font-medium transition-colors shadow-sm"
-                  >
-                    Profile
-                  </button>
+                  <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      (click)="openProfilePage()"
+                      aria-label="Open user profile"
+                      class="inline-flex items-center px-3.5 py-1.5 rounded-full bg-[#1a73e8] hover:bg-[#1557b0] text-white text-xs font-medium transition-colors shadow-sm"
+                    >
+                      Profile
+                    </button>
+                    <button
+                      type="button"
+                      (click)="onSwitchAccountClick()"
+                      aria-label="Switch user account"
+                      [attr.aria-expanded]="authService.isDevMode ? isSwitchAccountOpen() : null"
+                      [attr.aria-controls]="authService.isDevMode ? 'user-dropdown-account-switcher' : null"
+                      class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+                    >
+                      <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span>Switch account</span>
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              @if (authService.isDevMode && isSwitchAccountOpen()) {
+                <div
+                  id="user-dropdown-account-switcher"
+                  data-testid="dev-account-switcher-list"
+                  class="border-t border-slate-200 bg-slate-50/70 px-3 py-2.5 space-y-1.5 max-h-60 overflow-y-auto"
+                >
+                  <div class="px-2 flex items-center justify-between">
+                    <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Other accounts (ENV=dev)
+                    </span>
+                  </div>
+                  @for (acc of otherSwitchableAccounts(); track acc.email) {
+                    <button
+                      type="button"
+                      (click)="switchToDevAccount(acc)"
+                      [attr.aria-label]="'Switch to account ' + acc.email"
+                      class="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left hover:bg-white border border-transparent hover:border-slate-200 transition-colors"
+                    >
+                      <span
+                        class="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0"
+                        [style.backgroundColor]="acc.avatar_color || '#0284c7'"
+                      >
+                        {{ (acc.name || acc.email).charAt(0).toUpperCase() }}
+                      </span>
+                      <span class="min-w-0 flex-1">
+                        <span class="block text-xs font-medium text-slate-900 truncate">{{ acc.name }}</span>
+                        <span class="block text-[11px] text-slate-500 truncate">{{ acc.email }}</span>
+                      </span>
+                      @if (acc.badge) {
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600 font-medium shrink-0">
+                          {{ acc.badge }}
+                        </span>
+                      }
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    (click)="openSignedOutChooser()"
+                    aria-label="Use another account"
+                    class="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-medium text-sky-700 hover:bg-white border border-transparent hover:border-slate-200 transition-colors"
+                  >
+                    <span class="w-7 h-7 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-sm font-semibold shrink-0">
+                      +
+                    </span>
+                    <span>Use another account…</span>
+                  </button>
+                </div>
+              }
 
               <!-- Bottom Action Bar: Install App (when in browser tab) + Sign out -->
               <div class="px-5 py-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-2">
@@ -387,7 +454,7 @@ import {
                 <div>
                   <button
                     type="button"
-                    (click)="selectWikiPage('page-welcome')"
+                    (click)="selectWikiHome()"
                     class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 transition-colors text-left"
                   >
                     <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -681,19 +748,21 @@ import {
                 </div>
 
                 <!-- "+ New work item" Outlined Action Button -->
-                <div>
-                  <button
-                    type="button"
-                    (click)="workItemService.isQuickCreateOpen.set(true)"
-                    class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-medium text-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors"
-                  >
-                    <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                      <rect x="4" y="4" width="12" height="14" rx="2" />
-                      <path d="M8 2v2M16 14h6M19 11v6" />
-                    </svg>
-                    <span>New work item</span>
-                  </button>
-                </div>
+                @if (projectService.canEdit()) {
+                  <div>
+                    <button
+                      type="button"
+                      (click)="workItemService.isQuickCreateOpen.set(true)"
+                      class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-medium text-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors"
+                    >
+                      <svg class="w-4 h-4 text-slate-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <rect x="4" y="4" width="12" height="14" rx="2" />
+                        <path d="M8 2v2M16 14h6M19 11v6" />
+                      </svg>
+                      <span>New work item</span>
+                    </button>
+                  </div>
+                }
 
                 <!-- Top Personal Navigation Links: Home, My Work, Stickies (No Drafts) -->
                 <div class="space-y-0.5">
@@ -1191,6 +1260,7 @@ import {
         </div>
       </div>
     </div>
+    }
   `,
 })
 export class AppComponent implements OnInit {
@@ -1249,6 +1319,18 @@ export class AppComponent implements OnInit {
     });
 
     effect(() => {
+      if (this.workItemService.isQuickCreateOpen()) {
+        const pset = this.settingsService.activeProjectSettings();
+        if (ALL_STATUSES.some((s) => s.value === pset.defaultNewItemStatus)) {
+          this.newStatus = pset.defaultNewItemStatus as WorkItemStatus;
+        }
+        if (ALL_PRIORITIES.some((p) => p.value === pset.defaultNewItemPriority)) {
+          this.newPriority = pset.defaultNewItemPriority as WorkItemPriority;
+        }
+      }
+    });
+
+    effect(() => {
       const showToast = this.pwaService.updateAvailable();
       const el = this.pwaToastRef?.nativeElement as (HTMLElement & { showPopover?: () => void; hidePopover?: () => void }) | undefined;
       if (!el || typeof HTMLElement === 'undefined' || !('popover' in HTMLElement.prototype)) {
@@ -1288,18 +1370,56 @@ export class AppComponent implements OnInit {
   newDueDate = '';
 
   readonly isUserMenuOpen = signal<boolean>(false);
+  readonly isSwitchAccountOpen = signal<boolean>(false);
+  readonly isSignedOutRoute = signal<boolean>(false);
+
+  readonly otherSwitchableAccounts = computed<DevAccountPreset[]>(() => {
+    const curr = this.authService.currentUser();
+    const currEmail = (curr.email || '').toLowerCase();
+    const currId = (curr.user_id || '').toLowerCase();
+    const base = [...this.authService.availableDevAccounts()];
+    const seen = new Set(base.map((a) => a.email.toLowerCase()));
+
+    for (const m of this.projectService.members()) {
+      const mEmail = (m.email || '').trim().toLowerCase();
+      if (mEmail && !seen.has(mEmail)) {
+        seen.add(mEmail);
+        base.push({
+          user_id: m.user_id,
+          email: m.email,
+          name: m.name || m.email,
+          avatar_color: '#0284c7',
+          badge: m.role,
+        });
+      }
+    }
+
+    return base.filter(
+      (a) =>
+        a.email.toLowerCase() !== currEmail &&
+        a.user_id.toLowerCase() !== currId
+    );
+  });
 
   ngOnInit(): void {
-    if (typeof window !== 'undefined' && window.location.search.includes('ngsw-bypass')) {
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.search.includes('ngsw-bypass') ||
+        window.location.search.includes('gcp-iap-mode'))
+    ) {
       try {
         const u = new URL(window.location.href);
         u.searchParams.delete('ngsw-bypass');
+        u.searchParams.delete('gcp-iap-mode');
         window.history.replaceState({}, document.title, u.pathname + (u.search ? u.search : '') + u.hash);
       } catch {}
     }
 
-    this.authService.loadCurrentUser();
-    this.projectService.loadProjects();
+    this.isSignedOutRoute.set(this.router.url.startsWith('/signed-out'));
+    if (!this.authService.isSignedOut() && !this.isSignedOutRoute()) {
+      this.authService.loadCurrentUser();
+      this.projectService.loadProjects();
+    }
 
     // Sync activeRailSection with the current route URL
     if (this.router.url.startsWith('/wiki')) {
@@ -1311,6 +1431,7 @@ export class AppComponent implements OnInit {
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
         this.settingsService.closeMobileMenu();
+        this.isSignedOutRoute.set(e.urlAfterRedirects.startsWith('/signed-out'));
         if (e.urlAfterRedirects.startsWith('/wiki')) {
           this.activeRailSection.set('WIKI');
         } else if (e.urlAfterRedirects.startsWith('/settings')) {
@@ -1359,6 +1480,7 @@ export class AppComponent implements OnInit {
   selectProjectOnly(projectId: string): void {
     if (this.projectService.activeProjectId() !== projectId) {
       this.projectService.selectProject(projectId);
+      this.workItemService.clearProjectScopedFilters();
       this.workItemService.loadItems(projectId);
       this.pageService.loadWiki(projectId);
     }
@@ -1367,6 +1489,7 @@ export class AppComponent implements OnInit {
   selectAndToggleProject(projectId: string): void {
     if (this.projectService.activeProjectId() !== projectId) {
       this.projectService.selectProject(projectId);
+      this.workItemService.clearProjectScopedFilters();
       this.workItemService.loadItems(projectId);
       this.pageService.loadWiki(projectId);
       this.expandedProjects.update((m) => ({ ...m, [projectId]: true }));
@@ -1419,6 +1542,17 @@ export class AppComponent implements OnInit {
     this.activeRailSection.set('WIKI');
     this.settingsService.closeMobileMenu();
     this.router.navigate(['/wiki']);
+  }
+
+  selectWikiHome(): void {
+    const welcome =
+      this.pageService.pages().find((p) => p.id === 'page-welcome') ??
+      this.pageService.pages()[0];
+    if (welcome) {
+      this.selectWikiPage(welcome.id);
+    } else if (!this.router.url.startsWith('/wiki')) {
+      this.router.navigate(['/wiki']);
+    }
   }
 
   selectWikiPage(pageId: string): void {
@@ -1514,17 +1648,44 @@ export class AppComponent implements OnInit {
 
   toggleUserMenu(event: Event): void {
     event.stopPropagation();
-    this.isUserMenuOpen.set(!this.isUserMenuOpen());
+    const next = !this.isUserMenuOpen();
+    this.isUserMenuOpen.set(next);
+    if (!next) {
+      this.isSwitchAccountOpen.set(false);
+    }
   }
 
   openProfilePage(): void {
     this.isUserMenuOpen.set(false);
+    this.isSwitchAccountOpen.set(false);
     this.router.navigate(['/profile']);
+  }
+
+  onSwitchAccountClick(): void {
+    if (this.authService.isDevMode) {
+      this.isSwitchAccountOpen.set(!this.isSwitchAccountOpen());
+      return;
+    }
+    this.openSignedOutChooser();
+  }
+
+  switchToDevAccount(acc: DevAccountPreset): void {
+    this.isUserMenuOpen.set(false);
+    this.isSwitchAccountOpen.set(false);
+    this.authService.switchDevUser(acc);
+  }
+
+  openSignedOutChooser(): void {
+    this.isUserMenuOpen.set(false);
+    this.isSwitchAccountOpen.set(false);
+    this.authService.signOut();
+    this.router.navigate(['/signed-out'], { queryParams: { mode: 'switch' } });
   }
 
   signOut(): void {
     this.isUserMenuOpen.set(false);
+    this.isSwitchAccountOpen.set(false);
     this.authService.signOut();
-    this.router.navigate(['/home']);
+    this.router.navigate(['/signed-out']);
   }
 }

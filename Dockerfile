@@ -23,13 +23,18 @@ RUN go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /jynko-server ./cmd/server/main.go
 
-# Stage 3: Minimal Production Container
+# Stage 3: Minimal Non-Root Production Container
 FROM alpine:3.20
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata \
+    && addgroup -S jynko \
+    && adduser -S -u 10001 -G jynko jynko
 
 WORKDIR /app
 COPY --from=backend-builder /jynko-server ./server
 COPY --from=frontend-builder /app/frontend/dist/jynko-frontend/browser ./web
+RUN mkdir -p /app/data/attachments && chown -R jynko:jynko /app
+
+USER jynko
 
 ENV PORT=8080
 ENV STATIC_DIR=/app/web

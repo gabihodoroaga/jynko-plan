@@ -379,6 +379,7 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 
 	page := newViewportPage(browser, url)
 	defer page.MustClose()
+	screenshotTaken := false
 
 	if hasUserBtn, userBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasUserBtn && userBtn != nil {
 		userBtn.MustClick()
@@ -387,11 +388,12 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 		if hasCard, cardEl, _ := page.Has(`[data-testid="user-dropdown-card"]`); hasCard && cardEl != nil {
 			cardText := cardEl.MustText()
 			hasProfileBtn, profileBtn, _ := cardEl.Has(`button[aria-label="Open user profile"]`)
+			hasSwitchAccountBtn, _, _ := cardEl.Has(`button[aria-label="Switch user account"]`)
 			hasInstallPwaBtn, _, _ := cardEl.Has(`button[aria-label="Install Jynko PWA"]`)
 			hasSignOutBtn, _, _ := cardEl.Has(`button[aria-label="Sign out"]`)
 
-			if hasProfileBtn && hasInstallPwaBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
-				res.Assertions = append(res.Assertions, "Top-right user button opens Google-style account card with Name, Email, Profile, Install PWA, and Sign out actions")
+			if hasProfileBtn && hasSwitchAccountBtn && hasInstallPwaBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
+				res.Assertions = append(res.Assertions, "Top-right user button opens Google-style account card with Name, Email, Profile, Switch account, Install PWA, and Sign out actions")
 				profileBtn.MustClick()
 				time.Sleep(300 * time.Millisecond)
 
@@ -411,9 +413,80 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 					res.Passed = false
 					res.Errors = append(res.Errors, fmt.Sprintf("Profile page validation failed: url=%q, hasName=%v, hasReadonly=%v, hasAvatar=%v", profileURL, hasNameInput, hasReadonlyEmail, hasAvatarInput))
 				}
+
+				page.MustScreenshot(res.Screenshot)
+				screenshotTaken = true
+
+				// Verify inline account switching from the top-right user menu
+				if hasMenuAgain, menuBtnAgain, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuAgain && menuBtnAgain != nil {
+					menuBtnAgain.MustClick()
+					time.Sleep(200 * time.Millisecond)
+
+					if hasSwitch, switchBtn, _ := page.Has(`button[aria-label="Switch user account"]`); hasSwitch && switchBtn != nil {
+						switchBtn.MustClick()
+						time.Sleep(200 * time.Millisecond)
+
+						if hasAlice, aliceBtn, _ := page.Has(`button[aria-label="Switch to account alice@jynko.local"]`); hasAlice && aliceBtn != nil {
+							aliceBtn.MustClick()
+							time.Sleep(450 * time.Millisecond)
+
+							emailVal := page.MustEval(`() => {
+								const el = document.querySelector('input[aria-label="Profile email"]');
+								return el ? el.value : '';
+							}`).String()
+							if emailVal == "alice@jynko.local" {
+								res.Assertions = append(res.Assertions, "Clicking 'Switch account' in user menu switches active identity to selected account (alice@jynko.local)")
+							} else {
+								res.Passed = false
+								res.Errors = append(res.Errors, fmt.Sprintf("Expected switched profile email 'alice@jynko.local', got %q", emailVal))
+							}
+						} else {
+							res.Passed = false
+							res.Errors = append(res.Errors, "Missing button[aria-label='Switch to account alice@jynko.local'] after clicking Switch account")
+						}
+					}
+				}
+
+				// Verify Sign out -> /signed-out hides workspace shell and allows choosing a different user to sign back in
+				if hasMenuForSignOut, menuSignOutBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuForSignOut && menuSignOutBtn != nil {
+					menuSignOutBtn.MustClick()
+					time.Sleep(200 * time.Millisecond)
+
+					if hasOut, outBtn, _ := page.Has(`button[aria-label="Sign out"]`); hasOut && outBtn != nil {
+						outBtn.MustClick()
+						time.Sleep(350 * time.Millisecond)
+
+						signedOutURL := page.MustInfo().URL
+						hasSignedOutCard, _, _ := page.Has(`[data-testid="signed-out-card"]`)
+						hasShellHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
+						if strings.Contains(signedOutURL, "/signed-out") && hasSignedOutCard && !hasShellHeader {
+							res.Assertions = append(res.Assertions, "Clicking 'Sign out' navigates to /signed-out, hides workspace shell, and displays account chooser")
+						} else {
+							res.Passed = false
+							res.Errors = append(res.Errors, fmt.Sprintf("Sign out failed: url=%q, hasCard=%v, hasHeader=%v", signedOutURL, hasSignedOutCard, hasShellHeader))
+						}
+
+						if hasSignInDev, signInDevBtn, _ := page.Has(`button[aria-label="Sign in as dev@jynko.local"]`); hasSignInDev && signInDevBtn != nil {
+							signInDevBtn.MustClick()
+							time.Sleep(500 * time.Millisecond)
+
+							restoredURL := page.MustInfo().URL
+							hasRestoredHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
+							if strings.Contains(restoredURL, "/home") && hasRestoredHeader {
+								res.Assertions = append(res.Assertions, "Selecting an account on /signed-out restores authenticated session and workspace shell")
+							} else {
+								res.Passed = false
+								res.Errors = append(res.Errors, fmt.Sprintf("Sign in from /signed-out did not restore /home shell: url=%q, hasHeader=%v", restoredURL, hasRestoredHeader))
+							}
+						} else {
+							res.Passed = false
+							res.Errors = append(res.Errors, "Missing button[aria-label='Sign in as dev@jynko.local'] on /signed-out")
+						}
+					}
+				}
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, "User dropdown card missing expected Name/Email, Profile button, or Sign out button")
+				res.Errors = append(res.Errors, "User dropdown card missing expected Name/Email, Profile, Switch account, or Sign out button")
 			}
 		} else {
 			res.Passed = false
@@ -424,7 +497,9 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing top-right user button[aria-label='Open user menu']")
 	}
 
-	page.MustScreenshot(res.Screenshot)
+	if !screenshotTaken {
+		page.MustScreenshot(res.Screenshot)
+	}
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
@@ -727,6 +802,32 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Priority badges still contain 'll' or 'lll' prefixes")
 	}
 
+	// Verify Calendar & Timeline dynamic navigation controls
+	if hasCalBtn, calBtn, _ := page.Has(`button[aria-label="Switch to Calendar view"]`); hasCalBtn && calBtn != nil {
+		calBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		if hasTodayBtn, _, _ := page.Has(`button[aria-label="Calendar jump to current month"]`); hasTodayBtn {
+			res.Assertions = append(res.Assertions, "Calendar view renders dynamic month header with 'Today' jump control")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Calendar view missing button[aria-label='Calendar jump to current month']")
+		}
+	}
+
+	if hasTlBtn, tlBtn, _ := page.Has(`button[aria-label="Switch to Timeline view"]`); hasTlBtn && tlBtn != nil {
+		tlBtn.MustClick()
+		time.Sleep(200 * time.Millisecond)
+		hasTlPrev, _, _ := page.Has(`button[aria-label="Timeline previous window"]`)
+		hasTlToday, _, _ := page.Has(`button[aria-label="Timeline jump to today"]`)
+		hasTlNext, _, _ := page.Has(`button[aria-label="Timeline next window"]`)
+		if hasTlPrev && hasTlToday && hasTlNext {
+			res.Assertions = append(res.Assertions, "Timeline view renders dynamic date window navigation ('Prev', 'Today', 'Next')")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, fmt.Sprintf("Timeline view missing window controls: prev=%v, today=%v, next=%v", hasTlPrev, hasTlToday, hasTlNext))
+		}
+	}
+
 	// Switch explicitly to Board view to check Kanban columns and configurator
 	if hasBoardBtn, boardBtn, _ := page.Has(`button[aria-label="Switch to Board view"]`); hasBoardBtn && boardBtn != nil {
 		boardBtn.MustClick()
@@ -873,13 +974,14 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 			// Post the comment and verify it renders in discussion list
 			if hasPostBtn, postBtn, _ := detailPage.Has(`button[aria-label="Post comment"]`); hasPostBtn && postBtn != nil {
 				postBtn.MustClick()
-				time.Sleep(300 * time.Millisecond)
+				time.Sleep(350 * time.Millisecond)
 				if hasEditComment, _, _ := detailPage.Has(`button[aria-label="Edit comment"]`); hasEditComment {
 					res.Assertions = append(res.Assertions, "Posted Markdown comment renders formatted HTML and exposes inline 'Edit' action")
 				}
 			}
 		}
 	}
+	cleanupTestComments()
 
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
@@ -952,8 +1054,19 @@ func CheckEpicsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChec
 	hasCreateEpicBtn, _, _ := page.Has(`button[aria-label="Create new epic"]`)
 	hasEditEpicBtn, editEpicBtn, _ := page.Has(`button[aria-label^="Edit epic "]`)
 	hasDeleteEpicBtn, _, _ := page.Has(`button[aria-label^="Delete epic "]`)
-	hasEpicStatusDrop, _, _ := page.Has(`button[aria-label^="Epic status for "]`)
+	hasEpicStatusDrop, epicStatusBtn, _ := page.Has(`button[aria-label^="Epic status for "]`)
+	hasCancelledOption := false
 	hasEditEpicModal := false
+
+	if hasEpicStatusDrop && epicStatusBtn != nil {
+		epicStatusBtn.MustClick()
+		time.Sleep(150 * time.Millisecond)
+		if hasListbox, lb, _ := page.Has(`[role="listbox"]`); hasListbox && lb != nil {
+			hasCancelledOption = strings.Contains(lb.MustText(), "Cancelled")
+		}
+		epicStatusBtn.MustClick()
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	if hasEditEpicBtn && editEpicBtn != nil {
 		editEpicBtn.MustClick()
@@ -965,11 +1078,11 @@ func CheckEpicsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChec
 		}
 	}
 
-	if hasCreateEpicBtn && hasEditEpicBtn && hasDeleteEpicBtn && hasEpicStatusDrop && hasEditEpicModal {
-		res.Assertions = append(res.Assertions, "Epics page renders '+ New Epic', inline status dropdown, 'Delete' confirmation, and 'Edit Strategic Epic' modal")
+	if hasCreateEpicBtn && hasEditEpicBtn && hasDeleteEpicBtn && hasEpicStatusDrop && hasCancelledOption && hasEditEpicModal {
+		res.Assertions = append(res.Assertions, "Epics page renders '+ New Epic', inline status dropdown (including 'Cancelled'), 'Delete' confirmation, and 'Edit Strategic Epic' modal")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Epics page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasStatusDrop=%v, hasEditModal=%v", hasCreateEpicBtn, hasEditEpicBtn, hasDeleteEpicBtn, hasEpicStatusDrop, hasEditEpicModal))
+		res.Errors = append(res.Errors, fmt.Sprintf("Epics page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasStatusDrop=%v, hasCancelled=%v, hasEditModal=%v", hasCreateEpicBtn, hasEditEpicBtn, hasDeleteEpicBtn, hasEpicStatusDrop, hasCancelledOption, hasEditEpicModal))
 	}
 
 	assertFullWidthPageContainer(page, &res, "Epics")
@@ -1281,6 +1394,15 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 						res.Passed = false
 						res.Errors = append(res.Errors, fmt.Sprintf("Project settings were lost after browser reload (expected %v, got %v)", targetChecked, newChecked))
 					}
+
+					// Restore default (false) so test leaves project settings clean
+					if newChecked {
+						page.MustEval(`() => {
+							const el = document.querySelector('input[aria-label="Toggle require point estimate before in progress"]');
+							if (el && el.checked) el.click();
+						}`)
+						time.Sleep(500 * time.Millisecond)
+					}
 				}
 			}
 		} else {
@@ -1398,7 +1520,39 @@ func CheckMobileResponsiveLayout(browser *rod.Browser, baseURL, outDir string) V
 	return res
 }
 
+func e2eBackendBaseURL() string {
+	if v := strings.TrimSpace(os.Getenv("JYNKO_E2E_API_URL")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return "http://localhost:8082"
+}
+
+func cleanupTestComments() {
+	apiBase := e2eBackendBaseURL()
+	resp, err := http.Get(apiBase + "/api/v1/projects/proj-jynko-core/items/item-1/comments")
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	var list []struct {
+		ID      string `json:"id"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return
+	}
+	for _, c := range list {
+		if strings.Contains(c.Content, "Markdown E2E note:") {
+			req, _ := http.NewRequest(http.MethodDelete, apiBase+"/api/v1/projects/proj-jynko-core/items/item-1/comments/"+c.ID, nil)
+			if r, err := http.DefaultClient.Do(req); err == nil {
+				_ = r.Body.Close()
+			}
+		}
+	}
+}
+
 func cleanupTestStickies() {
+	apiBase := e2eBackendBaseURL()
 	seeded := map[string]bool{
 		"sticky-1": true,
 		"sticky-2": true,
@@ -1407,7 +1561,7 @@ func cleanupTestStickies() {
 		"sticky-5": true,
 		"sticky-6": true,
 	}
-	resp, err := http.Get("http://localhost:8082/api/v1/projects/proj-jynko-core/stickies")
+	resp, err := http.Get(apiBase + "/api/v1/projects/proj-jynko-core/stickies")
 	if err != nil {
 		return
 	}
@@ -1420,7 +1574,7 @@ func cleanupTestStickies() {
 	}
 	for _, s := range list {
 		if !seeded[s.ID] {
-			req, _ := http.NewRequest(http.MethodDelete, "http://localhost:8082/api/v1/projects/proj-jynko-core/stickies/"+s.ID, nil)
+			req, _ := http.NewRequest(http.MethodDelete, apiBase+"/api/v1/projects/proj-jynko-core/stickies/"+s.ID, nil)
 			if r, err := http.DefaultClient.Do(req); err == nil {
 				_ = r.Body.Close()
 			}
@@ -1429,7 +1583,8 @@ func cleanupTestStickies() {
 }
 
 func cleanupTestProjectByName(name string) {
-	resp, err := http.Get("http://localhost:8082/api/v1/projects")
+	apiBase := e2eBackendBaseURL()
+	resp, err := http.Get(apiBase + "/api/v1/projects")
 	if err != nil {
 		return
 	}
@@ -1443,7 +1598,7 @@ func cleanupTestProjectByName(name string) {
 	}
 	for _, p := range list {
 		if strings.EqualFold(p.Name, name) {
-			req, _ := http.NewRequest(http.MethodDelete, "http://localhost:8082/api/v1/projects/"+p.ID, nil)
+			req, _ := http.NewRequest(http.MethodDelete, apiBase+"/api/v1/projects/"+p.ID, nil)
 			if r, err := http.DefaultClient.Do(req); err == nil {
 				_ = r.Body.Close()
 			}

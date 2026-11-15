@@ -340,6 +340,7 @@ export class EpicsComponent {
     { value: 'PLANNED', label: 'Planned', dotColor: '#64748b' },
     { value: 'IN_PROGRESS', label: 'In Progress', dotColor: '#d97706' },
     { value: 'COMPLETED', label: 'Completed', dotColor: '#059669' },
+    { value: 'CANCELLED', label: 'Cancelled', dotColor: '#e11d48' },
   ];
 
   private formatDateInput(iso?: string): string {

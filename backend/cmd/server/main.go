@@ -36,6 +36,14 @@ func main() {
 	})
 	slog.SetDefault(appLogger)
 
+	if err := cfg.Validate(); err != nil {
+		slog.Error("invalid server configuration", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	if !cfg.AllowDevAuth() && cfg.IAPAudience == "" {
+		slog.Warn("IAP_AUDIENCE is empty in non-dev mode: relying on Cloud Run GFE IAP headers; set IAP_AUDIENCE for cryptographic JWT verification")
+	}
+
 	ctx := context.Background()
 
 	// Initialize OpenTelemetry Tracing and Metrics pipelines
@@ -65,20 +73,11 @@ func main() {
 		_ = firestoreClient.Close()
 	}()
 
-	if err := repository.EnsureSeedData(ctx, firestoreClient); err != nil {
-		slog.Warn("warning: failed to ensure Firestore seed data", slog.String("error", err.Error()))
+	if cfg.SeedOnStartup {
+		if err := repository.EnsureSeedData(ctx, firestoreClient); err != nil {
+			slog.Warn("warning: failed to ensure Firestore seed data", slog.String("error", err.Error()))
+		}
 	}
-
-	// Repositories
-	projectRepo := repository.NewProjectRepository(firestoreClient)
-	moduleRepo := repository.NewModuleRepository(firestoreClient)
-	epicRepo := repository.NewEpicRepository(firestoreClient)
-	cycleRepo := repository.NewCycleRepository(firestoreClient)
-	labelRepo := repository.NewLabelRepository(firestoreClient)
-	itemRepo := repository.NewItemRepository(firestoreClient)
-	pageRepo := repository.NewPageRepository(firestoreClient)
-	stickyRepo := repository.NewStickyRepository(firestoreClient)
-	attachmentRepo := repository.NewAttachmentRepository(firestoreClient)
 
 	// Storage Provider (local filesystem for dev/e2e, GCS for prd/stg)
 	storageProvider, err := storage.NewStorageProvider(ctx, cfg)
@@ -87,6 +86,18 @@ func main() {
 		os.Exit(1)
 	}
 	defer storageProvider.Close()
+
+	// Repositories
+	projectRepo := repository.NewProjectRepositoryWithBlobs(firestoreClient, storageProvider)
+	moduleRepo := repository.NewModuleRepository(firestoreClient)
+	epicRepo := repository.NewEpicRepository(firestoreClient)
+	cycleRepo := repository.NewCycleRepository(firestoreClient)
+	labelRepo := repository.NewLabelRepository(firestoreClient)
+	itemRepo := repository.NewItemRepositoryWithBlobs(firestoreClient, storageProvider)
+	pageRepo := repository.NewPageRepository(firestoreClient)
+	stickyRepo := repository.NewStickyRepository(firestoreClient)
+	attachmentRepo := repository.NewAttachmentRepository(firestoreClient)
+	profileRepo := repository.NewProfileRepository(firestoreClient)
 
 	// Services
 	projectSvc := service.NewProjectService(projectRepo)
@@ -100,7 +111,7 @@ func main() {
 	attachmentSvc := service.NewAttachmentService(attachmentRepo, storageProvider)
 
 	// Handlers
-	authHandler := handler.NewAuthHandler()
+	authHandler := handler.NewAuthHandlerWithRepo(profileRepo)
 	projectHandler := handler.NewProjectHandler(projectSvc)
 	moduleHandler := handler.NewModuleHandler(moduleSvc)
 	epicHandler := handler.NewEpicHandler(epicSvc)
@@ -129,8 +140,12 @@ func main() {
 	)
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: router,
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {
@@ -171,7 +186,11 @@ func SetupRouter(
 	stickyHandler *handler.StickyHandler,
 	attachmentHandler *handler.AttachmentHandler,
 ) *gin.Engine {
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.New()
+	_ = r.SetTrustedProxies(nil)
 	r.Use(
 		telemetry.GinTracingMiddleware("jynko"),
 		telemetry.HTTPMetricsMiddleware(),
@@ -185,7 +204,11 @@ func SetupRouter(
 	})
 
 	if cfg.EnablePrometheusMetrics {
-		r.GET("/metrics", gin.WrapH(telemetry.PrometheusHandler()))
+		if cfg.AllowDevAuth() {
+			r.GET("/metrics", gin.WrapH(telemetry.PrometheusHandler()))
+		} else {
+			r.GET("/metrics", middleware.IAPAuthMiddleware(cfg), gin.WrapH(telemetry.PrometheusHandler()))
+		}
 	}
 
 	api := r.Group("/api/v1")

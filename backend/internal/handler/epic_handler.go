@@ -24,7 +24,7 @@ func (h *EpicHandler) ListEpics(c *gin.Context) {
 	projectID := c.Param("projectId")
 	epics, err := h.svc.List(c.Request.Context(), projectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list epics", err)
 		return
 	}
 	c.JSON(http.StatusOK, epics)
@@ -71,7 +71,11 @@ func (h *EpicHandler) DeleteEpic(c *gin.Context) {
 	projectID := c.Param("projectId")
 	epicID := c.Param("epicId")
 	if err := h.svc.Delete(c.Request.Context(), projectID, epicID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "epic not found"})
+			return
+		}
+		respondInternalError(c, "failed to delete epic", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

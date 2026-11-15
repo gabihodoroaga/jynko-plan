@@ -1,0 +1,69 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "work_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "label_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "work_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "label_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "priority", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "work_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "label_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "cycle_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "work_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "label_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "epic_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "work_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "label_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "module_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "work_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "label_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "assignee_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collection_id", "order": "ASCENDING" },
+        { "fieldPath": "order", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attachments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "work_item_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

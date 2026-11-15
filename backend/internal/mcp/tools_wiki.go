@@ -108,7 +108,7 @@ func registerWikiTools(s *server.MCPServer, r *Resolver, pageSvc *service.PageSe
 				ParentPageID: req.GetString("parent_page_id", ""),
 			}
 
-			created, err := pageSvc.CreatePage(ctx, projID, r.cfg.User, input)
+			created, err := pageSvc.CreatePage(ctx, projID, r.UserFromContext(ctx), input)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to create wiki page: %v", err)), nil
 			}
@@ -147,7 +147,7 @@ func registerWikiTools(s *server.MCPServer, r *Resolver, pageSvc *service.PageSe
 				input.Content = &v
 			}
 
-			updated, err := pageSvc.UpdatePage(ctx, projID, pageID, r.cfg.User, input)
+			updated, err := pageSvc.UpdatePage(ctx, projID, pageID, r.UserFromContext(ctx), input)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to update wiki page: %v", err)), nil
 			}

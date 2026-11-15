@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { WorkItemService } from '../../../core/services/work-item.service';
 import { ProjectService } from '../../../core/services/project.service';
+import { SettingsService } from '../../../core/services/settings.service';
 import {
   ALL_PRIORITIES,
   ALL_STATUSES,
@@ -35,7 +36,9 @@ import { DropdownComponent, DropdownOption } from '../../../shared/components/dr
             <div class="divide-y divide-slate-200">
               @for (item of group.items; track item.id) {
                 <div
-                  class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-3.5 py-2.5 hover:bg-slate-100/70 transition-colors cursor-pointer"
+                  [attr.data-item-key]="item.key"
+                  class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-3.5 hover:bg-slate-100/70 transition-colors cursor-pointer"
+                  [ngClass]="settingsService.generalSettings().compactTableRows ? 'py-1.5' : 'py-2.5'"
                   (click)="workItemService.openItemDetail(item.id)"
                 >
                   <div class="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -110,6 +113,7 @@ import { DropdownComponent, DropdownOption } from '../../../shared/components/dr
 export class WorkItemListComponent {
   readonly workItemService = inject(WorkItemService);
   readonly projectService = inject(ProjectService);
+  readonly settingsService = inject(SettingsService);
 
   readonly statuses = ALL_STATUSES;
   readonly priorities = ALL_PRIORITIES;

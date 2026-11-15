@@ -26,7 +26,7 @@ func (h *PageHandler) ListPages(c *gin.Context) {
 	collectionID := c.Query("collection_id")
 	pages, err := h.svc.ListPages(c.Request.Context(), projectID, collectionID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list wiki pages", err)
 		return
 	}
 	c.JSON(http.StatusOK, pages)
@@ -41,7 +41,7 @@ func (h *PageHandler) GetPage(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "wiki page not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to get wiki page", err)
 		return
 	}
 	c.JSON(http.StatusOK, page)
@@ -98,16 +98,21 @@ func (h *PageHandler) SetPageLock(c *gin.Context) {
 	projectID := c.Param("projectId")
 	pageID := c.Param("pageId")
 	userCtx, _ := middleware.GetUserContext(c)
+	role, _ := middleware.GetProjectRole(c)
 	var input lockInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	page, err := h.svc.SetPageLock(c.Request.Context(), projectID, pageID, userCtx, input.IsLocked)
+	page, err := h.svc.SetPageLock(c.Request.Context(), projectID, pageID, userCtx, role, input.IsLocked)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "wiki page not found"})
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only a project ADMIN or the page creator can unlock a locked page"})
 			return
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -120,7 +125,15 @@ func (h *PageHandler) DeletePage(c *gin.Context) {
 	projectID := c.Param("projectId")
 	pageID := c.Param("pageId")
 	if err := h.svc.DeletePage(c.Request.Context(), projectID, pageID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "wiki page not found"})
+			return
+		}
+		if errors.Is(err, service.ErrPageLocked) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		respondInternalError(c, "failed to delete wiki page", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -131,7 +144,7 @@ func (h *PageHandler) ListVersions(c *gin.Context) {
 	pageID := c.Param("pageId")
 	versions, err := h.svc.ListVersions(c.Request.Context(), projectID, pageID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list page versions", err)
 		return
 	}
 	c.JSON(http.StatusOK, versions)
@@ -163,7 +176,7 @@ func (h *PageHandler) ListCollections(c *gin.Context) {
 	projectID := c.Param("projectId")
 	collections, err := h.svc.ListCollections(c.Request.Context(), projectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternalError(c, "failed to list collections", err)
 		return
 	}
 	c.JSON(http.StatusOK, collections)
@@ -210,7 +223,15 @@ func (h *PageHandler) DeleteCollection(c *gin.Context) {
 	projectID := c.Param("projectId")
 	collectionID := c.Param("collectionId")
 	if err := h.svc.DeleteCollection(c.Request.Context(), projectID, collectionID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		if errors.Is(err, service.ErrPageLocked) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete collection containing locked pages"})
+			return
+		}
+		respondInternalError(c, "failed to delete collection", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

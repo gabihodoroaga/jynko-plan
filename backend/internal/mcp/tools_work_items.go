@@ -2,15 +2,12 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
-	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
 )
 
@@ -82,25 +79,8 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			// Try by ID first
-			var targetItem *model.WorkItem
-			item, err := itemSvc.GetByID(ctx, projID, keyOrID)
-			if err == nil && item != nil {
-				targetItem = item
-			} else if errors.Is(err, repository.ErrNotFound) || targetItem == nil {
-				// Search by sequential key
-				allItems, listErr := itemSvc.List(ctx, projID, model.WorkItemFilter{})
-				if listErr == nil {
-					for i := range allItems {
-						if strings.EqualFold(allItems[i].Key, keyOrID) {
-							targetItem = &allItems[i]
-							break
-						}
-					}
-				}
-			}
-
-			if targetItem == nil {
+			targetItem, err := itemSvc.GetByIDOrKey(ctx, projID, keyOrID)
+			if err != nil || targetItem == nil {
 				return mcp.NewToolResultError(fmt.Sprintf("work item %q not found in project %q", keyOrID, projID)), nil
 			}
 
@@ -159,7 +139,7 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 				input.Estimate = &est
 			}
 
-			created, err := itemSvc.Create(ctx, projID, r.cfg.User, input)
+			created, err := itemSvc.Create(ctx, projID, r.UserFromContext(ctx), input)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to create work item: %v", err)), nil
 			}
@@ -196,17 +176,9 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			// If key was provided (e.g. HODO-1), resolve to internal Firestore ID
-			itemID := rawID
-			if strings.Contains(rawID, "-") {
-				if items, lErr := itemSvc.List(ctx, projID, model.WorkItemFilter{}); lErr == nil {
-					for _, it := range items {
-						if strings.EqualFold(it.Key, rawID) {
-							itemID = it.ID
-							break
-						}
-					}
-				}
+			targetItem, err := itemSvc.GetByIDOrKey(ctx, projID, rawID)
+			if err != nil || targetItem == nil {
+				return mcp.NewToolResultError(fmt.Sprintf("work item %q not found in project %q", rawID, projID)), nil
 			}
 
 			input := service.UpdateWorkItemInput{}
@@ -235,11 +207,19 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 			if v, ok := args["module_id"].(string); ok {
 				input.ModuleID = &v
 			}
-			if est := req.GetInt("estimate", -1); est >= 0 {
-				input.Estimate = &est
+			if rawEst, exists := args["estimate"]; exists {
+				if rawEst == nil {
+					input.Estimate = service.OptionalInt{Set: true, Value: nil}
+				} else if est := req.GetInt("estimate", -1); est >= 0 {
+					if est == 0 {
+						input.Estimate = service.OptionalInt{Set: true, Value: nil}
+					} else {
+						input.Estimate = service.OptionalInt{Set: true, Value: &est}
+					}
+				}
 			}
 
-			updated, err := itemSvc.Update(ctx, projID, itemID, input)
+			updated, err := itemSvc.Update(ctx, projID, targetItem.ID, input)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to update work item: %v", err)), nil
 			}
@@ -272,19 +252,12 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			itemID := rawID
-			if strings.Contains(rawID, "-") {
-				if items, lErr := itemSvc.List(ctx, projID, model.WorkItemFilter{}); lErr == nil {
-					for _, it := range items {
-						if strings.EqualFold(it.Key, rawID) {
-							itemID = it.ID
-							break
-						}
-					}
-				}
+			targetItem, err := itemSvc.GetByIDOrKey(ctx, projID, rawID)
+			if err != nil || targetItem == nil {
+				return mcp.NewToolResultError(fmt.Sprintf("work item %q not found in project %q", rawID, projID)), nil
 			}
 
-			comment, err := itemSvc.CreateComment(ctx, projID, itemID, r.cfg.User, service.CreateCommentInput{Body: body})
+			comment, err := itemSvc.CreateComment(ctx, projID, targetItem.ID, r.UserFromContext(ctx), service.CreateCommentInput{Body: body})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to post comment: %v", err)), nil
 			}
@@ -317,19 +290,12 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			itemID := rawID
-			if strings.Contains(rawID, "-") {
-				if items, lErr := itemSvc.List(ctx, projID, model.WorkItemFilter{}); lErr == nil {
-					for _, it := range items {
-						if strings.EqualFold(it.Key, rawID) {
-							itemID = it.ID
-							break
-						}
-					}
-				}
+			targetItem, err := itemSvc.GetByIDOrKey(ctx, projID, rawID)
+			if err != nil || targetItem == nil {
+				return mcp.NewToolResultError(fmt.Sprintf("work item %q not found in project %q", rawID, projID)), nil
 			}
 
-			sub, err := itemSvc.CreateSubItem(ctx, projID, itemID, service.CreateSubItemInput{Title: title})
+			sub, err := itemSvc.CreateSubItem(ctx, projID, targetItem.ID, service.CreateSubItemInput{Title: title})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to add sub-item: %v", err)), nil
 			}
@@ -367,19 +333,12 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			itemID := rawID
-			if strings.Contains(rawID, "-") {
-				if items, lErr := itemSvc.List(ctx, projID, model.WorkItemFilter{}); lErr == nil {
-					for _, it := range items {
-						if strings.EqualFold(it.Key, rawID) {
-							itemID = it.ID
-							break
-						}
-					}
-				}
+			targetItem, err := itemSvc.GetByIDOrKey(ctx, projID, rawID)
+			if err != nil || targetItem == nil {
+				return mcp.NewToolResultError(fmt.Sprintf("work item %q not found in project %q", rawID, projID)), nil
 			}
 
-			updated, err := itemSvc.UpdateSubItem(ctx, projID, itemID, subID, service.UpdateSubItemInput{IsCompleted: &isCompleted})
+			updated, err := itemSvc.UpdateSubItem(ctx, projID, targetItem.ID, subID, service.UpdateSubItemInput{IsCompleted: &isCompleted})
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to update sub-item: %v", err)), nil
 			}

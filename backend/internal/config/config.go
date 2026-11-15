@@ -12,11 +12,14 @@ import (
 type Config struct {
 	Port                    string
 	Env                     string
+	RawEnv                  string
 	ProjectPrefix           string
 	ProjectsCollection      string
 	GoogleCloudProject      string
 	FirestoreDatabaseID     string
 	IAPAudience             string
+	IAPRequireJWT           bool
+	SeedOnStartup           bool
 	DevUserID               string
 	DevUserEmail            string
 	DevUserName             string
@@ -38,6 +41,17 @@ const (
 	EnvStg = "stg"
 	EnvDev = "dev"
 )
+
+// ValidateEnv checks that a non-empty environment value is strictly "prd", "stg", or "dev".
+func ValidateEnv(raw string) error {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	switch trimmed {
+	case "", EnvPrd, EnvStg, EnvDev:
+		return nil
+	default:
+		return fmt.Errorf("invalid ENV %q: must be one of %q, %q, or %q", raw, EnvPrd, EnvStg, EnvDev)
+	}
+}
 
 // ParseEnv validates and aligns the environment string strictly to "prd", "stg", or "dev".
 // Default is "dev". No other variations (such as prod or production) are allowed.
@@ -79,9 +93,11 @@ func Load() *Config {
 		}
 	}
 
+	rawEnv, _ := os.LookupEnv("ENV")
 	envVal := ParseEnv(getEnv("ENV", EnvDev))
 	defaultLogFormat := "json"
 	isPrd := envVal == EnvPrd
+	isDev := envVal == EnvDev && ValidateEnv(rawEnv) == nil
 
 	projectPrefix := getEnv("PROJECT_PREFIX", "jp")
 	projectsCol := getEnv("PROJECTS_COLLECTION", "")
@@ -89,14 +105,23 @@ func Load() *Config {
 		projectsCol = DeriveProjectsCollection(projectPrefix, envVal)
 	}
 
+	defaultGCPProject := ""
+	if isDev {
+		defaultGCPProject = "codelab1-244421"
+	}
+	iapAudience := getEnv("IAP_AUDIENCE", "")
+
 	return &Config{
 		Port:                    getEnv("PORT", "8082"),
 		Env:                     envVal,
+		RawEnv:                  strings.TrimSpace(rawEnv),
 		ProjectPrefix:           projectPrefix,
 		ProjectsCollection:      projectsCol,
-		GoogleCloudProject:      getEnv("GOOGLE_CLOUD_PROJECT", "codelab1-244421"),
+		GoogleCloudProject:      getEnv("GOOGLE_CLOUD_PROJECT", defaultGCPProject),
 		FirestoreDatabaseID:     getEnv("FIRESTORE_DATABASE_ID", "(default)"),
-		IAPAudience:             getEnv("IAP_AUDIENCE", ""),
+		IAPAudience:             iapAudience,
+		IAPRequireJWT:           getEnvBool("IAP_REQUIRE_JWT", iapAudience != ""),
+		SeedOnStartup:           getEnvBool("SEED_ON_STARTUP", isDev),
 		DevUserID:               getEnv("DEV_USER_ID", "dev-user-1"),
 		DevUserEmail:            getEnv("DEV_USER_EMAIL", "dev@jynko.local"),
 		DevUserName:             getEnv("DEV_USER_NAME", "Local Developer"),
@@ -111,6 +136,25 @@ func Load() *Config {
 		EnablePrometheusMetrics: getEnvBool("ENABLE_PROMETHEUS_METRICS", true),
 		OTelSampleRatio:         getEnvFloat("OTEL_SAMPLE_RATIO", 1.0),
 	}
+}
+
+// Validate checks startup invariants and fails closed on misconfiguration.
+func (c *Config) Validate() error {
+	if err := ValidateEnv(c.RawEnv); err != nil {
+		return err
+	}
+	if !c.AllowDevAuth() && strings.TrimSpace(c.GoogleCloudProject) == "" {
+		return fmt.Errorf("GOOGLE_CLOUD_PROJECT must be set when ENV=%q", c.Env)
+	}
+	return nil
+}
+
+// AllowDevAuth returns true strictly when ENV is unset or explicitly "dev" (never on typos like "production").
+func (c *Config) AllowDevAuth() bool {
+	if c == nil || c.Env != EnvDev {
+		return false
+	}
+	return ValidateEnv(c.RawEnv) == nil
 }
 
 // IsPrd returns true when running in prd mode.

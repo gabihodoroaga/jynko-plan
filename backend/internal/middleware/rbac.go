@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -32,6 +33,22 @@ func RequireProjectRole(projectRepo repository.ProjectRepository, minRole model.
 			if err != nil || member == nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access denied: not a member of this project"})
 				return
+			}
+			// Reconcile email-invited member document to canonical IAP UserID on first login
+			if member.UserID != userCtx.UserID && !strings.Contains(userCtx.UserID, "/") {
+				resolvedName := member.Name
+				if userCtx.Name != "" && (resolvedName == "" || strings.EqualFold(resolvedName, member.Email)) {
+					resolvedName = userCtx.Name
+				}
+				reconciled := &model.ProjectMember{
+					UserID:   userCtx.UserID,
+					Email:    strings.ToLower(strings.TrimSpace(userCtx.Email)),
+					Name:     resolvedName,
+					Role:     member.Role,
+					JoinedAt: member.JoinedAt,
+				}
+				_ = projectRepo.UpsertMember(c.Request.Context(), projectID, reconciled)
+				member = reconciled
 			}
 		}
 
