@@ -25,9 +25,9 @@ steps:
 
   # ----------------------------------------------------------------------------
   # Step 3: Resolve Target Environment by Branch & Deploy to Google Cloud Run
-  #   - main                  -> prd (jynko-plan-prd, jp-prd-projects)
-  #   - stg                   -> stg (jynko-plan-stg, jp-stg-projects)
-  #   - dev & feature/*       -> dev (jynko-plan-dev, jp-dev-projects)
+  #   - main -> prd (jynko-plan-prd, jp-prd-projects)
+  #   - stg  -> stg (jynko-plan-stg, jp-stg-projects)
+  #   - dev  -> dev (jynko-plan-dev, jp-dev-projects)
   # ----------------------------------------------------------------------------
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-cloud-run'
@@ -47,8 +47,12 @@ steps:
             stg)
               TARGET_ENV="stg"
               ;;
-            *)
+            dev)
               TARGET_ENV="dev"
+              ;;
+            *)
+              echo "ERROR: Branch '$$BRANCH' does not map to a deployable environment (expected main, stg, or dev)." >&2
+              exit 1
               ;;
           esac
         else
@@ -69,6 +73,10 @@ steps:
             fi
             if [ "$$TARGET_ENV" = "stg" ] && [ "$$BRANCH" != "stg" ]; then
               echo "ERROR: Branch '$$BRANCH' is not allowed to deploy to stg (expected 'stg')." >&2
+              exit 1
+            fi
+            if [ "$$TARGET_ENV" = "dev" ] && [ "$$BRANCH" != "dev" ]; then
+              echo "ERROR: Branch '$$BRANCH' is not allowed to deploy to dev (expected 'dev')." >&2
               exit 1
             fi
           fi

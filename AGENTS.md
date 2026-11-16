@@ -145,7 +145,7 @@ JYNKO_E2E_IAP_AUDIENCE="/projects/<PROJECT_NUM>/locations/europe-west3/services/
 ```
 
 ### Multi-Environment Branch & Deployment Workflow (`dev` -> `stg` -> `prd`)
-- **`dev` + feature branches (`feat/*`, `fix/*`, `chore/*`)**: Deploy to Cloud Run `jynko-plan-dev` (`ENV=dev`, Firestore `jp-dev-projects`, GCS prefix `dev/`). Used by developers and AI agents to build and test features.
+- **`dev` branch**: Deploys to Cloud Run `jynko-plan-dev` (`ENV=dev`, Firestore `jp-dev-projects`, GCS prefix `dev/`). Feature branches (`feat/*`, `fix/*`, `chore/*`) do not have Cloud Build triggers and are merged into `dev` when ready to deploy and test on `jynko-plan-dev`.
 - **`stg` branch**: Pre-release environment (`jynko-plan-stg`, `ENV=stg`, Firestore `jp-stg-projects`, GCS prefix `stg/`). Merge `dev -> stg` and validate end-to-end before promoting to production.
 - **`main` branch**: Production environment (`jynko-plan-prd`, `ENV=prd`, Firestore `jp-prd-projects`). Only merge `stg -> main` after `stg` validation succeeds.
 - On Cloud Run (`K_SERVICE` set), `ALLOW_DEV_AUTH` defaults to `false` even when `ENV=dev`, so all deployed Cloud Run services enforce Google Cloud IAP / OIDC authentication.

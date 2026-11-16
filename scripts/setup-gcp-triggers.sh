@@ -2,10 +2,11 @@
 # ==============================================================================
 # Jynko — Multi-Environment Cloud Build Triggers & Cloud Run IAP Provisioner
 # ==============================================================================
-# Configures three branch-routed Cloud Build triggers:
-#   1. dev : dev + all feature branches (--branch-pattern="^(main|stg)$" --invert-regex) -> jynko-plan-dev
-#   2. stg : ^stg$                                                                       -> jynko-plan-stg
-#   3. prd : ^main$                                                                      -> jynko-plan-prd
+# Configures strictly three branch-routed Cloud Build triggers (no triggers for
+# feature branches):
+#   1. dev : ^dev$   -> jynko-plan-dev
+#   2. stg : ^stg$   -> jynko-plan-stg
+#   3. prd : ^main$  -> jynko-plan-prd
 #
 # Usage:
 #   PROJECT_ID=aparaturafiscala-178410 ./scripts/setup-gcp-triggers.sh
@@ -45,8 +46,7 @@ echo "==> Project: ${PROJECT_ID} (#${PROJECT_NUM}), Region: ${REGION}"
 upsert_csr_trigger() {
   local env_name="$1"
   local branch_pattern="$2"
-  local invert_flag="$3"
-  local approval_flag="$4"
+  local approval_flag="$3"
 
   local trigger_name="${SERVICE_NAME}-${env_name}"
   local target_service="${SERVICE_NAME}-${env_name}"
@@ -62,7 +62,7 @@ upsert_csr_trigger() {
     return 0
   fi
 
-  echo "==> Creating Cloud Source Repository trigger '${trigger_name}' -> ${target_service}..."
+  echo "==> Creating Cloud Source Repository trigger '${trigger_name}' (${branch_pattern}) -> ${target_service}..."
   local cmd=(
     gcloud builds triggers create cloud-source-repositories
     "--project=${PROJECT_ID}"
@@ -74,9 +74,6 @@ upsert_csr_trigger() {
     "--service-account=${BUILDER_SA_RESOURCE}"
     "--substitutions=${subs}"
   )
-  if [ "${invert_flag}" = "true" ]; then
-    cmd+=("--invert-regex")
-  fi
   if [ "${approval_flag}" = "true" ]; then
     cmd+=("--require-approval")
   fi
@@ -84,14 +81,15 @@ upsert_csr_trigger() {
   "${cmd[@]}"
 }
 
-# 1. dev: dev branch + all feature branches (anything except main and stg)
-upsert_csr_trigger "dev" "^(main|stg)$" "true" "false"
+# Strictly 3 branch triggers (no build triggers for feature branches):
+# 1. dev: dev branch only
+upsert_csr_trigger "dev" "^dev$" "false"
 
 # 2. stg: stg branch only (pre-release validation)
-upsert_csr_trigger "stg" "^stg$" "false" "false"
+upsert_csr_trigger "stg" "^stg$" "false"
 
 # 3. prd: main branch only (production)
-upsert_csr_trigger "prd" "^main$" "false" "${REQUIRE_PRD_APPROVAL}"
+upsert_csr_trigger "prd" "^main$" "${REQUIRE_PRD_APPROVAL}"
 
 # Configure IAP Service Agent invoker binding (and optional iap-settings.yaml) on any deployed services
 for env_name in dev stg prd; do
@@ -117,4 +115,4 @@ for env_name in dev stg prd; do
   fi
 done
 
-echo "==> Multi-environment triggers ready (${SERVICE_NAME}-dev, ${SERVICE_NAME}-stg, ${SERVICE_NAME}-prd)."
+echo "==> Multi-environment triggers ready (${SERVICE_NAME}-dev [dev], ${SERVICE_NAME}-stg [stg], ${SERVICE_NAME}-prd [main])."

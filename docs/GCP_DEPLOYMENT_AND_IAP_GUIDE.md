@@ -204,14 +204,14 @@ gcloud builds submit --config=cloudbuild.yaml \
 
 Jynko uses a strict three-environment branch promotion flow backed by `cloudbuild.yaml`:
 
-| Environment | Git Branches | Cloud Run Service | Firestore Root Collection | GCS Prefix | Purpose |
+| Environment | Git Branch | Cloud Run Service | Firestore Root Collection | GCS Prefix | Purpose |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`dev`** | `dev` + all feature branches (`^(main\|stg)$` inverted) | `jynko-plan-dev` | `jp-dev-projects` | `dev/` | Live integration & E2E testing by developers and AI agents |
+| **`dev`** | `dev` (`^dev$`) | `jynko-plan-dev` | `jp-dev-projects` | `dev/` | Live integration & E2E testing by developers and AI agents (feature branches merge into `dev`) |
 | **`stg`** | `stg` (`^stg$`) | `jynko-plan-stg` | `jp-stg-projects` | `stg/` | Pre-release QA gate (`git checkout stg && git merge dev`) |
 | **`prd`** | `main` (`^main$`) | `jynko-plan-prd` | `jp-prd-projects` | `""` | Production release (`git checkout main && git merge stg`) |
 
 > [!IMPORTANT]
-> `cloudbuild.yaml` includes built-in branch protection: `_ENV_PREFIX` defaults to `auto` (`main -> prd`, `stg -> stg`, everything else `-> dev`), and even if `_ENV_PREFIX` is explicitly set, Step 3 refuses to deploy a non-`main` branch to `prd` or a non-`stg` branch to `stg` unless `_ALLOW_BRANCH_OVERRIDE=true`.
+> Only `dev`, `stg`, and `main` have Cloud Build triggers (feature branches do not trigger builds). `cloudbuild.yaml` also enforces strict 1-to-1 branch protection (`dev -> dev`, `stg -> stg`, `main -> prd`) unless `_ALLOW_BRANCH_OVERRIDE=true`.
 
 ### Automated Trigger Setup Script (`scripts/setup-gcp-triggers.sh`)
 Provision all three Cloud Build triggers (`jynko-plan-dev`, `jynko-plan-stg`, `jynko-plan-prd`) and grant IAP Service Agent `roles/run.invoker` on each deployed service in one command:
@@ -232,12 +232,11 @@ IAP_SETTINGS_FILE=iap-settings.yaml \
    ```bash
    export SERVICE_BASE="jynko-plan"
 
-   # 1. DEV: dev branch + all feature branches (inverted regex excluding main & stg)
+   # 1. DEV: dev branch only
    gcloud builds triggers create cloud-source-repositories \
      --name="${SERVICE_BASE}-dev" \
      --repo="jynko-plan" \
-     --branch-pattern="^(main|stg)$" \
-     --invert-regex \
+     --branch-pattern="^dev$" \
      --build-config="cloudbuild.yaml" \
      --region=$REGION \
      --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
@@ -265,7 +264,7 @@ IAP_SETTINGS_FILE=iap-settings.yaml \
    ```
 
 ### Option B: Triggers from GitHub (Cloud Build 2nd Gen)
-Follow the exact same 3-trigger structure (`--branch-pattern="^(main|stg)$" --invert-regex` for `dev`, `^stg$` for `stg`, `^main$` for `prd`) using `gcloud builds triggers create github --repo-name="jynko-plan" --repo-owner="gabihodoroaga" ...`.
+Follow the exact same 3-trigger structure (`^dev$` for `dev`, `^stg$` for `stg`, `^main$` for `prd`) using `gcloud builds triggers create github --repo-name="jynko-plan" --repo-owner="gabihodoroaga" ...`.
 
 ### Validating Deployed `dev` and `stg` Environments with Go-Rod E2E
 Once `programmaticClients` is configured on `jynko-plan-dev` and `jynko-plan-stg` via `iap-settings.yaml`, both developers and AI coding agents can run the full 15-suite Go-Rod E2E validator directly against the live Cloud Run URL:
