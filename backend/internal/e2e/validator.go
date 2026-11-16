@@ -934,6 +934,54 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 	}
 
 	page.MustScreenshot(res.Screenshot)
+
+	// Verify Create work item dialog: title 'Create work item', Cycle dropdown option, and default Estimate = 1
+	if hasCreateBtn, createBtn, _ := page.Has(`[data-testid="open-create-work-item-btn"]`); hasCreateBtn && createBtn != nil {
+		createBtn.MustClick()
+		time.Sleep(250 * time.Millisecond)
+
+		if hasModal, modalEl, _ := page.Has(`dialog[open]`); hasModal && modalEl != nil {
+			modalTitle := ""
+			if hasH2, h2El, _ := modalEl.Has("h2"); hasH2 && h2El != nil {
+				modalTitle = strings.TrimSpace(h2El.MustText())
+			}
+			hasCycleDrop, cycleDropBtn, _ := modalEl.Has(`button[aria-label="New work item cycle"]`)
+			hasCycleOptions := false
+			if hasCycleDrop && cycleDropBtn != nil {
+				cycleDropBtn.MustClick()
+				time.Sleep(150 * time.Millisecond)
+				if hasListbox, lbEl, _ := modalEl.Has(`[role="listbox"]`); hasListbox && lbEl != nil {
+					lbText := lbEl.MustText()
+					hasCycleOptions = strings.Contains(lbText, "No cycle") && len(strings.Split(strings.TrimSpace(lbText), "\n")) >= 2
+				}
+				cycleDropBtn.MustClick()
+				time.Sleep(100 * time.Millisecond)
+			}
+			estimateVal := modalEl.MustEval(`() => {
+				const el = this.querySelector('input#quick-create-estimate');
+				return el ? el.value : '';
+			}`).String()
+
+			if modalTitle == "Create work item" && hasCycleDrop && hasCycleOptions && estimateVal == "1" {
+				res.Assertions = append(res.Assertions, "Create work item dialog renders title 'Create work item', Cycle dropdown with project cycles, and default Estimate = 1")
+			} else {
+				res.Passed = false
+				res.Errors = append(res.Errors, fmt.Sprintf("Create work item modal check failed: title=%q, hasCycleDrop=%v, hasCycleOptions=%v, estimate=%q", modalTitle, hasCycleDrop, hasCycleOptions, estimateVal))
+			}
+
+			if hasClose, closeBtn, _ := modalEl.Has(`button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+				closeBtn.MustClick()
+				time.Sleep(150 * time.Millisecond)
+			}
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Clicking 'New work item' did not open dialog[open]")
+		}
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing [data-testid='open-create-work-item-btn'] button")
+	}
+
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }

@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -771,6 +771,7 @@ import {
                   <div>
                     <button
                       type="button"
+                      data-testid="open-create-work-item-btn"
                       (click)="workItemService.isQuickCreateOpen.set(true)"
                       class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-medium text-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors"
                     >
@@ -999,14 +1000,15 @@ import {
       <!-- Global Quick Create Work Item Modal -->
       <app-modal
         [isOpen]="workItemService.isQuickCreateOpen()"
-        title="Create New Work Item"
+        title="Create work item"
         maxWidth="max-w-2xl"
         (closed)="workItemService.isQuickCreateOpen.set(false)"
       >
         <form (ngSubmit)="submitQuickCreate()" class="space-y-3.5">
           <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Title</label>
+            <label for="quick-create-title" class="block text-xs font-medium text-slate-700 mb-1">Title</label>
             <input
+              id="quick-create-title"
               type="text"
               name="title"
               [(ngModel)]="newTitle"
@@ -1017,51 +1019,66 @@ import {
           </div>
 
           <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description (Markdown)</label>
+            <label for="quick-create-description" class="block text-xs font-medium text-slate-700 mb-1">Description (Markdown)</label>
             <div
               class="growable-textarea text-xs font-mono leading-relaxed"
               [attr.data-replicated-value]="newDescription || ''"
             >
               <textarea
+                id="quick-create-description"
                 name="description"
                 [(ngModel)]="newDescription"
                 (input)="syncGrowableTextarea($event)"
-                aria-label="New work item description"
                 placeholder="Describe acceptance criteria and technical details..."
                 class="auto-grow-description w-full min-h-[160px] max-h-[200vh] px-3 py-2 text-xs font-mono leading-relaxed border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 resize-y"
               ></textarea>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label class="block text-[11px] font-medium text-slate-600 mb-1">Status</label>
+              <span class="block text-[11px] font-medium text-slate-600 mb-1">Status</span>
               <app-dropdown
                 [options]="statusOptions"
                 [value]="newStatus"
                 (valueChange)="onNewStatusChange($event)"
+                ariaLabel="New work item status"
                 [fullWidth]="true"
               ></app-dropdown>
             </div>
 
             <div>
-              <label class="block text-[11px] font-medium text-slate-600 mb-1">Priority</label>
+              <span class="block text-[11px] font-medium text-slate-600 mb-1">Priority</span>
               <app-dropdown
                 [options]="priorityOptions"
                 [value]="newPriority"
                 (valueChange)="onNewPriorityChange($event)"
+                ariaLabel="New work item priority"
                 [fullWidth]="true"
               ></app-dropdown>
             </div>
 
             <div>
-              <label class="block text-[11px] font-medium text-slate-600 mb-1">Estimate (pts)</label>
+              <span class="block text-[11px] font-medium text-slate-600 mb-1">Cycle</span>
+              <app-dropdown
+                [options]="cycleOptions()"
+                [value]="newCycleId"
+                emptyLabel="No cycle"
+                (valueChange)="onNewCycleChange($event)"
+                ariaLabel="New work item cycle"
+                [fullWidth]="true"
+              ></app-dropdown>
+            </div>
+
+            <div>
+              <label for="quick-create-estimate" class="block text-[11px] font-medium text-slate-600 mb-1">Estimate (pts)</label>
               <input
+                id="quick-create-estimate"
                 type="number"
                 name="estimate"
                 [(ngModel)]="newEstimate"
                 min="0"
-                class="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5"
+                class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-slate-300"
               />
             </div>
           </div>
@@ -1069,7 +1086,7 @@ import {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="block text-[11px] font-medium text-slate-600">
+                <label for="quick-create-start-date" class="block text-[11px] font-medium text-slate-600">
                   Start Date <span class="font-normal text-slate-400">(optional)</span>
                 </label>
                 @if (newStartDate) {
@@ -1083,16 +1100,16 @@ import {
                 }
               </div>
               <input
+                id="quick-create-start-date"
                 type="date"
                 name="startDate"
                 [(ngModel)]="newStartDate"
-                aria-label="New work item start date"
-                class="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5"
+                class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-slate-300"
               />
             </div>
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="block text-[11px] font-medium text-slate-600">
+                <label for="quick-create-due-date" class="block text-[11px] font-medium text-slate-600">
                   Due Date <span class="font-normal text-slate-400">(optional)</span>
                 </label>
                 @if (newDueDate) {
@@ -1106,11 +1123,11 @@ import {
                 }
               </div>
               <input
+                id="quick-create-due-date"
                 type="date"
                 name="dueDate"
                 [(ngModel)]="newDueDate"
-                aria-label="New work item due date"
-                class="w-full text-xs border border-slate-200 rounded-md px-2 py-1.5"
+                class="w-full text-xs border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-slate-300"
               />
             </div>
           </div>
@@ -1127,7 +1144,7 @@ import {
               type="submit"
               class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
             >
-              Create Work Item
+              Create work item
             </button>
           </div>
         </form>
@@ -1339,13 +1356,22 @@ export class AppComponent implements OnInit {
 
     effect(() => {
       if (this.workItemService.isQuickCreateOpen()) {
-        const pset = this.settingsService.activeProjectSettings();
-        if (ALL_STATUSES.some((s) => s.value === pset.defaultNewItemStatus)) {
-          this.newStatus = pset.defaultNewItemStatus as WorkItemStatus;
-        }
-        if (ALL_PRIORITIES.some((p) => p.value === pset.defaultNewItemPriority)) {
-          this.newPriority = pset.defaultNewItemPriority as WorkItemPriority;
-        }
+        untracked(() => {
+          const pset = this.settingsService.activeProjectSettings();
+          if (ALL_STATUSES.some((s) => s.value === pset.defaultNewItemStatus)) {
+            this.newStatus = pset.defaultNewItemStatus as WorkItemStatus;
+          }
+          if (ALL_PRIORITIES.some((p) => p.value === pset.defaultNewItemPriority)) {
+            this.newPriority = pset.defaultNewItemPriority as WorkItemPriority;
+          }
+          const activeFilterCycle = this.workItemService.filter().cycle_id;
+          const cycles = this.projectService.cycles();
+          this.newCycleId =
+            activeFilterCycle && cycles.some((c) => c.id === activeFilterCycle)
+              ? activeFilterCycle
+              : '';
+          this.newEstimate = 1;
+        });
       }
     });
 
@@ -1376,6 +1402,14 @@ export class AppComponent implements OnInit {
     value: p.value,
     label: p.label,
   }));
+  readonly cycleOptions = computed<DropdownOption[]>(() => [
+    { value: '', label: 'No cycle' },
+    ...this.projectService.cycles().map((c) => ({
+      value: c.id,
+      label: c.name,
+      badge: c.is_active ? 'Active' : undefined,
+    })),
+  ]);
   readonly collectionOptions = computed<DropdownOption[]>(() =>
     this.pageService.collections().map((c) => ({ value: c.id, label: c.name }))
   );
@@ -1384,7 +1418,8 @@ export class AppComponent implements OnInit {
   newDescription = '';
   newStatus: WorkItemStatus = 'TODO';
   newPriority: WorkItemPriority = 'MEDIUM';
-  newEstimate = 3;
+  newCycleId = '';
+  newEstimate = 1;
   newStartDate = '';
   newDueDate = '';
 
@@ -1637,6 +1672,10 @@ export class AppComponent implements OnInit {
     this.newPriority = val as WorkItemPriority;
   }
 
+  onNewCycleChange(val: string): void {
+    this.newCycleId = val;
+  }
+
   submitQuickCreate(): void {
     const title = this.newTitle.trim();
     if (!title) return;
@@ -1645,12 +1684,15 @@ export class AppComponent implements OnInit {
       description: this.newDescription.trim(),
       status: this.newStatus,
       priority: this.newPriority,
+      cycle_id: this.newCycleId || undefined,
       estimate: this.newEstimate,
       start_date: this.newStartDate || undefined,
       due_date: this.newDueDate || undefined,
     });
     this.newTitle = '';
     this.newDescription = '';
+    this.newCycleId = '';
+    this.newEstimate = 1;
     this.newStartDate = '';
     this.newDueDate = '';
     this.workItemService.isQuickCreateOpen.set(false);

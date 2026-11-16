@@ -45,7 +45,11 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 - **Work Secondary Panel (`w-64`)**:
   - Collapse secondary panel button: `button[aria-label="Collapse secondary panel"]`
   - Expand secondary panel button (shown when collapsed): `button[aria-label="Expand secondary panel"]`
-  - New work item button: `button` containing `New work item`.
+  - New work item button: `[data-testid="open-create-work-item-btn"]` (`button` containing `New work item`).
+  - Create work item modal (opened when clicking `[data-testid="open-create-work-item-btn"]` or `+ Add work item`):
+    - Modal title: `Create work item`
+    - Inputs: `input#quick-create-title`, `textarea#quick-create-description`, `input#quick-create-estimate` (defaults to `1`), `input#quick-create-start-date`, `input#quick-create-due-date`
+    - Dropdowns: `button[aria-label="New work item status"]`, `button[aria-label="New work item priority"]`, `button[aria-label="New work item cycle"]` (`No cycle` + project cycles)
   - Navigation links: `a[href="/home"]`, `a[href="/my-work"]`, `a[href="/stickies"]`.
   - Create new project `+` icon button at root of `Projects`:
     ```css
