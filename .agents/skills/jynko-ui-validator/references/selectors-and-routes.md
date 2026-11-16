@@ -29,6 +29,7 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 ### App Shell & Navigation (`frontend/src/app/app.component.ts`)
 - **Top Header Brand**:
   - Brand title text: `Jynko` (must **not** contain a dropdown caret `⌄` or workspace switcher).
+  - Non-production environment badge (`ENV=dev` or `ENV=stg`, omitted in `ENV=prd`): `header [data-testid="env-badge"]` (`DEV` or `STG`, with browser tab `document.title` prefixed as `[DEV] Jynko` or `[STG] Jynko`).
   - Global search input: `header input[type="search"]`.
   - Mobile hamburger button (`< 768px`): `button[aria-label="Toggle mobile navigation"]`.
 - **Mobile Navigation (`< 768px`)**:

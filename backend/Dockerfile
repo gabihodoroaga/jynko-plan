@@ -6,6 +6,8 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /jynko-server ./cmd/server/main.go
 
 FROM alpine:3.20
+ARG BUILD_SHA=""
+ARG BUILD_BRANCH=""
 RUN apk --no-cache add ca-certificates tzdata \
     && addgroup -S jynko \
     && adduser -S -u 10001 -G jynko jynko
@@ -18,5 +20,7 @@ USER jynko
 
 ENV PORT=8080
 ENV ENV=prd
+ENV BUILD_SHA=${BUILD_SHA}
+ENV BUILD_BRANCH=${BUILD_BRANCH}
 EXPOSE 8080
 CMD ["./jynko-server"]

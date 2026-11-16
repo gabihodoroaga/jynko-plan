@@ -13,6 +13,9 @@ type Config struct {
 	Port                    string
 	Env                     string
 	RawEnv                  string
+	BuildSHA                string
+	BuildBranch             string
+	DisableDevAuth          bool
 	ProjectPrefix           string
 	ProjectsCollection      string
 	GoogleCloudProject      string
@@ -26,6 +29,7 @@ type Config struct {
 	CORSAllowedOrigins      []string
 	StaticDir               string
 	AttachmentsGCSBucket    string
+	AttachmentsGCSPrefix    string
 	LocalStorageDir         string
 	LogLevel                string
 	LogFormat               string
@@ -98,6 +102,8 @@ func Load() *Config {
 	defaultLogFormat := "json"
 	isPrd := envVal == EnvPrd
 	isDev := envVal == EnvDev && ValidateEnv(rawEnv) == nil
+	kService := strings.TrimSpace(os.Getenv("K_SERVICE"))
+	allowDevAuth := getEnvBool("ALLOW_DEV_AUTH", isDev && kService == "")
 
 	projectPrefix := getEnv("PROJECT_PREFIX", "jp")
 	projectsCol := getEnv("PROJECTS_COLLECTION", "")
@@ -106,15 +112,27 @@ func Load() *Config {
 	}
 
 	defaultGCPProject := ""
-	if isDev {
+	if isDev && kService == "" {
 		defaultGCPProject = "codelab1-244421"
 	}
 	iapAudience := getEnv("IAP_AUDIENCE", "")
+
+	defaultGCSPrefix := ""
+	if envVal == EnvDev || envVal == EnvStg {
+		defaultGCSPrefix = envVal
+	}
+	gcsPrefix := defaultGCSPrefix
+	if rawPrefix, ok := os.LookupEnv("ATTACHMENTS_GCS_PREFIX"); ok {
+		gcsPrefix = strings.Trim(strings.TrimSpace(rawPrefix), "/")
+	}
 
 	return &Config{
 		Port:                    getEnv("PORT", "8082"),
 		Env:                     envVal,
 		RawEnv:                  strings.TrimSpace(rawEnv),
+		BuildSHA:                getEnv("BUILD_SHA", ""),
+		BuildBranch:             getEnv("BUILD_BRANCH", ""),
+		DisableDevAuth:          !allowDevAuth,
 		ProjectPrefix:           projectPrefix,
 		ProjectsCollection:      projectsCol,
 		GoogleCloudProject:      getEnv("GOOGLE_CLOUD_PROJECT", defaultGCPProject),
@@ -128,6 +146,7 @@ func Load() *Config {
 		CORSAllowedOrigins:      origins,
 		StaticDir:               getEnv("STATIC_DIR", ""),
 		AttachmentsGCSBucket:    getEnv("ATTACHMENTS_GCS_BUCKET", ""),
+		AttachmentsGCSPrefix:    gcsPrefix,
 		LocalStorageDir:         getEnv("LOCAL_STORAGE_DIR", "data/attachments"),
 		LogLevel:                getEnv("LOG_LEVEL", "info"),
 		LogFormat:               getEnv("LOG_FORMAT", defaultLogFormat),
@@ -149,9 +168,10 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// AllowDevAuth returns true strictly when ENV is unset or explicitly "dev" (never on typos like "production").
+// AllowDevAuth returns true strictly when local/explicit dev auth is enabled on ENV="dev"
+// (disabled automatically on Cloud Run when K_SERVICE is set unless ALLOW_DEV_AUTH=true, and never on invalid RawEnv).
 func (c *Config) AllowDevAuth() bool {
-	if c == nil || c.Env != EnvDev {
+	if c == nil || c.Env != EnvDev || c.DisableDevAuth {
 		return false
 	}
 	return ValidateEnv(c.RawEnv) == nil

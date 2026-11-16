@@ -210,8 +210,28 @@ func PrintReport(report ValidationReport, reportPath string) {
 	fmt.Println("================================================================================")
 }
 
+func applyPageAuthHeaders(page *rod.Page) {
+	if bearer := strings.TrimSpace(os.Getenv("JYNKO_E2E_BEARER_TOKEN")); bearer != "" {
+		cleanup := page.MustSetExtraHeaders("Authorization", "Bearer "+bearer)
+		_ = cleanup
+	}
+}
+
+func e2eDoRequest(method, targetURL string) (*http.Response, error) {
+	req, err := http.NewRequest(method, targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if bearer := strings.TrimSpace(os.Getenv("JYNKO_E2E_BEARER_TOKEN")); bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	return client.Do(req)
+}
+
 func newViewportPage(browser *rod.Browser, url string) *rod.Page {
 	page := browser.MustPage("")
+	applyPageAuthHeaders(page)
 	_ = proto.EmulationSetDeviceMetricsOverride{
 		Width:             1440,
 		Height:            900,
@@ -235,6 +255,7 @@ func newViewportPage(browser *rod.Browser, url string) *rod.Page {
 
 func newMobileViewportPage(browser *rod.Browser, url string) *rod.Page {
 	page := browser.MustPage("")
+	applyPageAuthHeaders(page)
 	_ = proto.EmulationSetDeviceMetricsOverride{
 		Width:             390,
 		Height:            844,
@@ -294,10 +315,35 @@ func CheckAppShell(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 		res.Errors = append(res.Errors, fmt.Sprintf("Expected header to show 'Jynko' without '⌄', got: %q", headerText))
 	}
 
+	// Verify environment badge & tab title behavior across dev/stg vs prd
+	expectEnv := strings.ToLower(strings.TrimSpace(os.Getenv("JYNKO_E2E_EXPECT_ENV")))
+	hasEnvBadge, envBadgeEl, _ := page.Has(`header [data-testid="env-badge"]`)
+	docTitle := page.MustEval(`() => document.title`).String()
+	if expectEnv == "prd" {
+		if !hasEnvBadge && docTitle == "Jynko" {
+			res.Assertions = append(res.Assertions, "Production environment omits non-prod header badge and keeps clean 'Jynko' document title")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, fmt.Sprintf("Expected prd to omit env-badge and keep title 'Jynko', got hasBadge=%v title=%q", hasEnvBadge, docTitle))
+		}
+	} else {
+		badgeText := ""
+		if hasEnvBadge && envBadgeEl != nil {
+			badgeText = strings.ToLower(strings.TrimSpace(envBadgeEl.MustText()))
+		}
+		if hasEnvBadge && (strings.HasPrefix(badgeText, "dev") || strings.HasPrefix(badgeText, "stg")) &&
+			(strings.HasPrefix(docTitle, "[DEV]") || strings.HasPrefix(docTitle, "[STG]")) {
+			res.Assertions = append(res.Assertions, fmt.Sprintf("Non-production top bar renders environment badge (%q) and prefixes browser tab title (%q)", strings.ToUpper(badgeText), docTitle))
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, fmt.Sprintf("Expected non-prod env-badge and prefixed document title, got hasBadge=%v badge=%q title=%q", hasEnvBadge, badgeText, docTitle))
+		}
+	}
+
 	// Verify PWA Web App Manifest link (crossorigin="use-credentials" for IAP) and served manifest + icon assets
 	hasManifestLink, _, _ := page.Has(`head link[rel="manifest"][href="manifest.webmanifest"][crossorigin="use-credentials"]`)
 	manifestOK := false
-	if mResp, err := http.Get(baseURL + "/manifest.webmanifest"); err == nil {
+	if mResp, err := e2eDoRequest(http.MethodGet, baseURL+"/manifest.webmanifest"); err == nil {
 		defer mResp.Body.Close()
 		var manifestData map[string]any
 		if mResp.StatusCode == http.StatusOK && json.NewDecoder(mResp.Body).Decode(&manifestData) == nil {
@@ -305,7 +351,7 @@ func CheckAppShell(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 		}
 	}
 	iconOK := false
-	if iResp, err := http.Get(baseURL + "/assets/icons/icon-192x192.png"); err == nil {
+	if iResp, err := e2eDoRequest(http.MethodGet, baseURL+"/assets/icons/icon-192x192.png"); err == nil {
 		defer iResp.Body.Close()
 		iconOK = iResp.StatusCode == http.StatusOK
 	}
@@ -392,7 +438,7 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 			hasInstallPwaBtn, _, _ := cardEl.Has(`button[aria-label="Install Jynko PWA"]`)
 			hasSignOutBtn, _, _ := cardEl.Has(`button[aria-label="Sign out"]`)
 
-			if hasProfileBtn && hasSwitchAccountBtn && hasInstallPwaBtn && hasSignOutBtn && strings.Contains(cardText, "dev@jynko.local") {
+			if hasProfileBtn && hasSwitchAccountBtn && hasInstallPwaBtn && hasSignOutBtn && strings.Contains(cardText, "@") {
 				res.Assertions = append(res.Assertions, "Top-right user button opens Google-style account card with Name, Email, Profile, Switch account, Install PWA, and Sign out actions")
 				profileBtn.MustClick()
 				time.Sleep(300 * time.Millisecond)
@@ -417,70 +463,98 @@ func CheckUserAndProfile(browser *rod.Browser, baseURL, outDir string) Validatio
 				page.MustScreenshot(res.Screenshot)
 				screenshotTaken = true
 
-				// Verify inline account switching from the top-right user menu
-				if hasMenuAgain, menuBtnAgain, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuAgain && menuBtnAgain != nil {
-					menuBtnAgain.MustClick()
-					time.Sleep(200 * time.Millisecond)
+				isLocalDevMode := strings.Contains(cardText, "dev@jynko.local")
 
-					if hasSwitch, switchBtn, _ := page.Has(`button[aria-label="Switch user account"]`); hasSwitch && switchBtn != nil {
-						switchBtn.MustClick()
+				if isLocalDevMode {
+					// Verify inline account switching from the top-right user menu in local dev mode
+					if hasMenuAgain, menuBtnAgain, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuAgain && menuBtnAgain != nil {
+						menuBtnAgain.MustClick()
 						time.Sleep(200 * time.Millisecond)
 
-						if hasAlice, aliceBtn, _ := page.Has(`button[aria-label="Switch to account alice@jynko.local"]`); hasAlice && aliceBtn != nil {
-							aliceBtn.MustClick()
-							time.Sleep(450 * time.Millisecond)
+						if hasSwitch, switchBtn, _ := page.Has(`button[aria-label="Switch user account"]`); hasSwitch && switchBtn != nil {
+							switchBtn.MustClick()
+							time.Sleep(200 * time.Millisecond)
 
-							emailVal := page.MustEval(`() => {
-								const el = document.querySelector('input[aria-label="Profile email"]');
-								return el ? el.value : '';
-							}`).String()
-							if emailVal == "alice@jynko.local" {
-								res.Assertions = append(res.Assertions, "Clicking 'Switch account' in user menu switches active identity to selected account (alice@jynko.local)")
+							if hasAlice, aliceBtn, _ := page.Has(`button[aria-label="Switch to account alice@jynko.local"]`); hasAlice && aliceBtn != nil {
+								aliceBtn.MustClick()
+								time.Sleep(450 * time.Millisecond)
+
+								emailVal := page.MustEval(`() => {
+									const el = document.querySelector('input[aria-label="Profile email"]');
+									return el ? el.value : '';
+								}`).String()
+								if emailVal == "alice@jynko.local" {
+									res.Assertions = append(res.Assertions, "Clicking 'Switch account' in user menu switches active identity to selected account (alice@jynko.local)")
+								} else {
+									res.Passed = false
+									res.Errors = append(res.Errors, fmt.Sprintf("Expected switched profile email 'alice@jynko.local', got %q", emailVal))
+								}
 							} else {
 								res.Passed = false
-								res.Errors = append(res.Errors, fmt.Sprintf("Expected switched profile email 'alice@jynko.local', got %q", emailVal))
+								res.Errors = append(res.Errors, "Missing button[aria-label='Switch to account alice@jynko.local'] after clicking Switch account")
 							}
-						} else {
-							res.Passed = false
-							res.Errors = append(res.Errors, "Missing button[aria-label='Switch to account alice@jynko.local'] after clicking Switch account")
 						}
 					}
-				}
 
-				// Verify Sign out -> /signed-out hides workspace shell and allows choosing a different user to sign back in
-				if hasMenuForSignOut, menuSignOutBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuForSignOut && menuSignOutBtn != nil {
-					menuSignOutBtn.MustClick()
-					time.Sleep(200 * time.Millisecond)
+					// Verify Sign out -> /signed-out hides workspace shell and allows choosing a different user to sign back in
+					if hasMenuForSignOut, menuSignOutBtn, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuForSignOut && menuSignOutBtn != nil {
+						menuSignOutBtn.MustClick()
+						time.Sleep(200 * time.Millisecond)
 
-					if hasOut, outBtn, _ := page.Has(`button[aria-label="Sign out"]`); hasOut && outBtn != nil {
-						outBtn.MustClick()
-						time.Sleep(350 * time.Millisecond)
+						if hasOut, outBtn, _ := page.Has(`button[aria-label="Sign out"]`); hasOut && outBtn != nil {
+							outBtn.MustClick()
+							time.Sleep(350 * time.Millisecond)
 
-						signedOutURL := page.MustInfo().URL
-						hasSignedOutCard, _, _ := page.Has(`[data-testid="signed-out-card"]`)
-						hasShellHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
-						if strings.Contains(signedOutURL, "/signed-out") && hasSignedOutCard && !hasShellHeader {
-							res.Assertions = append(res.Assertions, "Clicking 'Sign out' navigates to /signed-out, hides workspace shell, and displays account chooser")
-						} else {
-							res.Passed = false
-							res.Errors = append(res.Errors, fmt.Sprintf("Sign out failed: url=%q, hasCard=%v, hasHeader=%v", signedOutURL, hasSignedOutCard, hasShellHeader))
-						}
-
-						if hasSignInDev, signInDevBtn, _ := page.Has(`button[aria-label="Sign in as dev@jynko.local"]`); hasSignInDev && signInDevBtn != nil {
-							signInDevBtn.MustClick()
-							time.Sleep(500 * time.Millisecond)
-
-							restoredURL := page.MustInfo().URL
-							hasRestoredHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
-							if strings.Contains(restoredURL, "/home") && hasRestoredHeader {
-								res.Assertions = append(res.Assertions, "Selecting an account on /signed-out restores authenticated session and workspace shell")
+							signedOutURL := page.MustInfo().URL
+							hasSignedOutCard, _, _ := page.Has(`[data-testid="signed-out-card"]`)
+							hasShellHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
+							if strings.Contains(signedOutURL, "/signed-out") && hasSignedOutCard && !hasShellHeader {
+								res.Assertions = append(res.Assertions, "Clicking 'Sign out' navigates to /signed-out, hides workspace shell, and displays account chooser")
 							} else {
 								res.Passed = false
-								res.Errors = append(res.Errors, fmt.Sprintf("Sign in from /signed-out did not restore /home shell: url=%q, hasHeader=%v", restoredURL, hasRestoredHeader))
+								res.Errors = append(res.Errors, fmt.Sprintf("Sign out failed: url=%q, hasCard=%v, hasHeader=%v", signedOutURL, hasSignedOutCard, hasShellHeader))
 							}
-						} else {
-							res.Passed = false
-							res.Errors = append(res.Errors, "Missing button[aria-label='Sign in as dev@jynko.local'] on /signed-out")
+
+							if hasSignInDev, signInDevBtn, _ := page.Has(`button[aria-label="Sign in as dev@jynko.local"]`); hasSignInDev && signInDevBtn != nil {
+								signInDevBtn.MustClick()
+								time.Sleep(500 * time.Millisecond)
+
+								restoredURL := page.MustInfo().URL
+								hasRestoredHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
+								if strings.Contains(restoredURL, "/home") && hasRestoredHeader {
+									res.Assertions = append(res.Assertions, "Selecting an account on /signed-out restores authenticated session and workspace shell")
+								} else {
+									res.Passed = false
+									res.Errors = append(res.Errors, fmt.Sprintf("Sign in from /signed-out did not restore /home shell: url=%q, hasHeader=%v", restoredURL, hasRestoredHeader))
+								}
+							} else {
+								res.Passed = false
+								res.Errors = append(res.Errors, "Missing button[aria-label='Sign in as dev@jynko.local'] on /signed-out")
+							}
+						}
+					}
+				} else {
+					// Cloud Run Google Cloud IAP mode: verify Switch account routes to /signed-out?mode=switch with IAP chooser controls
+					if hasMenuAgain, menuBtnAgain, _ := page.Has(`button[aria-label="Open user menu"]`); hasMenuAgain && menuBtnAgain != nil {
+						menuBtnAgain.MustClick()
+						time.Sleep(200 * time.Millisecond)
+
+						if hasSwitch, switchBtn, _ := page.Has(`button[aria-label="Switch user account"]`); hasSwitch && switchBtn != nil {
+							switchBtn.MustClick()
+							time.Sleep(350 * time.Millisecond)
+
+							switchURL := page.MustInfo().URL
+							hasIAPBtn, _, _ := page.Has(`button[aria-label="Sign in with Google Cloud IAP"]`)
+							hasShellHeader, _, _ := page.Has(`header button[aria-label="Open user menu"]`)
+							if strings.Contains(switchURL, "/signed-out") && hasIAPBtn && !hasShellHeader {
+								res.Assertions = append(res.Assertions, "Cloud Run IAP mode routes 'Switch account' to /signed-out with Google Cloud IAP sign-in & account-chooser controls")
+							} else {
+								res.Passed = false
+								res.Errors = append(res.Errors, fmt.Sprintf("Cloud Run IAP switch-account check failed: url=%q, hasIAPBtn=%v, hasHeader=%v", switchURL, hasIAPBtn, hasShellHeader))
+							}
+
+							page.MustNavigate(baseURL + "/home").MustWaitLoad()
+							time.Sleep(400 * time.Millisecond)
 						}
 					}
 				}
@@ -1524,12 +1598,16 @@ func e2eBackendBaseURL() string {
 	if v := strings.TrimSpace(os.Getenv("JYNKO_E2E_API_URL")); v != "" {
 		return strings.TrimRight(v, "/")
 	}
+	if base := strings.TrimRight(strings.TrimSpace(os.Getenv("JYNKO_E2E_BASE_URL")), "/"); base != "" &&
+		!strings.Contains(base, "localhost") && !strings.Contains(base, "127.0.0.1") {
+		return base
+	}
 	return "http://localhost:8082"
 }
 
 func cleanupTestComments() {
 	apiBase := e2eBackendBaseURL()
-	resp, err := http.Get(apiBase + "/api/v1/projects/proj-jynko-core/items/item-1/comments")
+	resp, err := e2eDoRequest(http.MethodGet, apiBase+"/api/v1/projects/proj-jynko-core/items/item-1/comments")
 	if err != nil {
 		return
 	}
@@ -1543,8 +1621,7 @@ func cleanupTestComments() {
 	}
 	for _, c := range list {
 		if strings.Contains(c.Content, "Markdown E2E note:") {
-			req, _ := http.NewRequest(http.MethodDelete, apiBase+"/api/v1/projects/proj-jynko-core/items/item-1/comments/"+c.ID, nil)
-			if r, err := http.DefaultClient.Do(req); err == nil {
+			if r, err := e2eDoRequest(http.MethodDelete, apiBase+"/api/v1/projects/proj-jynko-core/items/item-1/comments/"+c.ID); err == nil {
 				_ = r.Body.Close()
 			}
 		}
@@ -1561,7 +1638,7 @@ func cleanupTestStickies() {
 		"sticky-5": true,
 		"sticky-6": true,
 	}
-	resp, err := http.Get(apiBase + "/api/v1/projects/proj-jynko-core/stickies")
+	resp, err := e2eDoRequest(http.MethodGet, apiBase+"/api/v1/projects/proj-jynko-core/stickies")
 	if err != nil {
 		return
 	}
@@ -1574,8 +1651,7 @@ func cleanupTestStickies() {
 	}
 	for _, s := range list {
 		if !seeded[s.ID] {
-			req, _ := http.NewRequest(http.MethodDelete, apiBase+"/api/v1/projects/proj-jynko-core/stickies/"+s.ID, nil)
-			if r, err := http.DefaultClient.Do(req); err == nil {
+			if r, err := e2eDoRequest(http.MethodDelete, apiBase+"/api/v1/projects/proj-jynko-core/stickies/"+s.ID); err == nil {
 				_ = r.Body.Close()
 			}
 		}
@@ -1584,7 +1660,7 @@ func cleanupTestStickies() {
 
 func cleanupTestProjectByName(name string) {
 	apiBase := e2eBackendBaseURL()
-	resp, err := http.Get(apiBase + "/api/v1/projects")
+	resp, err := e2eDoRequest(http.MethodGet, apiBase+"/api/v1/projects")
 	if err != nil {
 		return
 	}
@@ -1598,8 +1674,7 @@ func cleanupTestProjectByName(name string) {
 	}
 	for _, p := range list {
 		if strings.EqualFold(p.Name, name) {
-			req, _ := http.NewRequest(http.MethodDelete, apiBase+"/api/v1/projects/"+p.ID, nil)
-			if r, err := http.DefaultClient.Do(req); err == nil {
+			if r, err := e2eDoRequest(http.MethodDelete, apiBase+"/api/v1/projects/"+p.ID); err == nil {
 				_ = r.Body.Close()
 			}
 		}

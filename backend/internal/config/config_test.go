@@ -130,3 +130,63 @@ func TestLoadProjectsCollectionDefaultsAndOverride(t *testing.T) {
 	_ = os.Unsetenv("PROJECTS_COLLECTION")
 	_ = os.Setenv("ENV", "dev")
 }
+
+func TestCloudRunDevIsolationAndGCSPrefixes(t *testing.T) {
+	defer func() {
+		_ = os.Unsetenv("K_SERVICE")
+		_ = os.Unsetenv("ALLOW_DEV_AUTH")
+		_ = os.Unsetenv("ATTACHMENTS_GCS_PREFIX")
+		_ = os.Unsetenv("BUILD_SHA")
+		_ = os.Unsetenv("BUILD_BRANCH")
+		_ = os.Setenv("ENV", "dev")
+	}()
+
+	// 1. Local dev (K_SERVICE unset) enables AllowDevAuth and defaults GCS prefix to "dev"
+	_ = os.Setenv("ENV", "dev")
+	_ = os.Unsetenv("K_SERVICE")
+	_ = os.Unsetenv("ALLOW_DEV_AUTH")
+	_ = os.Unsetenv("ATTACHMENTS_GCS_PREFIX")
+	cfgLocal := Load()
+	if !cfgLocal.AllowDevAuth() {
+		t.Fatalf("expected AllowDevAuth() == true on local dev when K_SERVICE is unset")
+	}
+	if cfgLocal.AttachmentsGCSPrefix != "dev" {
+		t.Fatalf("expected AttachmentsGCSPrefix 'dev', got %q", cfgLocal.AttachmentsGCSPrefix)
+	}
+
+	// 2. Cloud Run dev (K_SERVICE set) disables AllowDevAuth by default while keeping jp-dev-projects
+	_ = os.Setenv("K_SERVICE", "jynko-plan-dev")
+	_ = os.Setenv("BUILD_SHA", "abc1234")
+	_ = os.Setenv("BUILD_BRANCH", "feat/multi-env")
+	cfgCloudDev := Load()
+	if cfgCloudDev.ProjectsCollection != "jp-dev-projects" {
+		t.Fatalf("expected Cloud Run dev to use 'jp-dev-projects', got %q", cfgCloudDev.ProjectsCollection)
+	}
+	if cfgCloudDev.AllowDevAuth() {
+		t.Fatalf("expected AllowDevAuth() == false on Cloud Run (K_SERVICE set) without explicit ALLOW_DEV_AUTH=true")
+	}
+	if cfgCloudDev.BuildSHA != "abc1234" || cfgCloudDev.BuildBranch != "feat/multi-env" {
+		t.Fatalf("expected build metadata to load, got sha=%q branch=%q", cfgCloudDev.BuildSHA, cfgCloudDev.BuildBranch)
+	}
+
+	// 3. Staging (ENV=stg) uses "stg" GCS prefix, disables SeedOnStartup, and blocks AllowDevAuth even if ALLOW_DEV_AUTH=true
+	_ = os.Setenv("ENV", "stg")
+	_ = os.Setenv("ALLOW_DEV_AUTH", "true")
+	cfgStg := Load()
+	if cfgStg.AllowDevAuth() {
+		t.Fatalf("expected AllowDevAuth() == false on ENV=stg even when ALLOW_DEV_AUTH=true")
+	}
+	if cfgStg.SeedOnStartup {
+		t.Fatalf("expected SeedOnStartup == false by default on ENV=stg")
+	}
+	if cfgStg.AttachmentsGCSPrefix != "stg" {
+		t.Fatalf("expected AttachmentsGCSPrefix 'stg' on ENV=stg, got %q", cfgStg.AttachmentsGCSPrefix)
+	}
+
+	// 4. Production (ENV=prd) defaults AttachmentsGCSPrefix to empty "" for backward-compatible root objects
+	_ = os.Setenv("ENV", "prd")
+	cfgPrd := Load()
+	if cfgPrd.AttachmentsGCSPrefix != "" {
+		t.Fatalf("expected AttachmentsGCSPrefix '' on ENV=prd, got %q", cfgPrd.AttachmentsGCSPrefix)
+	}
+}

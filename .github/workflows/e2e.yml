@@ -2,9 +2,21 @@ name: Jynko E2E & CI Pipeline
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+      - stg
+      - dev
+      - 'feat/**'
+      - 'feature/**'
+      - 'fix/**'
+      - 'chore/**'
   pull_request:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+      - stg
+      - dev
 
 jobs:
   e2e:

@@ -186,7 +186,7 @@ func SetupRouter(
 	stickyHandler *handler.StickyHandler,
 	attachmentHandler *handler.AttachmentHandler,
 ) *gin.Engine {
-	if cfg.IsProduction() {
+	if !cfg.AllowDevAuth() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
@@ -213,6 +213,16 @@ func SetupRouter(
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.IAPAuthMiddleware(cfg))
+
+	// Runtime environment & deployment metadata endpoint
+	api.GET("/meta", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"env":            cfg.Env,
+			"build_sha":      cfg.BuildSHA,
+			"build_branch":   cfg.BuildBranch,
+			"allow_dev_auth": cfg.AllowDevAuth(),
+		})
+	})
 
 	// Auth identity & profile endpoints
 	api.GET("/auth/me", authHandler.GetMe)

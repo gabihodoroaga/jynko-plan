@@ -86,6 +86,25 @@ import {
             </span>
             <span class="text-[13px] font-bold tracking-tight text-slate-900">Jynko</span>
           </a>
+
+          @if (authService.appMeta().env === 'dev' || authService.appMeta().env === 'stg') {
+            <span
+              data-testid="env-badge"
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold uppercase tracking-wide shrink-0"
+              [ngClass]="
+                authService.appMeta().env === 'dev'
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-sky-50 border-sky-200 text-sky-800'
+              "
+            >
+              <span>{{ authService.appMeta().env }}</span>
+              @if (authService.appMeta().build_sha) {
+                <span class="hidden lg:inline font-mono font-normal lowercase opacity-80">
+                  · {{ authService.appMeta().build_sha | slice:0:7 }}
+                </span>
+              }
+            </span>
+          }
         </div>
 
         <!-- Center: Global Search Input -->

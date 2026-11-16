@@ -13,6 +13,13 @@ export interface DevAccountPreset extends UserContext {
   badge?: string;
 }
 
+export interface AppRuntimeMeta {
+  env: 'dev' | 'stg' | 'prd';
+  build_sha?: string;
+  build_branch?: string;
+  allow_dev_auth?: boolean;
+}
+
 export const DEFAULT_DEV_ACCOUNTS: DevAccountPreset[] = [
   {
     user_id: 'dev-user-1',
@@ -55,6 +62,10 @@ export class AuthService {
   private readonly reloadCallbacks: Array<() => void> = [];
 
   readonly isDevMode = environment.devMode;
+  readonly appMeta = signal<AppRuntimeMeta>({
+    env: environment.devMode ? 'dev' : 'prd',
+    allow_dev_auth: environment.devMode,
+  });
   readonly isSignedOut = signal<boolean>(this.readInitialSignedOut());
   readonly lastSignedOutUser = signal<{ name: string; email: string } | null>(
     this.readLastSignedOutUser()
@@ -103,6 +114,7 @@ export class AuthService {
     if (this.isSignedOut()) {
       return;
     }
+    this.loadAppMeta();
     this.api.get<UserContext>('/auth/me').subscribe({
       next: (user) => {
         const merged = this.mergeStoredProfile(user);
@@ -113,6 +125,34 @@ export class AuthService {
         this.currentUser.set(fallback);
       },
     });
+  }
+
+  loadAppMeta(): void {
+    this.applyEnvironmentDocumentTitle(this.appMeta().env);
+    this.api.get<AppRuntimeMeta>('/meta').subscribe({
+      next: (meta) => {
+        if (meta && (meta.env === 'dev' || meta.env === 'stg' || meta.env === 'prd')) {
+          this.appMeta.set(meta);
+          this.applyEnvironmentDocumentTitle(meta.env);
+        }
+      },
+      error: () => {
+        this.applyEnvironmentDocumentTitle(this.appMeta().env);
+      },
+    });
+  }
+
+  private applyEnvironmentDocumentTitle(env: 'dev' | 'stg' | 'prd'): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (env === 'dev') {
+      document.title = '[DEV] Jynko';
+    } else if (env === 'stg') {
+      document.title = '[STG] Jynko';
+    } else {
+      document.title = 'Jynko';
+    }
   }
 
   updateProfile(patch: {

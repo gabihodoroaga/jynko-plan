@@ -188,67 +188,91 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## 4. Manual Deployment via Cloud Build CLI
 
-To test the deployment manually from your local terminal:
+To test a deployment manually from your local terminal (targeting `dev`, `stg`, or `prd` with `_ALLOW_BRANCH_OVERRIDE=true` when submitting outside a branch trigger):
 ```bash
-export IAP_AUDIENCE="/projects/${PROJECT_NUM}/locations/${REGION}/services/${SERVICE_NAME}-prd"
+export TARGET_ENV="dev" # dev | stg | prd
+export SERVICE_BASE="jynko-plan"
+export IAP_AUDIENCE="/projects/${PROJECT_NUM}/locations/${REGION}/services/${SERVICE_BASE}-${TARGET_ENV}"
 
 gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions=_REGION=$REGION,_AR_LOCATION=$REGION,_AR_REPOSITORY=$AR_REPO,_SERVICE_NAME=$SERVICE_NAME,_SERVICE_ACCOUNT=$RUNNER_SA,_ATTACHMENTS_GCS_BUCKET=$ATTACHMENTS_BUCKET,_IAP_AUDIENCE=$IAP_AUDIENCE
+  --substitutions=_ENV_PREFIX=$TARGET_ENV,_ALLOW_BRANCH_OVERRIDE=true,_REGION=$REGION,_SERVICE_NAME=$SERVICE_BASE,_SERVICE_ACCOUNT=$RUNNER_SA,_ATTACHMENTS_GCS_BUCKET=$ATTACHMENTS_BUCKET,_IAP_AUDIENCE=$IAP_AUDIENCE
 ```
 
 ---
 
-## 5. Setting Up Continuous Deployment (Cloud Build Triggers)
+## 5. Multi-Environment Continuous Deployment (`dev`, `stg`, `prd` by Git Branch)
 
-Automate deployments whenever code is pushed to your repository. You can connect via **GitHub** or Google **Cloud Source Repositories**.
+Jynko uses a strict three-environment branch promotion flow backed by `cloudbuild.yaml`:
 
-### Option A: Trigger from GitHub (Cloud Build 2nd Gen)
-1. In the Google Cloud Console, navigate to **Cloud Build > Repositories (2nd gen)**.
-2. Select your region (`europe-west3`) and click **Create Host Connection** > **GitHub**.
-3. Authenticate with GitHub and link your repository (e.g. `gabihodoroaga/jynko-plan`).
-4. Create the build trigger via `gcloud`:
+| Environment | Git Branches | Cloud Run Service | Firestore Root Collection | GCS Prefix | Purpose |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`dev`** | `dev` + all feature branches (`^(main\|stg)$` inverted) | `jynko-plan-dev` | `jp-dev-projects` | `dev/` | Live integration & E2E testing by developers and AI agents |
+| **`stg`** | `stg` (`^stg$`) | `jynko-plan-stg` | `jp-stg-projects` | `stg/` | Pre-release QA gate (`git checkout stg && git merge dev`) |
+| **`prd`** | `main` (`^main$`) | `jynko-plan-prd` | `jp-prd-projects` | `""` | Production release (`git checkout main && git merge stg`) |
+
+> [!IMPORTANT]
+> `cloudbuild.yaml` includes built-in branch protection: `_ENV_PREFIX` defaults to `auto` (`main -> prd`, `stg -> stg`, everything else `-> dev`), and even if `_ENV_PREFIX` is explicitly set, Step 3 refuses to deploy a non-`main` branch to `prd` or a non-`stg` branch to `stg` unless `_ALLOW_BRANCH_OVERRIDE=true`.
+
+### Automated Trigger Setup Script (`scripts/setup-gcp-triggers.sh`)
+Provision all three Cloud Build triggers (`jynko-plan-dev`, `jynko-plan-stg`, `jynko-plan-prd`) and grant IAP Service Agent `roles/run.invoker` on each deployed service in one command:
+```bash
+PROJECT_ID=$PROJECT_ID \
+REGION=$REGION \
+ATTACHMENTS_BUCKET=$ATTACHMENTS_BUCKET \
+IAP_SETTINGS_FILE=iap-settings.yaml \
+./scripts/setup-gcp-triggers.sh
+```
+
+### Option A: Triggers from Google Cloud Source Repositories (Manual CLI)
+1. **Push `main`, `stg`, and `dev` branches**:
    ```bash
-   gcloud builds triggers create github \
-     --name="jynko-plan-github-main" \
-     --repo-name="jynko-plan" \
-     --repo-owner="gabihodoroaga" \
-     --branch-pattern="^main$" \
+   git push --all google
+   ```
+2. **Create the 3 branch-routed triggers**:
+   ```bash
+   export SERVICE_BASE="jynko-plan"
+
+   # 1. DEV: dev branch + all feature branches (inverted regex excluding main & stg)
+   gcloud builds triggers create cloud-source-repositories \
+     --name="${SERVICE_BASE}-dev" \
+     --repo="jynko-plan" \
+     --branch-pattern="^(main|stg)$" \
+     --invert-regex \
      --build-config="cloudbuild.yaml" \
      --region=$REGION \
      --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-     --substitutions=_REGION=$REGION,_AR_LOCATION=$REGION,_AR_REPOSITORY=$AR_REPO,_SERVICE_NAME=$SERVICE_NAME,_SERVICE_ACCOUNT=$RUNNER_SA
-   ```
+     --substitutions=_ENV_PREFIX=dev,_REGION=$REGION,_SERVICE_NAME=$SERVICE_BASE,_SERVICE_ACCOUNT=$RUNNER_SA,_IAP_AUDIENCE=/projects/${PROJECT_NUM}/locations/${REGION}/services/${SERVICE_BASE}-dev
 
-### Option B: Trigger from Google Cloud Source Repositories (Alternate)
-If you host your repository directly in Google Cloud Source Repositories or mirror an external repository into GCP:
-
-1. **Create the Cloud Source Repository**:
-   ```bash
-   gcloud source repos create jynko-plan
-   ```
-
-2. **Push your code to Cloud Source Repositories**:
-   ```bash
-   # Add the Google Cloud Source Repository as a remote
-   git remote add google https://source.developers.google.com/p/$PROJECT_ID/r/jynko-plan
-
-   # Push code and branches
-   git push --all google
-   ```
-
-3. **Create the Cloud Build Trigger for Cloud Source Repositories**:
-   ```bash
+   # 2. STG: pre-release validation on stg branch
    gcloud builds triggers create cloud-source-repositories \
-     --name="jynko-plan-csr-main" \
+     --name="${SERVICE_BASE}-stg" \
+     --repo="jynko-plan" \
+     --branch-pattern="^stg$" \
+     --build-config="cloudbuild.yaml" \
+     --region=$REGION \
+     --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+     --substitutions=_ENV_PREFIX=stg,_REGION=$REGION,_SERVICE_NAME=$SERVICE_BASE,_SERVICE_ACCOUNT=$RUNNER_SA,_IAP_AUDIENCE=/projects/${PROJECT_NUM}/locations/${REGION}/services/${SERVICE_BASE}-stg
+
+   # 3. PRD: production deployment on main branch (add --require-approval for manual gate)
+   gcloud builds triggers create cloud-source-repositories \
+     --name="${SERVICE_BASE}-prd" \
      --repo="jynko-plan" \
      --branch-pattern="^main$" \
      --build-config="cloudbuild.yaml" \
      --region=$REGION \
      --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILDER_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-     --substitutions=_REGION=$REGION,_AR_LOCATION=$REGION,_AR_REPOSITORY=$AR_REPO,_SERVICE_NAME=$SERVICE_NAME,_SERVICE_ACCOUNT=$RUNNER_SA
+     --substitutions=_ENV_PREFIX=prd,_REGION=$REGION,_SERVICE_NAME=$SERVICE_BASE,_SERVICE_ACCOUNT=$RUNNER_SA,_IAP_AUDIENCE=/projects/${PROJECT_NUM}/locations/${REGION}/services/${SERVICE_BASE}-prd
    ```
 
-*(In the Google Cloud Console, this can also be set under **Cloud Build > Triggers > Create Trigger**, selecting **Event: Push to a branch**, **Source: Cloud Source Repositories**, and **Configuration: Cloud Build configuration file (`cloudbuild.yaml`)**).*
+### Option B: Triggers from GitHub (Cloud Build 2nd Gen)
+Follow the exact same 3-trigger structure (`--branch-pattern="^(main|stg)$" --invert-regex` for `dev`, `^stg$` for `stg`, `^main$` for `prd`) using `gcloud builds triggers create github --repo-name="jynko-plan" --repo-owner="gabihodoroaga" ...`.
+
+### Validating Deployed `dev` and `stg` Environments with Go-Rod E2E
+Once `programmaticClients` is configured on `jynko-plan-dev` and `jynko-plan-stg` via `iap-settings.yaml`, both developers and AI coding agents can run the full 15-suite Go-Rod E2E validator directly against the live Cloud Run URL:
+```bash
+JYNKO_E2E_IAP_AUDIENCE="/projects/${PROJECT_NUM}/locations/${REGION}/services/jynko-plan-dev" \
+  ./scripts/run-e2e.sh /tmp/jynko-dev-e2e "https://jynko-plan-dev-xxxx.a.run.app"
+```
 
 ---
 

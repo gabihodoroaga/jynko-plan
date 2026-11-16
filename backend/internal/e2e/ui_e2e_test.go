@@ -79,8 +79,15 @@ func TestJynkoUIEndToEnd(t *testing.T) {
 }
 
 func isFrontendReachable(url string) bool {
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(url)
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	if bearer := strings.TrimSpace(os.Getenv("JYNKO_E2E_BEARER_TOKEN")); bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}

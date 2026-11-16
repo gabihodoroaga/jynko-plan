@@ -80,26 +80,51 @@ func (p *LocalStorageProvider) Close() error {
 	return nil
 }
 
-// GCSStorageProvider stores files in a Google Cloud Storage bucket.
+// GCSStorageProvider stores files in a Google Cloud Storage bucket, optionally scoped under an environment prefix.
 type GCSStorageProvider struct {
 	client *storage.Client
 	bucket string
+	prefix string
 }
 
 // NewGCSStorageProvider creates a new GCSStorageProvider.
-func NewGCSStorageProvider(ctx context.Context, bucket string) (*GCSStorageProvider, error) {
+func NewGCSStorageProvider(ctx context.Context, bucket string, prefixes ...string) (*GCSStorageProvider, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gcs client: %w", err)
 	}
+	prefix := ""
+	if len(prefixes) > 0 {
+		prefix = filepath.ToSlash(filepath.Clean("/" + prefixes[0]))
+		if prefix == "/" || prefix == "." {
+			prefix = ""
+		} else {
+			prefix = prefix[1:]
+		}
+	}
 	return &GCSStorageProvider{
 		client: client,
 		bucket: bucket,
+		prefix: prefix,
 	}, nil
 }
 
+func (p *GCSStorageProvider) objectName(storagePath string) string {
+	clean := filepath.ToSlash(filepath.Clean("/" + storagePath))
+	if len(clean) > 0 && clean[0] == '/' {
+		clean = clean[1:]
+	}
+	if p.prefix == "" {
+		return clean
+	}
+	if clean == p.prefix || (len(clean) > len(p.prefix) && clean[:len(p.prefix)+1] == p.prefix+"/") {
+		return clean
+	}
+	return p.prefix + "/" + clean
+}
+
 func (p *GCSStorageProvider) Save(ctx context.Context, storagePath string, contentType string, reader io.Reader) error {
-	obj := p.client.Bucket(p.bucket).Object(storagePath)
+	obj := p.client.Bucket(p.bucket).Object(p.objectName(storagePath))
 	w := obj.NewWriter(ctx)
 	if contentType != "" {
 		w.ContentType = contentType
@@ -115,18 +140,27 @@ func (p *GCSStorageProvider) Save(ctx context.Context, storagePath string, conte
 }
 
 func (p *GCSStorageProvider) Open(ctx context.Context, storagePath string) (io.ReadCloser, error) {
-	obj := p.client.Bucket(p.bucket).Object(storagePath)
-	r, err := obj.NewReader(ctx)
-	if err != nil {
-		return nil, err
+	primaryKey := p.objectName(storagePath)
+	r, err := p.client.Bucket(p.bucket).Object(primaryKey).NewReader(ctx)
+	if err == nil {
+		return r, nil
 	}
-	return r, nil
+	// Transparent fallback to unprefixed storagePath if reading pre-prefix blobs
+	if errors.Is(err, storage.ErrObjectNotExist) && primaryKey != storagePath {
+		if rFallback, errFallback := p.client.Bucket(p.bucket).Object(storagePath).NewReader(ctx); errFallback == nil {
+			return rFallback, nil
+		}
+	}
+	return nil, err
 }
 
 func (p *GCSStorageProvider) Delete(ctx context.Context, storagePath string) error {
-	obj := p.client.Bucket(p.bucket).Object(storagePath)
-	if err := obj.Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+	primaryKey := p.objectName(storagePath)
+	if err := p.client.Bucket(p.bucket).Object(primaryKey).Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
 		return fmt.Errorf("failed to delete from gcs: %w", err)
+	}
+	if primaryKey != storagePath {
+		_ = p.client.Bucket(p.bucket).Object(storagePath).Delete(ctx)
 	}
 	return nil
 }
@@ -140,14 +174,18 @@ func (p *GCSStorageProvider) Close() error {
 
 // NewStorageProvider initializes the appropriate StorageProvider based on configuration.
 func NewStorageProvider(ctx context.Context, cfg *config.Config) (StorageProvider, error) {
-	if cfg.AttachmentsGCSBucket != "" {
-		return NewGCSStorageProvider(ctx, cfg.AttachmentsGCSBucket)
+	if cfg != nil && cfg.AttachmentsGCSBucket != "" {
+		return NewGCSStorageProvider(ctx, cfg.AttachmentsGCSBucket, cfg.AttachmentsGCSPrefix)
+	}
+	localDir := "data/attachments"
+	if cfg != nil && cfg.LocalStorageDir != "" {
+		localDir = cfg.LocalStorageDir
 	}
 	if cfg != nil && !cfg.AllowDevAuth() {
-		slog.Warn("ATTACHMENTS_GCS_BUCKET is not set in non-dev environment; falling back to ephemeral local container storage",
+		slog.Warn("ATTACHMENTS_GCS_BUCKET is not set in non-local environment; falling back to ephemeral local container storage",
 			slog.String("env", cfg.Env),
-			slog.String("local_dir", cfg.LocalStorageDir),
+			slog.String("local_dir", localDir),
 		)
 	}
-	return NewLocalStorageProvider(cfg.LocalStorageDir)
+	return NewLocalStorageProvider(localDir)
 }

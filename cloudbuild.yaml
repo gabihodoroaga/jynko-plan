@@ -6,6 +6,10 @@ steps:
     id: 'build-image'
     args:
       - 'build'
+      - '--build-arg'
+      - 'BUILD_SHA=$SHORT_SHA'
+      - '--build-arg'
+      - 'BUILD_BRANCH=$BRANCH_NAME'
       - '-t'
       - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
       - '.'
@@ -17,39 +21,93 @@ steps:
     id: 'push-image'
     args:
       - 'push'
-      - '--all-tags'
-      - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME'
+      - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
 
   # ----------------------------------------------------------------------------
-  # Step 3: Deploy to Google Cloud Run
+  # Step 3: Resolve Target Environment by Branch & Deploy to Google Cloud Run
+  #   - main                  -> prd (jynko-plan-prd, jp-prd-projects)
+  #   - stg                   -> stg (jynko-plan-stg, jp-stg-projects)
+  #   - dev & feature/*       -> dev (jynko-plan-dev, jp-dev-projects)
   # ----------------------------------------------------------------------------
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-cloud-run'
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - 'run'
-      - 'deploy'
-      - '${_SERVICE_NAME}-${_ENV_PREFIX}'
-      - '--image'
-      - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
-      - '--region'
-      - '$_REGION'
-      - '--platform'
-      - 'managed'
-      - '--iap'
-      - '--service-account'
-      - '$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--update-env-vars'
-      - 'ENV=$_ENV_PREFIX,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,IAP_AUDIENCE=$_IAP_AUDIENCE,STATIC_DIR=/app/web'
-      - '--no-allow-unauthenticated'
+      - '-e'
+      - '-c'
+      - |
+        RAW_ENV="$_ENV_PREFIX"
+        BRANCH="$BRANCH_NAME"
+
+        if [ -z "$$RAW_ENV" ] || [ "$$RAW_ENV" = "auto" ]; then
+          case "$$BRANCH" in
+            main)
+              TARGET_ENV="prd"
+              ;;
+            stg)
+              TARGET_ENV="stg"
+              ;;
+            *)
+              TARGET_ENV="dev"
+              ;;
+          esac
+        else
+          case "$$RAW_ENV" in
+            dev|stg|prd)
+              TARGET_ENV="$$RAW_ENV"
+              ;;
+            *)
+              echo "ERROR: Invalid _ENV_PREFIX '$$RAW_ENV' (must be auto, dev, stg, or prd)" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "$_ALLOW_BRANCH_OVERRIDE" != "true" ]; then
+            if [ "$$TARGET_ENV" = "prd" ] && [ "$$BRANCH" != "main" ]; then
+              echo "ERROR: Branch '$$BRANCH' is not allowed to deploy to prd (expected 'main')." >&2
+              exit 1
+            fi
+            if [ "$$TARGET_ENV" = "stg" ] && [ "$$BRANCH" != "stg" ]; then
+              echo "ERROR: Branch '$$BRANCH' is not allowed to deploy to stg (expected 'stg')." >&2
+              exit 1
+            fi
+          fi
+        fi
+
+        SERVICE="${_SERVICE_NAME}-$${TARGET_ENV}"
+        echo "==> Deploying branch '$$BRANCH' (SHA: $SHORT_SHA) to environment '$$TARGET_ENV' (Cloud Run service: $$SERVICE)"
+
+        # Tag environment-specific latest pointer in eu.gcr.io
+        gcloud container images add-tag --quiet \
+          "eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA" \
+          "eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$${TARGET_ENV}-latest" || true
+
+        ENV_VARS="ENV=$${TARGET_ENV},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DB,STATIC_DIR=/app/web,BUILD_SHA=$SHORT_SHA,BUILD_BRANCH=$$BRANCH"
+        if [ -n "$_IAP_AUDIENCE" ]; then
+          ENV_VARS="$${ENV_VARS},IAP_AUDIENCE=$_IAP_AUDIENCE"
+        fi
+        if [ -n "$_ATTACHMENTS_GCS_BUCKET" ]; then
+          ENV_VARS="$${ENV_VARS},ATTACHMENTS_GCS_BUCKET=$_ATTACHMENTS_GCS_BUCKET"
+        fi
+
+        gcloud run deploy "$$SERVICE" \
+          --image "eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA" \
+          --region "$_REGION" \
+          --platform managed \
+          --iap \
+          --service-account "$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com" \
+          --update-env-vars "$$ENV_VARS" \
+          --no-allow-unauthenticated
 
 substitutions:
-  _ENV_PREFIX: 'prd'
+  _ENV_PREFIX: 'auto'
+  _ALLOW_BRANCH_OVERRIDE: 'false'
   _SERVICE_NAME: 'jynko-plan'
   _REGION: 'europe-west3'
   _SERVICE_ACCOUNT: 'jynko-plan-runner'
   _FIRESTORE_DB: '(default)'
   _IAP_AUDIENCE: ''
+  _ATTACHMENTS_GCS_BUCKET: ''
 
 images:
   - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'

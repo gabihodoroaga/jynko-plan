@@ -138,7 +138,17 @@ Read `.agents/skills/jynko-ui-validator/SKILL.md` for full instructions on runni
 
 # Or run directly via go test when frontend is already running on :4202
 JYNKO_E2E=1 JYNKO_E2E_OUT_DIR=/tmp/jynko-screenshots go -C backend test -v -count=1 ./internal/e2e/...
+
+# Run E2E validation against a deployed Cloud Run dev/stg environment behind Google Cloud IAP
+JYNKO_E2E_IAP_AUDIENCE="/projects/<PROJECT_NUM>/locations/europe-west3/services/jynko-plan-dev" \
+  ./scripts/run-e2e.sh /tmp/jynko-dev-e2e "https://jynko-plan-dev-<hash>.a.run.app"
 ```
+
+### Multi-Environment Branch & Deployment Workflow (`dev` -> `stg` -> `prd`)
+- **`dev` + feature branches (`feat/*`, `fix/*`, `chore/*`)**: Deploy to Cloud Run `jynko-plan-dev` (`ENV=dev`, Firestore `jp-dev-projects`, GCS prefix `dev/`). Used by developers and AI agents to build and test features.
+- **`stg` branch**: Pre-release environment (`jynko-plan-stg`, `ENV=stg`, Firestore `jp-stg-projects`, GCS prefix `stg/`). Merge `dev -> stg` and validate end-to-end before promoting to production.
+- **`main` branch**: Production environment (`jynko-plan-prd`, `ENV=prd`, Firestore `jp-prd-projects`). Only merge `stg -> main` after `stg` validation succeeds.
+- On Cloud Run (`K_SERVICE` set), `ALLOW_DEV_AUTH` defaults to `false` even when `ENV=dev`, so all deployed Cloud Run services enforce Google Cloud IAP / OIDC authentication.
 
 ### Required Environment Variables (`backend/.env`)
 ```env
