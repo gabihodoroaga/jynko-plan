@@ -73,7 +73,8 @@ Set common environment variables for your deployment shell:
 export PROJECT_ID=$(gcloud config get-value project)
 export PROJECT_NUM=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 export REGION="europe-west3"
-export SERVICE_NAME="jynko-plan-app"
+export SERVICE_BASE="jynko-plan"
+export SERVICE_NAME="jynko-plan-prd" # or jynko-plan-stg / jynko-plan-dev when targeting a specific Cloud Run service
 export AR_REPO="jynko-plan"
 export RUNNER_SA="jynko-plan-runner"
 export BUILDER_SA="jynko-plan-build"
