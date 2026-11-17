@@ -7,30 +7,38 @@ import { WorkItemService } from '../../core/services/work-item.service';
 import { SettingsService } from '../../core/services/settings.service';
 import { Cycle } from '../../core/models/project.model';
 import { ModalComponent } from '../../shared/components/modal.component';
+import { ProjectBreadcrumbComponent } from '../../shared/components/project-breadcrumb.component';
 
 @Component({
   selector: 'app-cycles',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ProjectBreadcrumbComponent],
   template: `
     <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
-      <div class="flex items-center justify-between">
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <app-project-breadcrumb
+            sectionLabel="Cycles"
+            [sectionRoute]="['/projects', projectService.activeProjectId(), 'cycles']"
+          ></app-project-breadcrumb>
+          @if (projectService.canEdit()) {
+            <button
+              type="button"
+              data-testid="page-primary-action-btn"
+              aria-label="Create new cycle"
+              (click)="openCreateModal()"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+            >
+              + New Cycle
+            </button>
+          }
+        </div>
         <div>
           <h2 class="text-base font-semibold text-slate-900">Sprint Cycles</h2>
           <p class="text-xs text-slate-500">
             Time-boxed iterations for scheduled execution in {{ projectService.activeProject()?.name }}
           </p>
         </div>
-        @if (projectService.canEdit()) {
-          <button
-            type="button"
-            aria-label="Create new cycle"
-            (click)="openCreateModal()"
-            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          >
-            + New Cycle
-          </button>
-        }
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

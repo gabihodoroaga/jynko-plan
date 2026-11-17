@@ -19,6 +19,7 @@ import { WorkItemSpreadsheetComponent } from '../work-item-spreadsheet/work-item
 import { WorkItemDetailDrawerComponent } from '../work-item-detail-drawer/work-item-detail-drawer.component';
 import { DropdownComponent, DropdownOption } from '../../../shared/components/dropdown.component';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge.component';
+import { ProjectBreadcrumbComponent } from '../../../shared/components/project-breadcrumb.component';
 
 @Component({
   selector: 'app-work-items-shell',
@@ -34,9 +35,29 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
     WorkItemDetailDrawerComponent,
     DropdownComponent,
     StatusBadgeComponent,
+    ProjectBreadcrumbComponent,
   ],
   template: `
     <div class="flex flex-col w-full h-full">
+      <!-- Top-Left Project Breadcrumb & Primary Action Row -->
+      <div class="px-3 sm:px-4 py-2 bg-white border-b border-slate-100 flex items-center justify-between gap-2">
+        <app-project-breadcrumb
+          sectionLabel="Work items"
+          [sectionRoute]="['/projects', projectService.activeProjectId(), 'work-items']"
+        ></app-project-breadcrumb>
+
+        @if (projectService.canEdit()) {
+          <button
+            type="button"
+            data-testid="page-primary-action-btn"
+            (click)="workItemService.isQuickCreateOpen.set(true)"
+            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+          >
+            + Add work item
+          </button>
+        }
+      </div>
+
       <!-- View Toolbar & Filter Bar (h-11 / 44px) -->
       <div
         class="min-h-[44px] px-3 sm:px-4 py-1.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2"
@@ -221,16 +242,6 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
             </button>
           }
           </div>
-
-          @if (projectService.canEdit()) {
-            <button
-              type="button"
-              (click)="workItemService.isQuickCreateOpen.set(true)"
-              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors ml-auto md:ml-0"
-            >
-              + Add work item
-            </button>
-          }
         </div>
       </div>
 

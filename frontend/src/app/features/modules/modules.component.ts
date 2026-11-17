@@ -7,30 +7,38 @@ import { WorkItemService } from '../../core/services/work-item.service';
 import { Module } from '../../core/models/project.model';
 import { ModalComponent } from '../../shared/components/modal.component';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
+import { ProjectBreadcrumbComponent } from '../../shared/components/project-breadcrumb.component';
 
 @Component({
   selector: 'app-modules',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent],
   template: `
     <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
-      <div class="flex items-center justify-between">
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <app-project-breadcrumb
+            sectionLabel="Modules"
+            [sectionRoute]="['/projects', projectService.activeProjectId(), 'modules']"
+          ></app-project-breadcrumb>
+          @if (projectService.canEdit()) {
+            <button
+              type="button"
+              data-testid="page-primary-action-btn"
+              aria-label="Create new module"
+              (click)="openCreateModal()"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+            >
+              + New Module
+            </button>
+          }
+        </div>
         <div>
           <h2 class="text-base font-semibold text-slate-900">Feature Modules</h2>
           <p class="text-xs text-slate-500">
             Persistent functional domains across the software lifecycle in {{ projectService.activeProject()?.name }}
           </p>
         </div>
-        @if (projectService.canEdit()) {
-          <button
-            type="button"
-            aria-label="Create new module"
-            (click)="openCreateModal()"
-            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          >
-            + New Module
-          </button>
-        }
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
