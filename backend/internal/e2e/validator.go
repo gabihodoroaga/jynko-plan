@@ -288,6 +288,43 @@ func assertFullWidthPageContainer(page *rod.Page, res *ValidationCheckResult, pa
 	}
 }
 
+func assertProjectBreadcrumbNavigatesToOverview(page *rod.Page, res *ValidationCheckResult, pageLabel string) {
+	hasLink, linkEl, _ := page.Has(`main nav[aria-label="Breadcrumbs"] a[data-testid="page-project-link"]`)
+	if !hasLink || linkEl == nil {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s page missing top-left project breadcrumb link (main nav[aria-label='Breadcrumbs'] a[data-testid='page-project-link'])", pageLabel))
+		return
+	}
+	linkText := strings.TrimSpace(linkEl.MustText())
+	isTopLeftAndAligned := linkEl.MustEval(`() => {
+		const main = document.querySelector('main');
+		const actionBtn = document.querySelector('main [data-testid="page-primary-action-btn"]');
+		if (!main || !actionBtn) return false;
+		const mainRect = main.getBoundingClientRect();
+		const r = this.getBoundingClientRect();
+		const btnRect = actionBtn.getBoundingClientRect();
+		return r.left < mainRect.left + mainRect.width / 2 &&
+			r.top < mainRect.top + 120 &&
+			Math.abs(btnRect.top - r.top) < 20 &&
+			btnRect.left > r.right;
+	}`).Bool()
+	if !strings.Contains(linkText, "hodo") || !isTopLeftAndAligned {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s project breadcrumb expected 'hodo' at top-left aligned with primary action button, got text=%q aligned=%v", pageLabel, linkText, isTopLeftAndAligned))
+		return
+	}
+
+	linkEl.MustClick()
+	time.Sleep(300 * time.Millisecond)
+	afterURL := page.MustInfo().URL
+	if strings.HasSuffix(strings.Split(afterURL, "?")[0], "/projects/proj-jynko-core") {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s displays project name ('hodo') at top-left on the same line as the primary action button and navigates to project overview on click", pageLabel))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s clicking project breadcrumb navigated to %q instead of /projects/proj-jynko-core", pageLabel, afterURL))
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Suite 1: App Shell & Responsive Panel Layout
 // -----------------------------------------------------------------------------
@@ -982,6 +1019,7 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing [data-testid='open-create-work-item-btn'] button")
 	}
 
+	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Work Items")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
@@ -1152,6 +1190,7 @@ func CheckCyclesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChe
 	assertFullWidthPageContainer(page, &res, "Cycles")
 
 	page.MustScreenshot(res.Screenshot)
+	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Cycles")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
@@ -1210,6 +1249,7 @@ func CheckEpicsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChec
 	assertFullWidthPageContainer(page, &res, "Epics")
 
 	page.MustScreenshot(res.Screenshot)
+	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Epics")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }
@@ -1257,6 +1297,7 @@ func CheckModulesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCh
 	assertFullWidthPageContainer(page, &res, "Modules")
 
 	page.MustScreenshot(res.Screenshot)
+	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Modules")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
 }

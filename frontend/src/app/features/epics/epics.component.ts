@@ -7,30 +7,38 @@ import { WorkItemService } from '../../core/services/work-item.service';
 import { Epic, EpicStatus } from '../../core/models/project.model';
 import { ModalComponent } from '../../shared/components/modal.component';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
+import { ProjectBreadcrumbComponent } from '../../shared/components/project-breadcrumb.component';
 
 @Component({
   selector: 'app-epics',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent],
   template: `
     <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
-      <div class="flex items-center justify-between">
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <app-project-breadcrumb
+            sectionLabel="Epics"
+            [sectionRoute]="['/projects', projectService.activeProjectId(), 'epics']"
+          ></app-project-breadcrumb>
+          @if (projectService.canEdit()) {
+            <button
+              type="button"
+              data-testid="page-primary-action-btn"
+              aria-label="Create new epic"
+              (click)="openCreateModal()"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+            >
+              + New Epic
+            </button>
+          }
+        </div>
         <div>
           <h2 class="text-base font-semibold text-slate-900">Epics & Strategic Milestones</h2>
           <p class="text-xs text-slate-500">
             Time-bound strategic objectives grouping related work items in {{ projectService.activeProject()?.name }}
           </p>
         </div>
-        @if (projectService.canEdit()) {
-          <button
-            type="button"
-            aria-label="Create new epic"
-            (click)="openCreateModal()"
-            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          >
-            + New Epic
-          </button>
-        }
       </div>
 
       <div class="space-y-3">

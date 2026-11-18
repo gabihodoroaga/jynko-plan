@@ -45,6 +45,10 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 - **Work Secondary Panel (`w-64`)**:
   - Collapse secondary panel button: `button[aria-label="Collapse secondary panel"]`
   - Expand secondary panel button (shown when collapsed): `button[aria-label="Expand secondary panel"]`
+  - Top-left project breadcrumb (Work Items, Cycles, Epics, Modules):
+    ```css
+    main nav[aria-label="Breadcrumbs"] a[data-testid="page-project-link"]
+    ```
   - New work item button: `[data-testid="open-create-work-item-btn"]` (`button` containing `New work item`).
   - Create work item modal (opened when clicking `[data-testid="open-create-work-item-btn"]` or `+ Add work item`):
     - Modal title: `Create work item`
