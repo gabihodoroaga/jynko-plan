@@ -276,5 +276,93 @@ func TestHTTPHandler_AuthenticationAndPerCallerRBAC(t *testing.T) {
 	}
 }
 
+func TestHTTPHandler_CloudRunStatelessAndServiceAccount(t *testing.T) {
+	saEmail := "jynko-scion-agent@aparaturafiscala-178410.iam.gserviceaccount.com"
+	saSub := "109876543210987654321"
+
+	projRepo := &testProjectRepo{
+		members: map[string]*model.ProjectMember{
+			// Invited by email only (Firestore doc ID differs from OIDC numeric sub)
+			"proj-1:" + saEmail: {
+				UserID: saEmail,
+				Email:  saEmail,
+				Role:   model.RoleMember,
+			},
+		},
+	}
+
+	appCfg := &config.Config{
+		Env:           "prd",
+		RawEnv:        "prd",
+		IAPAudience:   "/projects/123/locations/europe-west3/services/jynko-plan-prd",
+		IAPRequireJWT: true,
+	}
+
+	mockValidator := func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+		if token == "sa-oidc-jwt" && audience == appCfg.IAPAudience {
+			return &idtoken.Payload{
+				Subject: saSub,
+				Claims: map[string]interface{}{
+					"email": saEmail,
+				},
+			}, nil
+		}
+		return nil, errors.New("invalid token")
+	}
+
+	s := NewServer(ServerDeps{
+		Config:       Config{DefaultProjectID: "proj-1"},
+		AppConfig:    appCfg,
+		JWTValidator: mockValidator,
+		ProjectRepo:  projRepo,
+		ProjectSvc:   service.NewProjectService(projRepo),
+	})
+	handler := s.HTTPHandler()
+
+	doMCP := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
+		req.RemoteAddr = "127.0.0.1:12345"
+		req.Host = "jynko-plan-prd-d2lb6vh75a-ey.a.run.app"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer sa-oidc-jwt")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+
+	// 1. initialize behind Cloud Run proxy (127.0.0.1 RemoteAddr + external Host)
+	wInit := doMCP(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0"}}}`)
+	if wInit.Code != http.StatusOK {
+		t.Fatalf("expected 200 on initialize behind Cloud Run proxy, got %d: %s", wInit.Code, wInit.Body.String())
+	}
+
+	// 2. tools/list without Mcp-Session-Id (stateless mode)
+	wList := doMCP(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	if wList.Code != http.StatusOK {
+		t.Fatalf("expected 200 on stateless tools/list, got %d: %s", wList.Code, wList.Body.String())
+	}
+	if !strings.Contains(wList.Body.String(), "list_projects") {
+		t.Fatalf("expected tools/list to include list_projects, got: %s", wList.Body.String())
+	}
+
+	// 3. Stateless tools/call without Mcp-Session-Id
+	wCall := doMCP(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}`)
+	if wCall.Code != http.StatusOK {
+		t.Fatalf("expected 200 on stateless tools/call, got %d: %s", wCall.Code, wCall.Body.String())
+	}
+	if !strings.Contains(wCall.Body.String(), "proj-1") {
+		t.Fatalf("expected tools/call list_projects to return proj-1, got: %s", wCall.Body.String())
+	}
+
+	// 4. Verify service account RBAC lookup by email works via CheckRole even when sub != email
+	saCtx := WithUserContext(context.Background(), model.UserContext{
+		UserID: saSub,
+		Email:  saEmail,
+	})
+	if err := s.resolver.CheckRole(saCtx, "proj-1", model.RoleMember); err != nil {
+		t.Fatalf("expected service account invited by email to pass RoleMember via GetMemberByEmail: %v", err)
+	}
+}
+
 // Suppress unused imports
 var _ = time.Now
