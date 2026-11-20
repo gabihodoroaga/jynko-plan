@@ -79,6 +79,8 @@ func (s *Server) HTTPHandler() http.Handler {
 	streamable := server.NewStreamableHTTPServer(
 		s.mcpServer,
 		server.WithMaxRequestBodyBytes(2<<20),
+		server.WithStateLess(true),
+		server.WithDisableLocalhostProtection(true),
 	)
 
 	appCfg := s.deps.AppConfig

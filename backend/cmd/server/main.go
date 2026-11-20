@@ -16,6 +16,7 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/config"
 	"github.com/gabihodoroaga/jynko-plan/internal/handler"
 	"github.com/gabihodoroaga/jynko-plan/internal/logger"
+	"github.com/gabihodoroaga/jynko-plan/internal/mcp"
 	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
@@ -123,7 +124,30 @@ func main() {
 	stickyHandler := handler.NewStickyHandler(stickySvc)
 	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc)
 
-	router := SetupRouter(
+	mcpCfg := mcp.Config{
+		DefaultProjectID: strings.TrimSpace(os.Getenv("DEFAULT_PROJECT_ID")),
+	}
+	if cfg.AllowDevAuth() {
+		mcpCfg.User = model.UserContext{
+			UserID: cfg.DevUserID,
+			Email:  cfg.DevUserEmail,
+			Name:   cfg.DevUserName,
+		}
+	}
+	mcpSrv := mcp.NewServer(mcp.ServerDeps{
+		Config:      mcpCfg,
+		AppConfig:   cfg,
+		ProjectRepo: projectRepo,
+		ProjectSvc:  projectSvc,
+		ItemSvc:     itemSvc,
+		PageSvc:     pageSvc,
+		CycleSvc:    cycleSvc,
+		EpicSvc:     epicSvc,
+		ModuleSvc:   moduleSvc,
+		StickySvc:   stickySvc,
+	})
+
+	router := SetupRouterWithMCP(
 		cfg,
 		projectRepo,
 		authHandler,
@@ -137,6 +161,7 @@ func main() {
 		pageHandler,
 		stickyHandler,
 		attachmentHandler,
+		mcpSrv.HTTPHandler(),
 	)
 
 	srv := &http.Server{
@@ -185,6 +210,41 @@ func SetupRouter(
 	pageHandler *handler.PageHandler,
 	stickyHandler *handler.StickyHandler,
 	attachmentHandler *handler.AttachmentHandler,
+) *gin.Engine {
+	return SetupRouterWithMCP(
+		cfg,
+		projectRepo,
+		authHandler,
+		projectHandler,
+		moduleHandler,
+		epicHandler,
+		cycleHandler,
+		labelHandler,
+		itemHandler,
+		commentHandler,
+		pageHandler,
+		stickyHandler,
+		attachmentHandler,
+		nil,
+	)
+}
+
+// SetupRouterWithMCP configures all Gin routes, /api/v1 middleware, and an optional Streamable HTTP /mcp handler.
+func SetupRouterWithMCP(
+	cfg *config.Config,
+	projectRepo repository.ProjectRepository,
+	authHandler *handler.AuthHandler,
+	projectHandler *handler.ProjectHandler,
+	moduleHandler *handler.ModuleHandler,
+	epicHandler *handler.EpicHandler,
+	cycleHandler *handler.CycleHandler,
+	labelHandler *handler.LabelHandler,
+	itemHandler *handler.ItemHandler,
+	commentHandler *handler.CommentHandler,
+	pageHandler *handler.PageHandler,
+	stickyHandler *handler.StickyHandler,
+	attachmentHandler *handler.AttachmentHandler,
+	mcpHandler http.Handler,
 ) *gin.Engine {
 	if !cfg.AllowDevAuth() {
 		gin.SetMode(gin.ReleaseMode)
@@ -321,6 +381,10 @@ func SetupRouter(
 		projGroup.DELETE("/attachments/:attachmentId", member, attachmentHandler.DeleteAttachment)
 	}
 
+	if mcpHandler != nil {
+		r.Any("/mcp", gin.WrapH(mcpHandler))
+	}
+
 	// Static SPA asset serving & HTML5 history routing fallback (when STATIC_DIR is configured)
 	if cfg.StaticDir != "" {
 		cleanStaticDir := filepath.Clean(cfg.StaticDir)
@@ -328,8 +392,8 @@ func SetupRouter(
 
 		r.NoRoute(func(c *gin.Context) {
 			path := c.Request.URL.Path
-			// Don't intercept unmatched API routes; return standard 404 JSON
-			if strings.HasPrefix(path, "/api/") {
+			// Don't intercept unmatched API or MCP routes; return standard 404 JSON
+			if strings.HasPrefix(path, "/api/") || path == "/mcp" || strings.HasPrefix(path, "/mcp/") {
 				c.JSON(http.StatusNotFound, gin.H{"error": "route not found"})
 				return
 			}
