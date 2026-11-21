@@ -13,12 +13,18 @@ import (
 
 // WorkItemDetailView combines a work item with its child sub-tasks and discussion comments.
 type WorkItemDetailView struct {
-	Item     *model.WorkItem     `json:"item"`
-	SubItems []model.SubWorkItem `json:"sub_items"`
-	Comments []model.Comment     `json:"comments"`
+	Item        *model.WorkItem     `json:"item"`
+	SubItems    []model.SubWorkItem `json:"sub_items"`
+	Comments    []model.Comment     `json:"comments"`
+	Attachments []model.Attachment  `json:"attachments"`
 }
 
-func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.ItemService) {
+func registerWorkItemTools(
+	s *server.MCPServer,
+	r *Resolver,
+	itemSvc *service.ItemService,
+	attSvc *service.AttachmentService,
+) {
 	// 1. list_work_items
 	s.AddTool(
 		mcp.NewTool("list_work_items",
@@ -86,11 +92,19 @@ func registerWorkItemTools(s *server.MCPServer, r *Resolver, itemSvc *service.It
 
 			subItems, _ := itemSvc.ListSubItems(ctx, projID, targetItem.ID)
 			comments, _ := itemSvc.ListComments(ctx, projID, targetItem.ID)
+			var attachments []model.Attachment
+			if attSvc != nil {
+				attachments, _ = attSvc.ListAttachments(ctx, projID, targetItem.ID)
+			}
+			if attachments == nil {
+				attachments = []model.Attachment{}
+			}
 
 			view := WorkItemDetailView{
-				Item:     targetItem,
-				SubItems: subItems,
-				Comments: comments,
+				Item:        targetItem,
+				SubItems:    subItems,
+				Comments:    comments,
+				Attachments: attachments,
 			}
 			return jsonResult(view)
 		},
