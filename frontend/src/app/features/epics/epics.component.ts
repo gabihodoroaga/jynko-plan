@@ -14,310 +14,316 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent],
   template: `
-    <div data-testid="project-canvas" class="project-canvas w-full p-4 sm:p-6 space-y-5 min-h-full">
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between gap-2">
-          <app-project-breadcrumb
-            sectionLabel="Epics"
-            [sectionRoute]="['/projects', projectService.activeProjectId(), 'epics']"
-          ></app-project-breadcrumb>
-          @if (projectService.canEdit()) {
-            <button
-              type="button"
-              data-testid="page-primary-action-btn"
-              aria-label="Create new epic"
-              (click)="openCreateModal()"
-              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
-            >
-              + New Epic
-            </button>
-          }
-        </div>
+    <div class="flex flex-col w-full min-h-full">
+      <!-- Project Top Bar: project breadcrumb + primary action, tinted with the project background colour (PLAN-7) -->
+      <div
+        data-testid="project-top-bar"
+        class="project-bg px-3 sm:px-4 py-2 border-b border-slate-100 flex items-center justify-between gap-2"
+      >
+        <app-project-breadcrumb
+          sectionLabel="Epics"
+          [sectionRoute]="['/projects', projectService.activeProjectId(), 'epics']"
+        ></app-project-breadcrumb>
+        @if (projectService.canEdit()) {
+          <button
+            type="button"
+            data-testid="page-primary-action-btn"
+            aria-label="Create new epic"
+            (click)="openCreateModal()"
+            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+          >
+            + New Epic
+          </button>
+        }
+      </div>
+
+      <!-- Page Content: default slate-50 canvas, same padding as the Work Items view canvas -->
+      <div data-testid="project-page-content" class="flex-1 p-2.5 sm:p-4 bg-slate-50 space-y-5">
         <div>
           <h2 class="text-base font-semibold text-slate-900">Epics & Strategic Milestones</h2>
           <p class="text-xs text-slate-500">
             Time-bound strategic objectives grouping related work items in {{ projectService.activeProject()?.name }}
           </p>
         </div>
-      </div>
 
-      <div class="space-y-3">
-        @for (row of epicRows(); track row.epic.id) {
-          <div
-            [attr.data-epic-id]="row.epic.id"
-            class="bg-white border border-slate-200 rounded-md p-4 shadow-card space-y-3"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2.5 min-w-0">
-                <h3 class="text-sm font-semibold text-slate-900 truncate">{{ row.epic.name }}</h3>
+        <div class="space-y-3">
+          @for (row of epicRows(); track row.epic.id) {
+            <div
+              [attr.data-epic-id]="row.epic.id"
+              class="bg-white border border-slate-200 rounded-md p-4 shadow-card space-y-3"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <h3 class="text-sm font-semibold text-slate-900 truncate">{{ row.epic.name }}</h3>
+                  <app-dropdown
+                    [options]="epicStatusOptions"
+                    [value]="row.epic.status"
+                    (valueChange)="onInlineStatusChange(row.epic.id, $event)"
+                    [disabled]="!projectService.canEdit()"
+                    [ariaLabel]="'Epic status for ' + row.epic.name"
+                    size="sm"
+                  ></app-dropdown>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3">
+                  @if (row.epic.start_date || row.epic.target_date) {
+                    <span class="text-[11px] font-mono text-slate-500">
+                      @if (row.epic.start_date) {
+                        <span>{{ row.epic.start_date | date: 'MMM d, yyyy' }}</span>
+                      }
+                      @if (row.epic.start_date && row.epic.target_date) {
+                        <span class="mx-1">→</span>
+                      }
+                      @if (row.epic.target_date) {
+                        <span>Target: {{ row.epic.target_date | date: 'MMM d, yyyy' }}</span>
+                      }
+                    </span>
+                  }
+                  <button
+                    type="button"
+                    (click)="viewEpicTimeline(row.epic.id)"
+                    class="text-xs font-medium text-sky-600 hover:underline"
+                  >
+                    Open in Timeline →
+                  </button>
+                  @if (projectService.canEdit()) {
+                    @if (confirmDeleteId() === row.epic.id) {
+                      <div class="inline-flex items-center gap-1.5">
+                        <span class="text-[11px] text-slate-500">Delete?</span>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteEpic(row.epic.id)"
+                          [attr.aria-label]="'Confirm delete epic ' + row.epic.name"
+                          class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteId.set(null)"
+                          class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    } @else {
+                      <button
+                        type="button"
+                        (click)="openEditModal(row.epic)"
+                        [attr.aria-label]="'Edit epic ' + row.epic.name"
+                        class="text-[11px] font-medium text-slate-500 hover:text-sky-600 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        (click)="confirmDeleteId.set(row.epic.id)"
+                        [attr.aria-label]="'Delete epic ' + row.epic.name"
+                        class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    }
+                  }
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-600">{{ row.epic.description || 'No description provided.' }}</p>
+
+              <div class="space-y-1.5 pt-2 border-t border-slate-200">
+                <div class="flex items-center justify-between text-[11px] text-slate-600">
+                  <span>Linked Work Items: {{ row.doneCount }}/{{ row.totalCount }} Done</span>
+                  <span class="font-mono font-medium">{{ row.percent }}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    class="h-full bg-emerald-600 transition-all"
+                    [style.width.%]="row.percent"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          } @empty {
+            <div class="bg-white border border-slate-200 rounded-md p-8 text-center text-xs text-slate-400">
+              No strategic epics defined yet for this project. Click <strong>+ New Epic</strong> to create one.
+            </div>
+          }
+        </div>
+
+        <!-- Create Strategic Epic Modal -->
+        <app-modal
+          [isOpen]="isCreateOpen()"
+          title="Create Strategic Epic"
+          (closed)="isCreateOpen.set(false)"
+        >
+          <form (ngSubmit)="submitCreate()" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Epic Name</label>
+              <input
+                type="text"
+                name="name"
+                [(ngModel)]="newName"
+                required
+                aria-label="New epic name"
+                placeholder="e.g., Enterprise SSO & Audit Logging"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                rows="2"
+                name="description"
+                [(ngModel)]="newDesc"
+                aria-label="New epic description"
+                placeholder="High-level scope and measurable outcomes..."
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              ></textarea>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
                 <app-dropdown
                   [options]="epicStatusOptions"
-                  [value]="row.epic.status"
-                  (valueChange)="onInlineStatusChange(row.epic.id, $event)"
-                  [disabled]="!projectService.canEdit()"
-                  [ariaLabel]="'Epic status for ' + row.epic.name"
-                  size="sm"
+                  [value]="newStatus"
+                  (valueChange)="onEpicStatusChange($event)"
+                  [fullWidth]="true"
                 ></app-dropdown>
               </div>
-
-              <div class="flex flex-wrap items-center gap-3">
-                @if (row.epic.start_date || row.epic.target_date) {
-                  <span class="text-[11px] font-mono text-slate-500">
-                    @if (row.epic.start_date) {
-                      <span>{{ row.epic.start_date | date: 'MMM d, yyyy' }}</span>
-                    }
-                    @if (row.epic.start_date && row.epic.target_date) {
-                      <span class="mx-1">→</span>
-                    }
-                    @if (row.epic.target_date) {
-                      <span>Target: {{ row.epic.target_date | date: 'MMM d, yyyy' }}</span>
-                    }
-                  </span>
-                }
-                <button
-                  type="button"
-                  (click)="viewEpicTimeline(row.epic.id)"
-                  class="text-xs font-medium text-sky-600 hover:underline"
-                >
-                  Open in Timeline →
-                </button>
-                @if (projectService.canEdit()) {
-                  @if (confirmDeleteId() === row.epic.id) {
-                    <div class="inline-flex items-center gap-1.5">
-                      <span class="text-[11px] text-slate-500">Delete?</span>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteEpic(row.epic.id)"
-                        [attr.aria-label]="'Confirm delete epic ' + row.epic.name"
-                        class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteId.set(null)"
-                        class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  } @else {
-                    <button
-                      type="button"
-                      (click)="openEditModal(row.epic)"
-                      [attr.aria-label]="'Edit epic ' + row.epic.name"
-                      class="text-[11px] font-medium text-slate-500 hover:text-sky-600 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      (click)="confirmDeleteId.set(row.epic.id)"
-                      [attr.aria-label]="'Delete epic ' + row.epic.name"
-                      class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  }
-                }
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  Start Date <span class="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  name="startDate"
+                  [(ngModel)]="newStart"
+                  aria-label="New epic start date"
+                  class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  Target Date <span class="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  name="targetDate"
+                  [(ngModel)]="newTarget"
+                  [min]="newStart"
+                  aria-label="New epic target date"
+                  class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
               </div>
             </div>
+            @if (dateValidationError()) {
+              <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
+            }
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                (click)="isCreateOpen.set(false)"
+                class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                aria-label="Submit create epic"
+                class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+              >
+                Create Epic
+              </button>
+            </div>
+          </form>
+        </app-modal>
 
-            <p class="text-xs text-slate-600">{{ row.epic.description || 'No description provided.' }}</p>
-
-            <div class="space-y-1.5 pt-2 border-t border-slate-200">
-              <div class="flex items-center justify-between text-[11px] text-slate-600">
-                <span>Linked Work Items: {{ row.doneCount }}/{{ row.totalCount }} Done</span>
-                <span class="font-mono font-medium">{{ row.percent }}%</span>
+        <!-- Edit Strategic Epic Modal -->
+        <app-modal
+          [isOpen]="isEditOpen()"
+          title="Edit Strategic Epic"
+          (closed)="closeEditModal()"
+        >
+          <form (ngSubmit)="submitEdit()" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Epic Name</label>
+              <input
+                type="text"
+                name="editName"
+                [(ngModel)]="editName"
+                required
+                aria-label="Edit epic name"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                rows="2"
+                name="editDescription"
+                [(ngModel)]="editDesc"
+                aria-label="Edit epic description"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              ></textarea>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
+                <app-dropdown
+                  [options]="epicStatusOptions"
+                  [value]="editStatus"
+                  (valueChange)="onEditStatusChange($event)"
+                  [fullWidth]="true"
+                ></app-dropdown>
               </div>
-              <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-emerald-600 transition-all"
-                  [style.width.%]="row.percent"
-                ></div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  Start Date <span class="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  name="editStartDate"
+                  [(ngModel)]="editStart"
+                  aria-label="Edit epic start date"
+                  class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">
+                  Target Date <span class="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  name="editTargetDate"
+                  [(ngModel)]="editTarget"
+                  [min]="editStart"
+                  aria-label="Edit epic target date"
+                  class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
               </div>
             </div>
-          </div>
-        } @empty {
-          <div class="bg-white border border-slate-200 rounded-md p-8 text-center text-xs text-slate-400">
-            No strategic epics defined yet for this project. Click <strong>+ New Epic</strong> to create one.
-          </div>
-        }
+            @if (dateValidationError()) {
+              <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
+            }
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                (click)="closeEditModal()"
+                class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                aria-label="Save epic changes"
+                class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </app-modal>
       </div>
-
-      <!-- Create Strategic Epic Modal -->
-      <app-modal
-        [isOpen]="isCreateOpen()"
-        title="Create Strategic Epic"
-        (closed)="isCreateOpen.set(false)"
-      >
-        <form (ngSubmit)="submitCreate()" class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Epic Name</label>
-            <input
-              type="text"
-              name="name"
-              [(ngModel)]="newName"
-              required
-              aria-label="New epic name"
-              placeholder="e.g., Enterprise SSO & Audit Logging"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
-            <textarea
-              rows="2"
-              name="description"
-              [(ngModel)]="newDesc"
-              aria-label="New epic description"
-              placeholder="High-level scope and measurable outcomes..."
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
-              <app-dropdown
-                [options]="epicStatusOptions"
-                [value]="newStatus"
-                (valueChange)="onEpicStatusChange($event)"
-                [fullWidth]="true"
-              ></app-dropdown>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">
-                Start Date <span class="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="date"
-                name="startDate"
-                [(ngModel)]="newStart"
-                aria-label="New epic start date"
-                class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">
-                Target Date <span class="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="date"
-                name="targetDate"
-                [(ngModel)]="newTarget"
-                [min]="newStart"
-                aria-label="New epic target date"
-                class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-          </div>
-          @if (dateValidationError()) {
-            <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
-          }
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <button
-              type="button"
-              (click)="isCreateOpen.set(false)"
-              class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              aria-label="Submit create epic"
-              class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
-            >
-              Create Epic
-            </button>
-          </div>
-        </form>
-      </app-modal>
-
-      <!-- Edit Strategic Epic Modal -->
-      <app-modal
-        [isOpen]="isEditOpen()"
-        title="Edit Strategic Epic"
-        (closed)="closeEditModal()"
-      >
-        <form (ngSubmit)="submitEdit()" class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Epic Name</label>
-            <input
-              type="text"
-              name="editName"
-              [(ngModel)]="editName"
-              required
-              aria-label="Edit epic name"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
-            <textarea
-              rows="2"
-              name="editDescription"
-              [(ngModel)]="editDesc"
-              aria-label="Edit epic description"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
-              <app-dropdown
-                [options]="epicStatusOptions"
-                [value]="editStatus"
-                (valueChange)="onEditStatusChange($event)"
-                [fullWidth]="true"
-              ></app-dropdown>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">
-                Start Date <span class="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="date"
-                name="editStartDate"
-                [(ngModel)]="editStart"
-                aria-label="Edit epic start date"
-                class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">
-                Target Date <span class="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="date"
-                name="editTargetDate"
-                [(ngModel)]="editTarget"
-                [min]="editStart"
-                aria-label="Edit epic target date"
-                class="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-          </div>
-          @if (dateValidationError()) {
-            <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
-          }
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <button
-              type="button"
-              (click)="closeEditModal()"
-              class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              aria-label="Save epic changes"
-              class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </app-modal>
     </div>
   `,
 })

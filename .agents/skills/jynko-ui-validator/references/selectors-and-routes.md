@@ -84,9 +84,9 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - Scope switcher tabs: `button[aria-label="General App Settings tab"]`, `button[aria-label="Per-Project Settings tab"]`
     - Progressive Web App (PWA) card: `[data-testid="pwa-settings-card"]`, `button[aria-label="Install Jynko PWA from settings"]`, `button[aria-label="Check for PWA updates"]`, `button[aria-label="Clear PWA cache"]`, `input[aria-label="Toggle PWA auto update"]`, `input[aria-label="Toggle PWA install menu shortcut"]`, `input[aria-label="Toggle PWA offline indicator"]`
     - Project Appearance / background colour picker (PLAN-4, Per-Project Settings): `[data-testid="project-appearance-card"] [role="radiogroup"][aria-label="Project background color"]`, options `button[role="radio"][aria-label="Set project background color <Label>"]` (e.g. `Default (Slate)`, `Sky`, `Rose`) with `aria-checked` and `data-color-key` (`DEFAULT`, `SKY`, `ROSE`, ...).
-    - Tinted project page canvas (Overview, Work items, Cycles, Epics, Modules): `main [data-testid="project-canvas"]` (background from the `--project-bg` CSS variable set on `main`; `main[data-project-bg="<KEY>"]`).
-    - Work Items top bar (project breadcrumb row, also tinted with the project background — PLAN-5): `main [data-testid="work-items-top-bar"]`.
-    - Work Items view/filter toolbar (List/Board/... switcher, Columns, Filters — also tinted with the project background, PLAN-6): `main [data-testid="work-items-toolbar"]`.
+    - Project top bar (Overview, Work items, Cycles, Epics, Modules — PLAN-7): `main [data-testid="project-top-bar"]`. The only element tinted with the project background colour (`.project-bg`, from the `--project-bg` CSS variable set on `main`; `main[data-project-bg="<KEY>"]`). Shared layout: `px-3 sm:px-4 py-2` with a 1px `border-b border-slate-100` hairline.
+    - Project page content (below the top bar): `main [data-testid="project-page-content"]` — default `bg-slate-50` canvas with `p-2.5 sm:p-4` padding on every project page.
+    - Work Items view/filter toolbar (List/Board/... switcher, Columns, Filters): `main [data-testid="work-items-toolbar"]` — white (`bg-white`), not tinted.
     - User menu PWA install shortcut: `button[aria-label="Install Jynko PWA"]`
   - Kanban Board Column Configurator (`/work-items` in `BOARD` mode):
     - Toolbar columns button: `button[aria-label="Configure Kanban board columns"]`

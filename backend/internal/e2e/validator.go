@@ -325,34 +325,76 @@ func assertProjectBreadcrumbNavigatesToOverview(page *rod.Page, res *ValidationC
 	}
 }
 
-// assertWorkItemsTopBarUsesProjectBackground verifies PLAN-5 / PLAN-6: the Work Items top bar (project
-// breadcrumb row) and the view/filter toolbar (List, Board, ..., Columns, Filters) use the same project
-// background colour as the view canvas, like the other project pages.
-func assertWorkItemsTopBarUsesProjectBackground(page *rod.Page, res *ValidationCheckResult) {
-	colors := page.MustEval(`() => {
-		const bar = document.querySelector('main [data-testid="work-items-top-bar"]');
+// assertProjectPageLayout verifies PLAN-5 / PLAN-6 / PLAN-7 on project pages (Work Items, Cycles, Epics,
+// Modules): every page has the same project top bar (breadcrumb row) tinted with the project background
+// colour, a 1px bottom hairline, and identical top/left padding; the page content below keeps the default
+// slate-50 canvas and starts at the same left/top padding on every page. On Work Items the view/filter
+// toolbar stays white.
+func assertProjectPageLayout(page *rod.Page, res *ValidationCheckResult, pageLabel string) {
+	info := page.MustEval(`() => {
+		const main = document.querySelector('main');
+		const bar = document.querySelector('main [data-testid="project-top-bar"]');
+		const content = document.querySelector('main [data-testid="project-page-content"]');
 		const toolbar = document.querySelector('main [data-testid="work-items-toolbar"]');
-		const canvas = document.querySelector('main [data-testid="project-canvas"]');
+		if (!main || !bar || !content) return { ok: false };
+		const probe = document.createElement('div');
+		probe.style.backgroundColor = 'var(--project-bg, #f8fafc)';
+		main.appendChild(probe);
+		const projectBg = getComputedStyle(probe).backgroundColor;
+		probe.remove();
+		const b = getComputedStyle(bar);
+		const c = getComputedStyle(content);
 		return {
-			bar: bar ? getComputedStyle(bar).backgroundColor : '',
-			toolbar: toolbar ? getComputedStyle(toolbar).backgroundColor : '',
-			canvas: canvas ? getComputedStyle(canvas).backgroundColor : '',
+			ok: true,
+			projectBg,
+			barBg: b.backgroundColor,
+			barPadLeft: b.paddingLeft,
+			barPadTop: b.paddingTop,
+			barBorderBottom: b.borderBottomWidth,
+			contentBg: c.backgroundColor,
+			contentPadLeft: c.paddingLeft,
+			contentPadTop: c.paddingTop,
+			toolbarBg: toolbar ? getComputedStyle(toolbar).backgroundColor : '',
 		};
 	}`)
-	bar := colors.Get("bar").Str()
-	toolbar := colors.Get("toolbar").Str()
-	canvas := colors.Get("canvas").Str()
-	if toolbar != "" && toolbar == canvas {
-		res.Assertions = append(res.Assertions, fmt.Sprintf("Work Items view/filter toolbar uses the project background colour (%s), matching the view canvas", toolbar))
-	} else {
+	if !info.Get("ok").Bool() {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Work Items view/filter toolbar background %q does not match project canvas background %q", toolbar, canvas))
+		res.Errors = append(res.Errors, fmt.Sprintf("%s page missing main [data-testid='project-top-bar'] or [data-testid='project-page-content']", pageLabel))
+		return
 	}
-	if bar != "" && bar == canvas {
-		res.Assertions = append(res.Assertions, fmt.Sprintf("Work Items top bar uses the project background colour (%s), matching the view canvas", bar))
+	get := func(k string) string { return info.Get(k).Str() }
+
+	if get("barBg") == get("projectBg") {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s top bar uses the project background colour (%s)", pageLabel, get("barBg")))
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Work Items top bar background %q does not match project canvas background %q", bar, canvas))
+		res.Errors = append(res.Errors, fmt.Sprintf("%s top bar background %q does not match project background %q", pageLabel, get("barBg"), get("projectBg")))
+	}
+
+	if get("contentBg") == "rgb(248, 250, 252)" {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s page content keeps the default slate-50 canvas", pageLabel))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s page content background expected slate-50 rgb(248, 250, 252), got %q", pageLabel, get("contentBg")))
+	}
+
+	// Desktop viewport (1440px): top bar px-4/py-2 and content p-4 -> 16px left, 8px / 16px top.
+	if get("barPadLeft") == "16px" && get("barPadTop") == "8px" && get("barBorderBottom") == "1px" &&
+		get("contentPadLeft") == "16px" && get("contentPadTop") == "16px" {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s top bar and content use the shared project page padding (16px left, 8px bar top, 16px content top) with a 1px bottom hairline", pageLabel))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s project page padding mismatch: bar left=%s top=%s border-bottom=%s, content left=%s top=%s (expected 16px/8px/1px, 16px/16px)",
+			pageLabel, get("barPadLeft"), get("barPadTop"), get("barBorderBottom"), get("contentPadLeft"), get("contentPadTop")))
+	}
+
+	if pageLabel == "Work Items" {
+		if get("toolbarBg") == "rgb(255, 255, 255)" {
+			res.Assertions = append(res.Assertions, "Work Items view/filter toolbar stays white; only the top bar carries the project colour")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, fmt.Sprintf("Work Items view/filter toolbar expected white rgb(255, 255, 255), got %q", get("toolbarBg")))
+		}
 	}
 }
 
@@ -1050,7 +1092,7 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing [data-testid='open-create-work-item-btn'] button")
 	}
 
-	assertWorkItemsTopBarUsesProjectBackground(page, &res)
+	assertProjectPageLayout(page, &res, "Work Items")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Work Items")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
@@ -1222,6 +1264,7 @@ func CheckCyclesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChe
 	assertFullWidthPageContainer(page, &res, "Cycles")
 
 	page.MustScreenshot(res.Screenshot)
+	assertProjectPageLayout(page, &res, "Cycles")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Cycles")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
@@ -1281,6 +1324,7 @@ func CheckEpicsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChec
 	assertFullWidthPageContainer(page, &res, "Epics")
 
 	page.MustScreenshot(res.Screenshot)
+	assertProjectPageLayout(page, &res, "Epics")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Epics")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
@@ -1329,6 +1373,7 @@ func CheckModulesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCh
 	assertFullWidthPageContainer(page, &res, "Modules")
 
 	page.MustScreenshot(res.Screenshot)
+	assertProjectPageLayout(page, &res, "Modules")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Modules")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
@@ -1652,15 +1697,20 @@ func assertProjectBackgroundColorPicker(page *rod.Page, res *ValidationCheckResu
 	page.MustNavigate(baseURL + "/projects/proj-jynko-core/cycles")
 	page.MustWaitLoad()
 	time.Sleep(800 * time.Millisecond)
-	bg := page.MustEval(`() => {
-		const el = document.querySelector('main [data-testid="project-canvas"]');
-		return el ? getComputedStyle(el).backgroundColor : '';
-	}`).Str()
-	if bg == "rgb(255, 241, 242)" {
-		res.Assertions = append(res.Assertions, "Project background colour chosen in Settings (Rose) is applied to the project's Cycles page canvas")
+	colors := page.MustEval(`() => {
+		const bar = document.querySelector('main [data-testid="project-top-bar"]');
+		const content = document.querySelector('main [data-testid="project-page-content"]');
+		return {
+			bar: bar ? getComputedStyle(bar).backgroundColor : '',
+			content: content ? getComputedStyle(content).backgroundColor : '',
+		};
+	}`)
+	barBg, contentBg := colors.Get("bar").Str(), colors.Get("content").Str()
+	if barBg == "rgb(255, 241, 242)" && contentBg == "rgb(248, 250, 252)" {
+		res.Assertions = append(res.Assertions, "Project background colour chosen in Settings (Rose) is applied to the Cycles page top bar only; page content keeps slate-50")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Project Cycles canvas expected Rose background rgb(255, 241, 242), got %q", bg))
+		res.Errors = append(res.Errors, fmt.Sprintf("Cycles page expected Rose top bar rgb(255, 241, 242) and slate-50 content rgb(248, 250, 252), got bar=%q content=%q", barBg, contentBg))
 	}
 
 	// Restore default colour.
