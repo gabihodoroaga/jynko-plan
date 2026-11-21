@@ -12,6 +12,7 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/storage"
 )
 
 func main() {
@@ -56,6 +57,14 @@ func main() {
 	}
 	defer firestoreClient.Close()
 
+	// Storage Provider (local filesystem for dev/e2e, GCS for prd/stg)
+	storageProvider, err := storage.NewStorageProvider(ctx, cfg)
+	if err != nil {
+		slog.Error("failed to initialize storage provider", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer storageProvider.Close()
+
 	// Repositories
 	projectRepo := repository.NewProjectRepository(firestoreClient)
 	moduleRepo := repository.NewModuleRepository(firestoreClient)
@@ -65,6 +74,7 @@ func main() {
 	itemRepo := repository.NewItemRepository(firestoreClient)
 	pageRepo := repository.NewPageRepository(firestoreClient)
 	stickyRepo := repository.NewStickyRepository(firestoreClient)
+	attachmentRepo := repository.NewAttachmentRepository(firestoreClient)
 
 	// Services
 	projectSvc := service.NewProjectService(projectRepo)
@@ -75,6 +85,7 @@ func main() {
 	itemSvc := service.NewItemService(itemRepo)
 	pageSvc := service.NewPageService(pageRepo)
 	stickySvc := service.NewStickyService(stickyRepo)
+	attachmentSvc := service.NewAttachmentService(attachmentRepo, storageProvider)
 
 	// Static fallback user is ONLY enabled for local STDIO transport or dev environment.
 	// In prd/stg SSE mode, every incoming HTTP request must carry authenticated IAP/OIDC credentials.
@@ -98,16 +109,17 @@ func main() {
 	}
 
 	serverDeps := mcp.ServerDeps{
-		Config:      mcpCfg,
-		AppConfig:   cfg,
-		ProjectRepo: projectRepo,
-		ProjectSvc:  projectSvc,
-		ItemSvc:     itemSvc,
-		PageSvc:     pageSvc,
-		CycleSvc:    cycleSvc,
-		EpicSvc:     epicSvc,
-		ModuleSvc:   moduleSvc,
-		StickySvc:   stickySvc,
+		Config:        mcpCfg,
+		AppConfig:     cfg,
+		ProjectRepo:   projectRepo,
+		ProjectSvc:    projectSvc,
+		ItemSvc:       itemSvc,
+		PageSvc:       pageSvc,
+		CycleSvc:      cycleSvc,
+		EpicSvc:       epicSvc,
+		ModuleSvc:     moduleSvc,
+		StickySvc:     stickySvc,
+		AttachmentSvc: attachmentSvc,
 	}
 
 	srv := mcp.NewServer(serverDeps)

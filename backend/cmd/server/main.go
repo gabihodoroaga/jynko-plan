@@ -143,8 +143,9 @@ func main() {
 		PageSvc:     pageSvc,
 		CycleSvc:    cycleSvc,
 		EpicSvc:     epicSvc,
-		ModuleSvc:   moduleSvc,
-		StickySvc:   stickySvc,
+		ModuleSvc:     moduleSvc,
+		StickySvc:     stickySvc,
+		AttachmentSvc: attachmentSvc,
 	})
 
 	router := SetupRouterWithMCP(

@@ -27,7 +27,8 @@ type ServerDeps struct {
 	CycleSvc     *service.CycleService
 	EpicSvc      *service.EpicService
 	ModuleSvc    *service.ModuleService
-	StickySvc    *service.StickyService
+	StickySvc     *service.StickyService
+	AttachmentSvc *service.AttachmentService
 }
 
 // Server wraps the mark3labs MCP Server with Jynko domain tool, resource, and prompt registrations.
@@ -50,11 +51,12 @@ func NewServer(deps ServerDeps) *Server {
 
 	resolver := NewResolver(deps.Config, deps.ProjectRepo)
 
-	registerWorkItemTools(mcpServer, resolver, deps.ItemSvc)
+	registerWorkItemTools(mcpServer, resolver, deps.ItemSvc, deps.AttachmentSvc)
+	registerAttachmentTools(mcpServer, resolver, deps.AttachmentSvc, deps.ItemSvc)
 	registerWikiTools(mcpServer, resolver, deps.PageSvc)
 	registerProjectTools(mcpServer, resolver, deps.ProjectSvc)
 	registerPlanningTools(mcpServer, resolver, deps.CycleSvc, deps.EpicSvc, deps.ModuleSvc, deps.StickySvc)
-	registerResources(mcpServer, resolver, deps.ItemSvc, deps.PageSvc)
+	registerResources(mcpServer, resolver, deps.ItemSvc, deps.PageSvc, deps.AttachmentSvc)
 	registerPrompts(mcpServer, resolver, deps.ItemSvc, deps.CycleSvc)
 
 	return &Server{

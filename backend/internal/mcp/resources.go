@@ -2,8 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -17,6 +20,7 @@ func registerResources(
 	r *Resolver,
 	itemSvc *service.ItemService,
 	pageSvc *service.PageService,
+	attSvc *service.AttachmentService,
 ) {
 	// 1. Work Item Resource Template
 	s.AddResourceTemplate(
@@ -89,6 +93,17 @@ func registerResources(
 				}
 			}
 
+			if attSvc != nil {
+				attachments, _ := attSvc.ListAttachments(ctx, projID, targetItem.ID)
+				if len(attachments) > 0 {
+					sb.WriteString("## Attachments\n\n")
+					for _, att := range attachments {
+						sb.WriteString(fmt.Sprintf("- [%s](jynko://projects/%s/attachments/%s) (%s, %d bytes)\n", att.FileName, projID, att.ID, att.ContentType, att.SizeBytes))
+					}
+					sb.WriteString("\n")
+				}
+			}
+
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
 					URI:      uri,
@@ -143,6 +158,66 @@ func registerResources(
 					URI:      uri,
 					MIMEType: "text/markdown",
 					Text:     sb.String(),
+				},
+			}, nil
+		},
+	)
+
+	// 3. Attachment Resource Template
+	s.AddResourceTemplate(
+		mcp.NewResourceTemplate(
+			"jynko://projects/{projectId}/attachments/{attachmentId}",
+			"Jynko Attachment Content",
+			mcp.WithTemplateDescription("Live content and data of a project attachment file."),
+		),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			uri := req.Params.URI
+			if !strings.HasPrefix(uri, "jynko://") {
+				return nil, fmt.Errorf("invalid attachment URI: %s", uri)
+			}
+			path := strings.TrimPrefix(uri, "jynko://")
+			parts := strings.Split(path, "/")
+			// Expected strictly: projects/{projectId}/attachments/{attachmentId}
+			if len(parts) != 4 || parts[0] != "projects" || parts[1] == "" || parts[2] != "attachments" || parts[3] == "" {
+				return nil, fmt.Errorf("invalid attachment URI: %s", uri)
+			}
+			projID := parts[1]
+			attID := parts[3]
+
+			if err := r.CheckRole(ctx, projID, model.RoleViewer); err != nil {
+				return nil, err
+			}
+
+			if attSvc == nil {
+				return nil, fmt.Errorf("attachment service is not available")
+			}
+
+			att, rc, err := attSvc.GetAttachment(ctx, projID, attID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get attachment: %w", err)
+			}
+			defer rc.Close()
+
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read attachment content: %w", err)
+			}
+
+			if isTextMIMEType(att.ContentType) && utf8.Valid(data) {
+				return []mcp.ResourceContents{
+					mcp.TextResourceContents{
+						URI:      uri,
+						MIMEType: att.ContentType,
+						Text:     string(data),
+					},
+				}, nil
+			}
+
+			return []mcp.ResourceContents{
+				mcp.BlobResourceContents{
+					URI:      uri,
+					MIMEType: att.ContentType,
+					Blob:     base64.StdEncoding.EncodeToString(data),
 				},
 			}, nil
 		},
