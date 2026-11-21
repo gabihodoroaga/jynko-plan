@@ -14,232 +14,238 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent],
   template: `
-    <div data-testid="project-canvas" class="project-canvas w-full p-4 sm:p-6 space-y-5 min-h-full">
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between gap-2">
-          <app-project-breadcrumb
-            sectionLabel="Modules"
-            [sectionRoute]="['/projects', projectService.activeProjectId(), 'modules']"
-          ></app-project-breadcrumb>
-          @if (projectService.canEdit()) {
-            <button
-              type="button"
-              data-testid="page-primary-action-btn"
-              aria-label="Create new module"
-              (click)="openCreateModal()"
-              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
-            >
-              + New Module
-            </button>
-          }
-        </div>
+    <div class="flex flex-col w-full min-h-full">
+      <!-- Project Top Bar: project breadcrumb + primary action, tinted with the project background colour (PLAN-7) -->
+      <div
+        data-testid="project-top-bar"
+        class="project-bg px-3 sm:px-4 py-2 border-b border-slate-100 flex items-center justify-between gap-2"
+      >
+        <app-project-breadcrumb
+          sectionLabel="Modules"
+          [sectionRoute]="['/projects', projectService.activeProjectId(), 'modules']"
+        ></app-project-breadcrumb>
+        @if (projectService.canEdit()) {
+          <button
+            type="button"
+            data-testid="page-primary-action-btn"
+            aria-label="Create new module"
+            (click)="openCreateModal()"
+            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+          >
+            + New Module
+          </button>
+        }
+      </div>
+
+      <!-- Page Content: default slate-50 canvas, same padding as the Work Items view canvas -->
+      <div data-testid="project-page-content" class="flex-1 p-2.5 sm:p-4 bg-slate-50 space-y-5">
         <div>
           <h2 class="text-base font-semibold text-slate-900">Feature Modules</h2>
           <p class="text-xs text-slate-500">
             Persistent functional domains across the software lifecycle in {{ projectService.activeProject()?.name }}
           </p>
         </div>
-      </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        @for (row of moduleRows(); track row.module.id) {
-          <div
-            [attr.data-module-id]="row.module.id"
-            class="bg-white border border-slate-200 rounded-md p-4 shadow-card flex flex-col justify-between space-y-4"
-          >
-            <div class="space-y-2.5">
-              <div class="flex items-center justify-between gap-2">
-                <h3 class="text-sm font-semibold text-slate-900 truncate">{{ row.module.name }}</h3>
-                @if (projectService.canEdit()) {
-                  <div class="flex items-center gap-2 shrink-0">
-                    @if (confirmDeleteId() === row.module.id) {
-                      <span class="text-[11px] text-slate-500">Delete?</span>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteModule(row.module.id)"
-                        [attr.aria-label]="'Confirm delete module ' + row.module.name"
-                        class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteId.set(null)"
-                        class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px]"
-                      >
-                        Cancel
-                      </button>
-                    } @else {
-                      <button
-                        type="button"
-                        (click)="openEditModal(row.module)"
-                        [attr.aria-label]="'Edit module ' + row.module.name"
-                        class="text-[11px] font-medium text-slate-500 hover:text-sky-600 transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteId.set(row.module.id)"
-                        [attr.aria-label]="'Delete module ' + row.module.name"
-                        class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    }
-                  </div>
-                }
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          @for (row of moduleRows(); track row.module.id) {
+            <div
+              [attr.data-module-id]="row.module.id"
+              class="bg-white border border-slate-200 rounded-md p-4 shadow-card flex flex-col justify-between space-y-4"
+            >
+              <div class="space-y-2.5">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-sm font-semibold text-slate-900 truncate">{{ row.module.name }}</h3>
+                  @if (projectService.canEdit()) {
+                    <div class="flex items-center gap-2 shrink-0">
+                      @if (confirmDeleteId() === row.module.id) {
+                        <span class="text-[11px] text-slate-500">Delete?</span>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteModule(row.module.id)"
+                          [attr.aria-label]="'Confirm delete module ' + row.module.name"
+                          class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteId.set(null)"
+                          class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px]"
+                        >
+                          Cancel
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          (click)="openEditModal(row.module)"
+                          [attr.aria-label]="'Edit module ' + row.module.name"
+                          class="text-[11px] font-medium text-slate-500 hover:text-sky-600 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteId.set(row.module.id)"
+                          [attr.aria-label]="'Delete module ' + row.module.name"
+                          class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+
+                <p class="text-xs text-slate-600">{{ row.module.description || 'No description provided.' }}</p>
+
+                <div class="flex items-center gap-2 text-[11px] text-slate-500 pt-0.5">
+                  <span>Lead:</span>
+                  <app-dropdown
+                    [options]="leadDropdownOptions()"
+                    [value]="row.module.lead_user_id || ''"
+                    emptyLabel="Unassigned"
+                    (valueChange)="onInlineLeadChange(row.module.id, $event)"
+                    [disabled]="!projectService.canEdit()"
+                    [ariaLabel]="'Module lead for ' + row.module.name"
+                    size="sm"
+                  ></app-dropdown>
+                </div>
               </div>
 
-              <p class="text-xs text-slate-600">{{ row.module.description || 'No description provided.' }}</p>
-
-              <div class="flex items-center gap-2 text-[11px] text-slate-500 pt-0.5">
-                <span>Lead:</span>
-                <app-dropdown
-                  [options]="leadDropdownOptions()"
-                  [value]="row.module.lead_user_id || ''"
-                  emptyLabel="Unassigned"
-                  (valueChange)="onInlineLeadChange(row.module.id, $event)"
-                  [disabled]="!projectService.canEdit()"
-                  [ariaLabel]="'Module lead for ' + row.module.name"
-                  size="sm"
-                ></app-dropdown>
+              <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
+                <span class="text-[11px] font-mono text-slate-500">
+                  {{ row.itemCount }} work items
+                </span>
+                <button
+                  type="button"
+                  (click)="filterByModule(row.module.id)"
+                  class="text-xs font-medium text-sky-600 hover:underline"
+                >
+                  View items →
+                </button>
               </div>
             </div>
+          } @empty {
+            <div class="col-span-full bg-white border border-slate-200 rounded-md p-8 text-center text-xs text-slate-400">
+              No feature modules defined yet for this project. Click <strong>+ New Module</strong> to create one.
+            </div>
+          }
+        </div>
 
-            <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
-              <span class="text-[11px] font-mono text-slate-500">
-                {{ row.itemCount }} work items
-              </span>
+        <!-- Create Feature Module Modal -->
+        <app-modal
+          [isOpen]="isCreateOpen()"
+          title="Create Feature Module"
+          (closed)="isCreateOpen.set(false)"
+        >
+          <form (ngSubmit)="submitCreate()" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Module Name</label>
+              <input
+                type="text"
+                name="name"
+                [(ngModel)]="newName"
+                required
+                aria-label="New module name"
+                placeholder="e.g., Firestore Sync & Webhooks"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                rows="2"
+                name="description"
+                [(ngModel)]="newDesc"
+                aria-label="New module description"
+                placeholder="Functional responsibilities of this module..."
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              ></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Module Lead</label>
+              <app-dropdown
+                [options]="memberOptions()"
+                [value]="newLeadId"
+                (valueChange)="newLeadId = $event"
+                [fullWidth]="true"
+              ></app-dropdown>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
               <button
                 type="button"
-                (click)="filterByModule(row.module.id)"
-                class="text-xs font-medium text-sky-600 hover:underline"
+                (click)="isCreateOpen.set(false)"
+                class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
               >
-                View items →
+                Cancel
+              </button>
+              <button
+                type="submit"
+                aria-label="Submit create module"
+                class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+              >
+                Create Module
               </button>
             </div>
-          </div>
-        } @empty {
-          <div class="col-span-full bg-white border border-slate-200 rounded-md p-8 text-center text-xs text-slate-400">
-            No feature modules defined yet for this project. Click <strong>+ New Module</strong> to create one.
-          </div>
-        }
+          </form>
+        </app-modal>
+
+        <!-- Edit Feature Module Modal -->
+        <app-modal
+          [isOpen]="isEditOpen()"
+          title="Edit Feature Module"
+          (closed)="closeEditModal()"
+        >
+          <form (ngSubmit)="submitEdit()" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Module Name</label>
+              <input
+                type="text"
+                name="editName"
+                [(ngModel)]="editName"
+                required
+                aria-label="Edit module name"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                rows="2"
+                name="editDescription"
+                [(ngModel)]="editDesc"
+                aria-label="Edit module description"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              ></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Module Lead</label>
+              <app-dropdown
+                [options]="memberOptions()"
+                [value]="editLeadId"
+                (valueChange)="editLeadId = $event"
+                [fullWidth]="true"
+              ></app-dropdown>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                (click)="closeEditModal()"
+                class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                aria-label="Save module changes"
+                class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </app-modal>
       </div>
-
-      <!-- Create Feature Module Modal -->
-      <app-modal
-        [isOpen]="isCreateOpen()"
-        title="Create Feature Module"
-        (closed)="isCreateOpen.set(false)"
-      >
-        <form (ngSubmit)="submitCreate()" class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Module Name</label>
-            <input
-              type="text"
-              name="name"
-              [(ngModel)]="newName"
-              required
-              aria-label="New module name"
-              placeholder="e.g., Firestore Sync & Webhooks"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
-            <textarea
-              rows="2"
-              name="description"
-              [(ngModel)]="newDesc"
-              aria-label="New module description"
-              placeholder="Functional responsibilities of this module..."
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Module Lead</label>
-            <app-dropdown
-              [options]="memberOptions()"
-              [value]="newLeadId"
-              (valueChange)="newLeadId = $event"
-              [fullWidth]="true"
-            ></app-dropdown>
-          </div>
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <button
-              type="button"
-              (click)="isCreateOpen.set(false)"
-              class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              aria-label="Submit create module"
-              class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
-            >
-              Create Module
-            </button>
-          </div>
-        </form>
-      </app-modal>
-
-      <!-- Edit Feature Module Modal -->
-      <app-modal
-        [isOpen]="isEditOpen()"
-        title="Edit Feature Module"
-        (closed)="closeEditModal()"
-      >
-        <form (ngSubmit)="submitEdit()" class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Module Name</label>
-            <input
-              type="text"
-              name="editName"
-              [(ngModel)]="editName"
-              required
-              aria-label="Edit module name"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
-            <textarea
-              rows="2"
-              name="editDescription"
-              [(ngModel)]="editDesc"
-              aria-label="Edit module description"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Module Lead</label>
-            <app-dropdown
-              [options]="memberOptions()"
-              [value]="editLeadId"
-              (valueChange)="editLeadId = $event"
-              [fullWidth]="true"
-            ></app-dropdown>
-          </div>
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <button
-              type="button"
-              (click)="closeEditModal()"
-              class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              aria-label="Save module changes"
-              class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </app-modal>
     </div>
   `,
 })

@@ -14,295 +14,301 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, ProjectBreadcrumbComponent],
   template: `
-    <div data-testid="project-canvas" class="project-canvas w-full p-4 sm:p-6 space-y-5 min-h-full">
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between gap-2">
-          <app-project-breadcrumb
-            sectionLabel="Cycles"
-            [sectionRoute]="['/projects', projectService.activeProjectId(), 'cycles']"
-          ></app-project-breadcrumb>
-          @if (projectService.canEdit()) {
-            <button
-              type="button"
-              data-testid="page-primary-action-btn"
-              aria-label="Create new cycle"
-              (click)="openCreateModal()"
-              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
-            >
-              + New Cycle
-            </button>
-          }
-        </div>
+    <div class="flex flex-col w-full min-h-full">
+      <!-- Project Top Bar: project breadcrumb + primary action, tinted with the project background colour (PLAN-7) -->
+      <div
+        data-testid="project-top-bar"
+        class="project-bg px-3 sm:px-4 py-2 border-b border-slate-100 flex items-center justify-between gap-2"
+      >
+        <app-project-breadcrumb
+          sectionLabel="Cycles"
+          [sectionRoute]="['/projects', projectService.activeProjectId(), 'cycles']"
+        ></app-project-breadcrumb>
+        @if (projectService.canEdit()) {
+          <button
+            type="button"
+            data-testid="page-primary-action-btn"
+            aria-label="Create new cycle"
+            (click)="openCreateModal()"
+            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+          >
+            + New Cycle
+          </button>
+        }
+      </div>
+
+      <!-- Page Content: default slate-50 canvas, same padding as the Work Items view canvas -->
+      <div data-testid="project-page-content" class="flex-1 p-2.5 sm:p-4 bg-slate-50 space-y-5">
         <div>
           <h2 class="text-base font-semibold text-slate-900">Sprint Cycles</h2>
           <p class="text-xs text-slate-500">
             Time-boxed iterations for scheduled execution in {{ projectService.activeProject()?.name }}
           </p>
         </div>
-      </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        @for (row of cycleRows(); track row.cycle.id) {
-          <div
-            [attr.data-cycle-id]="row.cycle.id"
-            class="bg-white border border-slate-200 rounded-md p-4 shadow-card flex flex-col justify-between space-y-4"
-          >
-            <div class="space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
-                  <h3 class="text-sm font-semibold text-slate-900 truncate">{{ row.cycle.name }}</h3>
-                  <button
-                    type="button"
-                    [disabled]="!projectService.canEdit()"
-                    (click)="toggleCycleActive(row.cycle)"
-                    [attr.aria-label]="'Toggle active status for ' + row.cycle.name"
-                    [title]="projectService.canEdit() ? 'Click to toggle active status' : ''"
-                    class="px-2 py-0.5 rounded-full border text-[10px] font-medium shrink-0 transition-colors disabled:cursor-default"
-                    [ngClass]="
-                      row.cycle.is_active
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100/70'
-                        : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/70'
-                    "
-                  >
-                    {{ row.cycle.is_active ? 'Active Cycle' : 'Completed / Planned' }}
-                  </button>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          @for (row of cycleRows(); track row.cycle.id) {
+            <div
+              [attr.data-cycle-id]="row.cycle.id"
+              class="bg-white border border-slate-200 rounded-md p-4 shadow-card flex flex-col justify-between space-y-4"
+            >
+              <div class="space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <h3 class="text-sm font-semibold text-slate-900 truncate">{{ row.cycle.name }}</h3>
+                    <button
+                      type="button"
+                      [disabled]="!projectService.canEdit()"
+                      (click)="toggleCycleActive(row.cycle)"
+                      [attr.aria-label]="'Toggle active status for ' + row.cycle.name"
+                      [title]="projectService.canEdit() ? 'Click to toggle active status' : ''"
+                      class="px-2 py-0.5 rounded-full border text-[10px] font-medium shrink-0 transition-colors disabled:cursor-default"
+                      [ngClass]="
+                        row.cycle.is_active
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100/70'
+                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/70'
+                      "
+                    >
+                      {{ row.cycle.is_active ? 'Active Cycle' : 'Completed / Planned' }}
+                    </button>
+                  </div>
+
+                  @if (projectService.canEdit()) {
+                    <div class="flex items-center gap-2 shrink-0">
+                      @if (confirmDeleteId() === row.cycle.id) {
+                        <span class="text-[11px] text-slate-500">Delete?</span>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteCycle(row.cycle.id)"
+                          [attr.aria-label]="'Confirm delete cycle ' + row.cycle.name"
+                          class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteId.set(null)"
+                          class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px]"
+                        >
+                          Cancel
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          (click)="openEditModal(row.cycle)"
+                          [attr.aria-label]="'Edit cycle ' + row.cycle.name"
+                          class="text-[11px] font-medium text-slate-500 hover:text-sky-600 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          (click)="confirmDeleteId.set(row.cycle.id)"
+                          [attr.aria-label]="'Delete cycle ' + row.cycle.name"
+                          class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      }
+                    </div>
+                  }
                 </div>
 
-                @if (projectService.canEdit()) {
-                  <div class="flex items-center gap-2 shrink-0">
-                    @if (confirmDeleteId() === row.cycle.id) {
-                      <span class="text-[11px] text-slate-500">Delete?</span>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteCycle(row.cycle.id)"
-                        [attr.aria-label]="'Confirm delete cycle ' + row.cycle.name"
-                        class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteId.set(null)"
-                        class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px]"
-                      >
-                        Cancel
-                      </button>
-                    } @else {
-                      <button
-                        type="button"
-                        (click)="openEditModal(row.cycle)"
-                        [attr.aria-label]="'Edit cycle ' + row.cycle.name"
-                        class="text-[11px] font-medium text-slate-500 hover:text-sky-600 transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        (click)="confirmDeleteId.set(row.cycle.id)"
-                        [attr.aria-label]="'Delete cycle ' + row.cycle.name"
-                        class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    }
-                  </div>
-                }
+                <p class="text-xs text-slate-600">{{ row.cycle.description || 'No description provided.' }}</p>
+
+                <div class="flex items-center gap-3 text-[11px] font-mono text-slate-500">
+                  <span>{{ row.cycle.start_date | date: 'MMM d, yyyy' }}</span>
+                  <span>→</span>
+                  <span>{{ row.cycle.end_date | date: 'MMM d, yyyy' }}</span>
+                </div>
               </div>
 
-              <p class="text-xs text-slate-600">{{ row.cycle.description || 'No description provided.' }}</p>
-
-              <div class="flex items-center gap-3 text-[11px] font-mono text-slate-500">
-                <span>{{ row.cycle.start_date | date: 'MMM d, yyyy' }}</span>
-                <span>→</span>
-                <span>{{ row.cycle.end_date | date: 'MMM d, yyyy' }}</span>
+              <!-- Progress & Actions -->
+              <div class="space-y-2 pt-3 border-t border-slate-200">
+                <div class="flex items-center justify-between text-[11px] text-slate-600">
+                  <span>Progress: {{ row.doneCount }}/{{ row.totalCount }} items completed</span>
+                  <span class="font-mono font-medium">{{ row.percent }}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    class="h-full bg-sky-600 transition-all"
+                    [style.width.%]="row.percent"
+                  ></div>
+                </div>
+                <div class="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    (click)="viewCycleItems(row.cycle.id)"
+                    class="text-xs font-medium text-sky-600 hover:underline"
+                  >
+                    View cycle items in Board →
+                  </button>
+                </div>
               </div>
             </div>
+          } @empty {
+            <div class="col-span-full bg-white border border-slate-200 rounded-md p-8 text-center text-xs text-slate-400">
+              No sprint cycles created yet for this project. Click <strong>+ New Cycle</strong> to schedule one.
+            </div>
+          }
+        </div>
 
-            <!-- Progress & Actions -->
-            <div class="space-y-2 pt-3 border-t border-slate-200">
-              <div class="flex items-center justify-between text-[11px] text-slate-600">
-                <span>Progress: {{ row.doneCount }}/{{ row.totalCount }} items completed</span>
-                <span class="font-mono font-medium">{{ row.percent }}%</span>
+        <!-- Create Sprint Cycle Modal -->
+        <app-modal
+          [isOpen]="isCreateOpen()"
+          title="Create Sprint Cycle"
+          (closed)="isCreateOpen.set(false)"
+        >
+          <form (ngSubmit)="submitCreate()" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Cycle Name</label>
+              <input
+                type="text"
+                name="name"
+                [(ngModel)]="newName"
+                required
+                aria-label="New cycle name"
+                placeholder="e.g., Cycle 5 — Performance & Security"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                rows="2"
+                name="description"
+                [(ngModel)]="newDesc"
+                aria-label="New cycle description"
+                placeholder="Goals and deliverables for this cycle..."
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              ></textarea>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  name="startDate"
+                  [(ngModel)]="newStart"
+                  aria-label="New cycle start date"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
               </div>
-              <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-sky-600 transition-all"
-                  [style.width.%]="row.percent"
-                ></div>
-              </div>
-              <div class="flex justify-end pt-1">
-                <button
-                  type="button"
-                  (click)="viewCycleItems(row.cycle.id)"
-                  class="text-xs font-medium text-sky-600 hover:underline"
-                >
-                  View cycle items in Board →
-                </button>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  name="endDate"
+                  [(ngModel)]="newEnd"
+                  [min]="newStart"
+                  aria-label="New cycle end date"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
               </div>
             </div>
-          </div>
-        } @empty {
-          <div class="col-span-full bg-white border border-slate-200 rounded-md p-8 text-center text-xs text-slate-400">
-            No sprint cycles created yet for this project. Click <strong>+ New Cycle</strong> to schedule one.
-          </div>
-        }
+            @if (dateValidationError()) {
+              <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
+            }
+            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+              <input type="checkbox" name="isActive" [(ngModel)]="newIsActive" />
+              Mark as Active Sprint Cycle
+            </label>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                (click)="isCreateOpen.set(false)"
+                class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                aria-label="Submit create cycle"
+                class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+              >
+                Create Cycle
+              </button>
+            </div>
+          </form>
+        </app-modal>
+
+        <!-- Edit Sprint Cycle Modal -->
+        <app-modal
+          [isOpen]="isEditOpen()"
+          title="Edit Sprint Cycle"
+          (closed)="closeEditModal()"
+        >
+          <form (ngSubmit)="submitEdit()" class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Cycle Name</label>
+              <input
+                type="text"
+                name="editName"
+                [(ngModel)]="editName"
+                required
+                aria-label="Edit cycle name"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
+              <textarea
+                rows="2"
+                name="editDescription"
+                [(ngModel)]="editDesc"
+                aria-label="Edit cycle description"
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+              ></textarea>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  name="editStartDate"
+                  [(ngModel)]="editStart"
+                  aria-label="Edit cycle start date"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  name="editEndDate"
+                  [(ngModel)]="editEnd"
+                  [min]="editStart"
+                  aria-label="Edit cycle end date"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+            </div>
+            @if (dateValidationError()) {
+              <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
+            }
+            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+              <input type="checkbox" name="editIsActive" [(ngModel)]="editIsActive" />
+              Mark as Active Sprint Cycle
+            </label>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                (click)="closeEditModal()"
+                class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                aria-label="Save cycle changes"
+                class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </app-modal>
       </div>
-
-      <!-- Create Sprint Cycle Modal -->
-      <app-modal
-        [isOpen]="isCreateOpen()"
-        title="Create Sprint Cycle"
-        (closed)="isCreateOpen.set(false)"
-      >
-        <form (ngSubmit)="submitCreate()" class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Cycle Name</label>
-            <input
-              type="text"
-              name="name"
-              [(ngModel)]="newName"
-              required
-              aria-label="New cycle name"
-              placeholder="e.g., Cycle 5 — Performance & Security"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
-            <textarea
-              rows="2"
-              name="description"
-              [(ngModel)]="newDesc"
-              aria-label="New cycle description"
-              placeholder="Goals and deliverables for this cycle..."
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">Start Date</label>
-              <input
-                type="date"
-                name="startDate"
-                [(ngModel)]="newStart"
-                aria-label="New cycle start date"
-                class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">End Date</label>
-              <input
-                type="date"
-                name="endDate"
-                [(ngModel)]="newEnd"
-                [min]="newStart"
-                aria-label="New cycle end date"
-                class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-          </div>
-          @if (dateValidationError()) {
-            <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
-          }
-          <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-            <input type="checkbox" name="isActive" [(ngModel)]="newIsActive" />
-            Mark as Active Sprint Cycle
-          </label>
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <button
-              type="button"
-              (click)="isCreateOpen.set(false)"
-              class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              aria-label="Submit create cycle"
-              class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
-            >
-              Create Cycle
-            </button>
-          </div>
-        </form>
-      </app-modal>
-
-      <!-- Edit Sprint Cycle Modal -->
-      <app-modal
-        [isOpen]="isEditOpen()"
-        title="Edit Sprint Cycle"
-        (closed)="closeEditModal()"
-      >
-        <form (ngSubmit)="submitEdit()" class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Cycle Name</label>
-            <input
-              type="text"
-              name="editName"
-              [(ngModel)]="editName"
-              required
-              aria-label="Edit cycle name"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1">Description</label>
-            <textarea
-              rows="2"
-              name="editDescription"
-              [(ngModel)]="editDesc"
-              aria-label="Edit cycle description"
-              class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-            ></textarea>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">Start Date</label>
-              <input
-                type="date"
-                name="editStartDate"
-                [(ngModel)]="editStart"
-                aria-label="Edit cycle start date"
-                class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1">End Date</label>
-              <input
-                type="date"
-                name="editEndDate"
-                [(ngModel)]="editEnd"
-                [min]="editStart"
-                aria-label="Edit cycle end date"
-                class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
-              />
-            </div>
-          </div>
-          @if (dateValidationError()) {
-            <p class="text-[11px] text-rose-600">{{ dateValidationError() }}</p>
-          }
-          <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-            <input type="checkbox" name="editIsActive" [(ngModel)]="editIsActive" />
-            Mark as Active Sprint Cycle
-          </label>
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
-            <button
-              type="button"
-              (click)="closeEditModal()"
-              class="px-3 py-1.5 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              aria-label="Save cycle changes"
-              class="px-3 py-1.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </app-modal>
     </div>
   `,
 })

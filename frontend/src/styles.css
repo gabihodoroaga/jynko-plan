@@ -269,9 +269,10 @@ textarea.auto-grow-comment {
   }
 }
 
-/* PLAN-4: Per-project background colour. `--project-bg` is set on <main> by AppComponent
-   from the active project's settings; project-scoped page canvases opt in via .project-canvas. */
-.project-canvas {
+/* PLAN-4 / PLAN-7: Per-project background colour. `--project-bg` is set on <main> by AppComponent
+   from the active project's settings. Only the project top bar (breadcrumb row) of each project page
+   opts in via .project-bg; the page content keeps the default slate-50 canvas. */
+.project-bg {
   background-color: var(--project-bg, #f8fafc);
   transition: background-color 0.2s ease;
 }
