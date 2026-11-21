@@ -325,19 +325,29 @@ func assertProjectBreadcrumbNavigatesToOverview(page *rod.Page, res *ValidationC
 	}
 }
 
-// assertWorkItemsTopBarUsesProjectBackground verifies PLAN-5: the Work Items top bar (project breadcrumb
-// row) uses the same project background colour as the view canvas, like the other project pages.
+// assertWorkItemsTopBarUsesProjectBackground verifies PLAN-5 / PLAN-6: the Work Items top bar (project
+// breadcrumb row) and the view/filter toolbar (List, Board, ..., Columns, Filters) use the same project
+// background colour as the view canvas, like the other project pages.
 func assertWorkItemsTopBarUsesProjectBackground(page *rod.Page, res *ValidationCheckResult) {
 	colors := page.MustEval(`() => {
 		const bar = document.querySelector('main [data-testid="work-items-top-bar"]');
+		const toolbar = document.querySelector('main [data-testid="work-items-toolbar"]');
 		const canvas = document.querySelector('main [data-testid="project-canvas"]');
 		return {
 			bar: bar ? getComputedStyle(bar).backgroundColor : '',
+			toolbar: toolbar ? getComputedStyle(toolbar).backgroundColor : '',
 			canvas: canvas ? getComputedStyle(canvas).backgroundColor : '',
 		};
 	}`)
 	bar := colors.Get("bar").Str()
+	toolbar := colors.Get("toolbar").Str()
 	canvas := colors.Get("canvas").Str()
+	if toolbar != "" && toolbar == canvas {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("Work Items view/filter toolbar uses the project background colour (%s), matching the view canvas", toolbar))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Work Items view/filter toolbar background %q does not match project canvas background %q", toolbar, canvas))
+	}
 	if bar != "" && bar == canvas {
 		res.Assertions = append(res.Assertions, fmt.Sprintf("Work Items top bar uses the project background colour (%s), matching the view canvas", bar))
 	} else {

@@ -86,6 +86,7 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - Project Appearance / background colour picker (PLAN-4, Per-Project Settings): `[data-testid="project-appearance-card"] [role="radiogroup"][aria-label="Project background color"]`, options `button[role="radio"][aria-label="Set project background color <Label>"]` (e.g. `Default (Slate)`, `Sky`, `Rose`) with `aria-checked` and `data-color-key` (`DEFAULT`, `SKY`, `ROSE`, ...).
     - Tinted project page canvas (Overview, Work items, Cycles, Epics, Modules): `main [data-testid="project-canvas"]` (background from the `--project-bg` CSS variable set on `main`; `main[data-project-bg="<KEY>"]`).
     - Work Items top bar (project breadcrumb row, also tinted with the project background — PLAN-5): `main [data-testid="work-items-top-bar"]`.
+    - Work Items view/filter toolbar (List/Board/... switcher, Columns, Filters — also tinted with the project background, PLAN-6): `main [data-testid="work-items-toolbar"]`.
     - User menu PWA install shortcut: `button[aria-label="Install Jynko PWA"]`
   - Kanban Board Column Configurator (`/work-items` in `BOARD` mode):
     - Toolbar columns button: `button[aria-label="Configure Kanban board columns"]`
