@@ -28,6 +28,28 @@ type ProjectSettings struct {
 	RequireEstimateBeforeInProgress  bool     `firestore:"require_estimate_before_in_progress" json:"require_estimate_before_in_progress"`
 	AutoLockPublishedRunbooks        bool     `firestore:"auto_lock_published_runbooks" json:"auto_lock_published_runbooks"`
 	CreateVersionOnEverySave         bool     `firestore:"create_version_on_every_save" json:"create_version_on_every_save"`
+	// BackgroundColor is a palette key (see ProjectBackgroundColors) used to tint project pages so
+	// users can tell projects apart at a glance. Empty or "DEFAULT" means the standard slate-50 canvas.
+	BackgroundColor string `firestore:"background_color,omitempty" json:"background_color,omitempty"`
+}
+
+// ProjectBackgroundColors lists the allowed palette keys for ProjectSettings.BackgroundColor.
+var ProjectBackgroundColors = []string{
+	"DEFAULT", "SKY", "INDIGO", "VIOLET", "ROSE", "AMBER", "LIME", "EMERALD", "TEAL", "STONE",
+}
+
+// IsValidProjectBackgroundColor reports whether c is an allowed project background palette key.
+// An empty value is accepted and treated as "DEFAULT".
+func IsValidProjectBackgroundColor(c string) bool {
+	if c == "" {
+		return true
+	}
+	for _, v := range ProjectBackgroundColors {
+		if v == c {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultProjectSettings returns sensible defaults for a project's settings.
@@ -43,6 +65,7 @@ func DefaultProjectSettings() *ProjectSettings {
 		RequireEstimateBeforeInProgress:  false,
 		AutoLockPublishedRunbooks:        false,
 		CreateVersionOnEverySave:         true,
+		BackgroundColor:                  "DEFAULT",
 	}
 }
 

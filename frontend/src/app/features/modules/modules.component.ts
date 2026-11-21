@@ -14,7 +14,7 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent],
   template: `
-    <div class="w-full p-4 sm:p-6 space-y-5 bg-slate-50 min-h-full">
+    <div data-testid="project-canvas" class="project-canvas w-full p-4 sm:p-6 space-y-5 min-h-full">
       <div class="space-y-1.5">
         <div class="flex items-center justify-between gap-2">
           <app-project-breadcrumb

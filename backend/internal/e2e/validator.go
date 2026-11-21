@@ -1568,6 +1568,8 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 					}
 				}
 			}
+
+			assertProjectBackgroundColorPicker(page, &res, baseURL)
 		} else {
 			res.Passed = false
 			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")
@@ -1582,6 +1584,65 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 	page.MustScreenshot(res.Screenshot)
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
+}
+
+// assertProjectBackgroundColorPicker verifies PLAN-4: the per-project "Project Appearance" card lets an
+// ADMIN pick a background colour from a fixed palette, and the chosen colour tints project pages.
+// The project is restored to the DEFAULT colour afterwards so the suite leaves settings clean.
+func assertProjectBackgroundColorPicker(page *rod.Page, res *ValidationCheckResult, baseURL string) {
+	const pickerSel = `[data-testid="project-appearance-card"] [role="radiogroup"][aria-label="Project background color"]`
+	hasPicker, _, _ := page.Has(pickerSel)
+	if !hasPicker {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Per-Project Settings missing Project Appearance background colour picker ("+pickerSel+")")
+		return
+	}
+	optionCount := page.MustEval(`(sel) => document.querySelectorAll(sel + ' button[role="radio"]').length`, pickerSel).Int()
+	if optionCount < 2 {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Project background colour picker expected a list of colours, found %d options", optionCount))
+		return
+	}
+
+	roseBtn, err := page.Element(`button[aria-label="Set project background color Rose"]`)
+	if err != nil {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Project background colour picker missing 'Rose' option")
+		return
+	}
+	roseBtn.MustClick()
+	time.Sleep(600 * time.Millisecond)
+	if checked := roseBtn.MustEval(`() => this.getAttribute('aria-checked')`).Str(); checked != "true" {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Selecting 'Rose' background colour did not mark it as checked (aria-checked=%q)", checked))
+	}
+
+	page.MustNavigate(baseURL + "/projects/proj-jynko-core/cycles")
+	page.MustWaitLoad()
+	time.Sleep(800 * time.Millisecond)
+	bg := page.MustEval(`() => {
+		const el = document.querySelector('main [data-testid="project-canvas"]');
+		return el ? getComputedStyle(el).backgroundColor : '';
+	}`).Str()
+	if bg == "rgb(255, 241, 242)" {
+		res.Assertions = append(res.Assertions, "Project background colour chosen in Settings (Rose) is applied to the project's Cycles page canvas")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Project Cycles canvas expected Rose background rgb(255, 241, 242), got %q", bg))
+	}
+
+	// Restore default colour.
+	page.MustNavigate(baseURL + "/settings")
+	page.MustWaitLoad()
+	time.Sleep(500 * time.Millisecond)
+	if has, hodoBtn, _ := page.Has(`button[aria-label="Open project settings for hodo"]`); has && hodoBtn != nil {
+		hodoBtn.MustClick()
+		time.Sleep(400 * time.Millisecond)
+		if hasDef, defBtn, _ := page.Has(`button[aria-label="Set project background color Default (Slate)"]`); hasDef && defBtn != nil {
+			defBtn.MustClick()
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------

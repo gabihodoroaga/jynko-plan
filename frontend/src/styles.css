@@ -268,3 +268,10 @@ textarea.auto-grow-comment {
     display: block;
   }
 }
+
+/* PLAN-4: Per-project background colour. `--project-bg` is set on <main> by AppComponent
+   from the active project's settings; project-scoped page canvases opt in via .project-canvas. */
+.project-canvas {
+  background-color: var(--project-bg, #f8fafc);
+  transition: background-color 0.2s ease;
+}

@@ -38,6 +38,7 @@ export interface ProjectSettingsModel {
   require_estimate_before_in_progress: boolean;
   auto_lock_published_runbooks: boolean;
   create_version_on_every_save: boolean;
+  background_color?: string;
 }
 
 export interface Project {
