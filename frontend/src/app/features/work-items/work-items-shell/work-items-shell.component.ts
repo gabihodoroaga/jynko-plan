@@ -61,9 +61,10 @@ import { ProjectBreadcrumbComponent } from '../../../shared/components/project-b
         }
       </div>
 
-      <!-- View Toolbar & Filter Bar (h-11 / 44px) -->
+      <!-- View Toolbar & Filter Bar (h-11 / 44px) — project background colour (PLAN-6) -->
       <div
-        class="min-h-[44px] px-3 sm:px-4 py-1.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2"
+        data-testid="work-items-toolbar"
+        class="project-canvas min-h-[44px] px-3 sm:px-4 py-1.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2"
       >
         <!-- Top Row on Mobile: 5 Segmented View Switcher Buttons + Mobile Actions -->
         <div class="flex items-center justify-between gap-2 w-full md:w-auto">
