@@ -39,8 +39,11 @@ import { ProjectBreadcrumbComponent } from '../../../shared/components/project-b
   ],
   template: `
     <div class="flex flex-col w-full h-full">
-      <!-- Top-Left Project Breadcrumb & Primary Action Row -->
-      <div class="px-3 sm:px-4 py-2 bg-white border-b border-slate-100 flex items-center justify-between gap-2">
+      <!-- Top-Left Project Breadcrumb & Primary Action Row (project background colour, PLAN-5) -->
+      <div
+        data-testid="work-items-top-bar"
+        class="project-canvas px-3 sm:px-4 py-2 border-b border-slate-100 flex items-center justify-between gap-2"
+      >
         <app-project-breadcrumb
           sectionLabel="Work items"
           [sectionRoute]="['/projects', projectService.activeProjectId(), 'work-items']"

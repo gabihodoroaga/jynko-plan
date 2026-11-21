@@ -325,6 +325,27 @@ func assertProjectBreadcrumbNavigatesToOverview(page *rod.Page, res *ValidationC
 	}
 }
 
+// assertWorkItemsTopBarUsesProjectBackground verifies PLAN-5: the Work Items top bar (project breadcrumb
+// row) uses the same project background colour as the view canvas, like the other project pages.
+func assertWorkItemsTopBarUsesProjectBackground(page *rod.Page, res *ValidationCheckResult) {
+	colors := page.MustEval(`() => {
+		const bar = document.querySelector('main [data-testid="work-items-top-bar"]');
+		const canvas = document.querySelector('main [data-testid="project-canvas"]');
+		return {
+			bar: bar ? getComputedStyle(bar).backgroundColor : '',
+			canvas: canvas ? getComputedStyle(canvas).backgroundColor : '',
+		};
+	}`)
+	bar := colors.Get("bar").Str()
+	canvas := colors.Get("canvas").Str()
+	if bar != "" && bar == canvas {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("Work Items top bar uses the project background colour (%s), matching the view canvas", bar))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Work Items top bar background %q does not match project canvas background %q", bar, canvas))
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Suite 1: App Shell & Responsive Panel Layout
 // -----------------------------------------------------------------------------
@@ -1019,6 +1040,7 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing [data-testid='open-create-work-item-btn'] button")
 	}
 
+	assertWorkItemsTopBarUsesProjectBackground(page, &res)
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Work Items")
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
