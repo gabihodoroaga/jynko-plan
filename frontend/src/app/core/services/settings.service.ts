@@ -1,6 +1,12 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ProjectService } from './project.service';
 import { ALL_STATUSES, ProjectSettingsModel, WorkItemStatus } from '../models/project.model';
+import {
+  PROJECT_BACKGROUND_COLORS,
+  ProjectBackgroundColorKey,
+  ProjectBackgroundColorOption,
+  getProjectBackgroundColor,
+} from '../models/project-colors';
 
 export const DEFAULT_VISIBLE_BOARD_COLUMNS: WorkItemStatus[] = [
   'BACKLOG',
@@ -37,6 +43,7 @@ export interface ProjectSpecificSettings {
   requireEstimateBeforeInProgress: boolean;
   autoLockPublishedRunbooks: boolean;
   createVersionOnEverySave: boolean;
+  backgroundColor: ProjectBackgroundColorKey;
 }
 
 export const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSettings => ({
@@ -51,6 +58,7 @@ export const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSett
   requireEstimateBeforeInProgress: false,
   autoLockPublishedRunbooks: false,
   createVersionOnEverySave: true,
+  backgroundColor: 'DEFAULT',
 });
 
 export function toModelSettings(s: ProjectSpecificSettings): ProjectSettingsModel {
@@ -65,6 +73,7 @@ export function toModelSettings(s: ProjectSpecificSettings): ProjectSettingsMode
     require_estimate_before_in_progress: s.requireEstimateBeforeInProgress,
     auto_lock_published_runbooks: s.autoLockPublishedRunbooks,
     create_version_on_every_save: s.createVersionOnEverySave,
+    background_color: s.backgroundColor,
   };
 }
 
@@ -88,6 +97,7 @@ export function fromModelSettings(projectId: string, m?: ProjectSettingsModel): 
       m.require_estimate_before_in_progress ?? d.requireEstimateBeforeInProgress,
     autoLockPublishedRunbooks: m.auto_lock_published_runbooks ?? d.autoLockPublishedRunbooks,
     createVersionOnEverySave: m.create_version_on_every_save ?? d.createVersionOnEverySave,
+    backgroundColor: getProjectBackgroundColor(m.background_color).key,
   };
 }
 
@@ -150,6 +160,21 @@ export class SettingsService {
     }
     return fromModelSettings(project.id, project.settings);
   });
+
+  /** Resolved background colour option for the active project (PLAN-4). */
+  readonly activeProjectBackground = computed<ProjectBackgroundColorOption>(() =>
+    getProjectBackgroundColor(this.activeProjectSettings().backgroundColor)
+  );
+
+  /** Background colour option for any project (used e.g. for sidebar colour dots). */
+  projectBackground(projectId: string): ProjectBackgroundColorOption {
+    const local = this.projectSettingsByProject()[projectId];
+    if (local) return getProjectBackgroundColor(local.backgroundColor);
+    const proj = this.projectService.projects().find((p) => p.id === projectId);
+    return getProjectBackgroundColor(proj?.settings?.background_color);
+  }
+
+  readonly projectBackgroundColors = PROJECT_BACKGROUND_COLORS;
 
   readonly visibleBoardStatuses = computed<WorkItemStatus[]>(() => {
     return this.activeProjectSettings().visibleBoardColumns;

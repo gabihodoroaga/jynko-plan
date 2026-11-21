@@ -990,7 +990,11 @@ import {
         <!-- 3. Right Main Workspace Column -->
         <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-white border-t border-slate-200/90">
           <div class="flex-1 flex overflow-hidden">
-            <main class="flex-1 w-full overflow-auto">
+            <main
+              class="flex-1 w-full overflow-auto"
+              [style.--project-bg]="settingsService.activeProjectBackground().canvas"
+              [attr.data-project-bg]="settingsService.activeProjectBackground().key"
+            >
               <router-outlet></router-outlet>
             </main>
           </div>

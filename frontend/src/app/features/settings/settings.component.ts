@@ -500,6 +500,55 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
               </div>
             </div>
 
+            <!-- Card 1b: Project Appearance — Background Colour (PLAN-4) -->
+            <div
+              data-testid="project-appearance-card"
+              class="bg-white border border-slate-200 rounded-lg p-5 shadow-card space-y-4"
+            >
+              <div class="border-b border-slate-100 pb-3">
+                <h2 class="text-sm font-semibold text-slate-900">Project Appearance ({{ proj.name }})</h2>
+                <p class="text-xs text-slate-500">
+                  Pick a background colour for this project's pages (Overview, Work items, Cycles, Epics, Modules)
+                  so you can tell projects apart at a glance.
+                </p>
+              </div>
+
+              <div
+                role="radiogroup"
+                aria-label="Project background color"
+                class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2"
+              >
+                @for (color of settingsService.projectBackgroundColors; track color.key) {
+                  @let isSelected = pset.backgroundColor === color.key;
+                  <button
+                    type="button"
+                    role="radio"
+                    [attr.aria-checked]="isSelected"
+                    [attr.aria-label]="'Set project background color ' + color.label"
+                    [attr.data-color-key]="color.key"
+                    [disabled]="!projectService.isAdmin()"
+                    (click)="settingsService.updateActiveProjectSetting('backgroundColor', color.key)"
+                    class="flex items-center gap-2 px-2.5 py-2 rounded-md border text-left text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    [ngClass]="
+                      isSelected
+                        ? 'border-sky-500 ring-1 ring-sky-500 text-slate-900'
+                        : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                    "
+                    [style.background-color]="color.canvas"
+                  >
+                    <span
+                      class="w-4 h-4 rounded-full border border-black/10 shrink-0"
+                      [style.background-color]="color.swatch"
+                    ></span>
+                    <span class="truncate">{{ color.label }}</span>
+                    @if (isSelected) {
+                      <span class="ml-auto text-sky-600" aria-hidden="true">✓</span>
+                    }
+                  </button>
+                }
+              </div>
+            </div>
+
             <!-- Card 2: Work Item & Cycle Workflow Defaults (Per-Project Mock Settings) -->
             <div class="bg-white border border-slate-200 rounded-lg p-5 shadow-card space-y-4">
               <div class="border-b border-slate-100 pb-3">

@@ -123,6 +123,10 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, in
 		proj.Description = strings.TrimSpace(*input.Description)
 	}
 	if input.Settings != nil {
+		input.Settings.BackgroundColor = strings.ToUpper(strings.TrimSpace(input.Settings.BackgroundColor))
+		if !model.IsValidProjectBackgroundColor(input.Settings.BackgroundColor) {
+			return nil, errors.New("settings.background_color must be one of: " + strings.Join(model.ProjectBackgroundColors, ", "))
+		}
 		proj.Settings = input.Settings
 	}
 

@@ -245,8 +245,8 @@ import { ProjectBreadcrumbComponent } from '../../../shared/components/project-b
         </div>
       </div>
 
-      <!-- Active View Canvas (bg-slate-50) -->
-      <div class="flex-1 min-h-0 p-2.5 sm:p-4 bg-slate-50 overflow-auto flex flex-col">
+      <!-- Active View Canvas (project background colour, defaults to slate-50) -->
+      <div data-testid="project-canvas" class="project-canvas flex-1 min-h-0 p-2.5 sm:p-4 overflow-auto flex flex-col">
         @switch (workItemService.activeView()) {
           @case ('LIST') {
             <app-work-item-list></app-work-item-list>

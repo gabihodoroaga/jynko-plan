@@ -15,7 +15,7 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
   standalone: true,
   imports: [CommonModule, FormsModule, DropdownComponent],
   template: `
-    <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
+    <div data-testid="project-canvas" class="project-canvas w-full p-4 sm:p-6 space-y-6 min-h-full">
       <!-- Active Project Card -->
       @if (projectService.activeProject(); as proj) {
         <div class="bg-white border border-slate-200 rounded-md p-4 shadow-card space-y-3">
