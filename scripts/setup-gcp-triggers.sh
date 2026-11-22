@@ -64,7 +64,7 @@ upsert_csr_trigger() {
   local trigger_name="${SERVICE_BASE}-${env_name}"
   local target_service="${SERVICE_BASE}-${env_name}"
   local iap_audience="/projects/${PROJECT_NUM}/locations/${REGION}/services/${target_service}"
-  local subs="_ENV_PREFIX=${env_name},_REGION=${REGION},_SERVICE_NAME=${SERVICE_BASE},_SERVICE_ACCOUNT=${RUNNER_SA},_IAP_AUDIENCE=${iap_audience}"
+  local subs="_ENV_PREFIX=${env_name},_REGION=${REGION},_SERVICE_NAME=${SERVICE_BASE},_SERVICE_ACCOUNT=${RUNNER_SA},_IAP_AUDIENCE=${iap_audience},_ATTACHMENTS_GCS_PREFIX=${env_name}"
 
   if [ -n "${ATTACHMENTS_BUCKET}" ]; then
     subs="${subs},_ATTACHMENTS_GCS_BUCKET=${ATTACHMENTS_BUCKET}"

@@ -97,6 +97,9 @@ steps:
         if [ -n "$_ATTACHMENTS_GCS_BUCKET" ]; then
           ENV_VARS="$${ENV_VARS},ATTACHMENTS_GCS_BUCKET=$_ATTACHMENTS_GCS_BUCKET"
         fi
+        if [ -n "$_ATTACHMENTS_GCS_PREFIX" ]; then
+          ENV_VARS="$${ENV_VARS},ATTACHMENTS_GCS_PREFIX=$_ATTACHMENTS_GCS_PREFIX"
+        fi
 
         gcloud run deploy "$$SERVICE" \
           --image "eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA" \
@@ -116,6 +119,7 @@ substitutions:
   _FIRESTORE_DB: '(default)'
   _IAP_AUDIENCE: ''
   _ATTACHMENTS_GCS_BUCKET: ''
+  _ATTACHMENTS_GCS_PREFIX: ''
 
 images:
   - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
