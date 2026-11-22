@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -35,7 +35,48 @@ import {
     @if (authService.isSignedOut() || isSignedOutRoute()) {
       <router-outlet />
     } @else {
-    <div class="flex flex-col h-dvh w-full overflow-hidden bg-[#f0f4f9] text-slate-900">
+    <div
+      data-testid="app-shell"
+      [class.select-none]="isPullDragging()"
+      class="relative flex flex-col h-dvh w-full overflow-hidden bg-[#f0f4f9] text-slate-900"
+    >
+      @if (showPullIndicator()) {
+        <div
+          data-testid="pull-to-refresh-indicator"
+          [attr.data-pull-ready]="pullReady() || pwaService.refreshing()"
+          role="status"
+          aria-live="polite"
+          class="pointer-events-none fixed left-1/2 z-50 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.14)] text-xs font-medium text-slate-700 transition-opacity duration-150"
+          [style.top.px]="8"
+          [style.transform]="'translate(-50%, ' + pullIndicatorOffset() + 'px)'"
+        >
+          <svg
+            class="w-3.5 h-3.5 text-sky-600 shrink-0"
+            [class.animate-spin]="pwaService.refreshing()"
+            [style.transform]="pwaService.refreshing() ? null : 'rotate(' + pullIconRotation() + 'deg)'"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          <span>
+            {{
+              pwaService.refreshing()
+                ? 'Refreshing…'
+                : pullReady()
+                  ? 'Release to refresh'
+                  : 'Pull down to refresh'
+            }}
+          </span>
+        </div>
+      }
+
       <!-- Global Top Application Bar (Jynko App Icon on left, Search in center, User on right) -->
       <header class="h-11 px-3 sm:px-3.5 bg-[#f0f4f9] flex items-center justify-between gap-2 sm:gap-4 shrink-0 select-none">
         <!-- Left: Mobile Hamburger + Simple Application Brand Icon (no dropdown caret) -->
@@ -130,8 +171,8 @@ import {
           </div>
         </div>
 
-        <!-- Right: Offline Indicator + User Avatar & Account Popover Card -->
-        <div class="relative flex items-center gap-2">
+        <!-- Right: Offline Indicator + Refresh Action + User Avatar & Account Popover Card -->
+        <div class="relative flex items-center gap-1.5 sm:gap-2 shrink-0">
           @if (!pwaService.isOnline() && settingsService.generalSettings().pwaOfflineBanner) {
             <span
               data-testid="pwa-offline-badge"
@@ -142,6 +183,38 @@ import {
               <span class="hidden sm:inline">Offline</span>
             </span>
           }
+
+          <button
+            type="button"
+            data-testid="app-refresh-btn"
+            aria-label="Refresh page"
+            [title]="pwaService.updateAvailable() ? 'Update available — click to refresh' : 'Refresh page'"
+            [disabled]="pwaService.refreshing()"
+            (click)="triggerRefresh()"
+            class="relative w-8 h-8 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-[#e1e9f4] active:bg-[#d3e3fd] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 transition-colors disabled:opacity-60 shrink-0"
+          >
+            <svg
+              class="w-4 h-4 transition-transform"
+              [class.animate-spin]="pwaService.refreshing()"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            @if (pwaService.updateAvailable() && !pwaService.refreshing()) {
+              <span
+                data-testid="app-refresh-update-dot"
+                class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-sky-600 ring-2 ring-[#f0f4f9]"
+                aria-hidden="true"
+              ></span>
+            }
+          </button>
 
           <button
             type="button"
@@ -288,6 +361,27 @@ import {
                       <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                     <span>Install app</span>
+                  </button>
+                } @else if (pwaService.isStandalone()) {
+                  <button
+                    type="button"
+                    (click)="refreshFromMenu()"
+                    aria-label="Refresh Jynko app"
+                    [disabled]="pwaService.refreshing()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-medium text-slate-700 disabled:opacity-60 transition-colors"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5 shrink-0"
+                      [class.animate-spin]="pwaService.refreshing()"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Refresh app</span>
                   </button>
                 } @else {
                   <span></span>
@@ -1303,7 +1397,7 @@ import {
     }
   `,
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   readonly authService = inject(AuthService);
   readonly projectService = inject(ProjectService);
   readonly workItemService = inject(WorkItemService);
@@ -1311,8 +1405,23 @@ export class AppComponent implements OnInit {
   readonly settingsService = inject(SettingsService);
   readonly pwaService = inject(PwaService);
   private readonly router = inject(Router);
+  private readonly ngZone = inject(NgZone);
 
   @ViewChild('pwaToastEl') pwaToastRef?: ElementRef<HTMLElement>;
+
+  readonly pullThreshold = 56;
+  readonly pullDistance = signal<number>(0);
+  readonly isPullDragging = signal<boolean>(false);
+  readonly pullTriggeredRefresh = signal<boolean>(false);
+  readonly pullReady = computed<boolean>(() => this.pullDistance() >= this.pullThreshold);
+  readonly showPullIndicator = computed<boolean>(
+    () => this.pullDistance() > 0 || this.pullTriggeredRefresh()
+  );
+  readonly pullIndicatorOffset = computed<number>(() => Math.min(this.pullDistance(), 72));
+  readonly pullIconRotation = computed<number>(() =>
+    Math.round((this.pullDistance() / this.pullThreshold) * 220)
+  );
+  private readonly pullCleanupFns: Array<() => void> = [];
 
   readonly activeRailSection = signal<'WORK' | 'WIKI' | 'SETTINGS'>('WORK');
   readonly sidebarCollapsed = signal<boolean>(false);
@@ -1498,6 +1607,301 @@ export class AppComponent implements OnInit {
           this.activeRailSection.set('WORK');
         }
       });
+
+    this.setupPullToRefresh();
+  }
+
+  ngOnDestroy(): void {
+    for (const cleanup of this.pullCleanupFns) {
+      cleanup();
+    }
+    this.pullCleanupFns.length = 0;
+  }
+
+  triggerRefresh(): void {
+    void this.pwaService.refreshApp();
+  }
+
+  refreshFromMenu(): void {
+    this.isUserMenuOpen.set(false);
+    this.isSwitchAccountOpen.set(false);
+    this.triggerRefresh();
+  }
+
+  private setupPullToRefresh(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    let pullArmed = false;
+    let pullEngaged = false;
+    let isTouchGesture = false;
+    let activeTouchId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let startTarget: Element | null = null;
+
+    const resetGestureState = () => {
+      pullArmed = false;
+      pullEngaged = false;
+      isTouchGesture = false;
+      activeTouchId = null;
+      startTarget = null;
+    };
+
+    const cancelPull = () => {
+      const hadUiState = pullEngaged || this.isPullDragging() || this.pullDistance() !== 0;
+      resetGestureState();
+      if (hadUiState && !this.pullTriggeredRefresh()) {
+        this.ngZone.run(() => {
+          this.isPullDragging.set(false);
+          this.pullDistance.set(0);
+        });
+      }
+    };
+
+    const handleMove = (clientX: number, clientY: number, cancelableEvent?: Event) => {
+      if (!pullArmed) {
+        return;
+      }
+      if (document.querySelector('.cdk-drop-list-dragging, .cdk-drag-preview')) {
+        cancelPull();
+        return;
+      }
+
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+
+      if (!pullEngaged) {
+        if (dy < -6 || (Math.abs(dx) > 10 && Math.abs(dx) >= dy)) {
+          resetGestureState();
+          return;
+        }
+        if (dy >= 12 && dy > Math.abs(dx) * 1.25) {
+          if (!startTarget || !this.isScrolledToTop(startTarget)) {
+            resetGestureState();
+            return;
+          }
+          pullEngaged = true;
+          if (!isTouchGesture) {
+            window.getSelection?.()?.removeAllRanges?.();
+          }
+          this.ngZone.run(() => {
+            this.isPullDragging.set(true);
+          });
+        } else {
+          return;
+        }
+      }
+
+      if (isTouchGesture && cancelableEvent?.cancelable) {
+        cancelableEvent.preventDefault();
+      }
+
+      const nextPull = Math.min(96, Math.round(Math.max(0, dy - 12) * 0.6));
+      if (nextPull !== this.pullDistance()) {
+        this.ngZone.run(() => {
+          this.pullDistance.set(nextPull);
+        });
+      }
+    };
+
+    const finishPull = () => {
+      if (!pullArmed && !pullEngaged) {
+        return;
+      }
+      const wasEngaged = pullEngaged;
+      const wasTouch = isTouchGesture;
+      const wasReady = this.pullReady();
+      resetGestureState();
+
+      if (wasEngaged && !wasTouch) {
+        const blockClick = (clickEvent: MouseEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+        };
+        window.addEventListener('click', blockClick, { capture: true, once: true });
+        setTimeout(() => {
+          window.removeEventListener('click', blockClick, { capture: true });
+        }, 120);
+      }
+
+      this.ngZone.run(() => {
+        this.isPullDragging.set(false);
+        if (wasEngaged && wasReady) {
+          this.pullTriggeredRefresh.set(true);
+          this.pullDistance.set(48);
+          this.triggerRefresh();
+        } else if (this.pullDistance() !== 0) {
+          this.pullDistance.set(0);
+        }
+      });
+    };
+
+    this.ngZone.runOutsideAngular(() => {
+      const onMouseDown = (e: MouseEvent) => {
+        if (
+          e.button !== 0 ||
+          e.ctrlKey ||
+          e.metaKey ||
+          e.altKey ||
+          e.shiftKey ||
+          !this.canStartPull(e.target, false)
+        ) {
+          return;
+        }
+        pullArmed = true;
+        pullEngaged = false;
+        isTouchGesture = false;
+        activeTouchId = null;
+        startX = e.clientX;
+        startY = e.clientY;
+        startTarget = e.target as Element;
+      };
+
+      const onMouseMove = (e: MouseEvent) => {
+        if (!pullArmed || isTouchGesture) {
+          return;
+        }
+        if ((e.buttons & 1) === 0) {
+          finishPull();
+          return;
+        }
+        handleMove(e.clientX, e.clientY);
+      };
+
+      const onMouseUp = () => {
+        if (!pullArmed || isTouchGesture) {
+          return;
+        }
+        finishPull();
+      };
+
+      const onTouchStart = (e: TouchEvent) => {
+        if (e.touches.length !== 1 || !this.canStartPull(e.target, true)) {
+          if (e.touches.length > 1) {
+            cancelPull();
+          }
+          return;
+        }
+        const t = e.touches[0];
+        pullArmed = true;
+        pullEngaged = false;
+        isTouchGesture = true;
+        activeTouchId = t.identifier;
+        startX = t.clientX;
+        startY = t.clientY;
+        startTarget = e.target as Element;
+      };
+
+      const onTouchMove = (e: TouchEvent) => {
+        if (!pullArmed || !isTouchGesture) {
+          return;
+        }
+        if (e.touches.length > 1) {
+          cancelPull();
+          return;
+        }
+        const touch =
+          Array.from(e.touches).find((t) => t.identifier === activeTouchId) ?? e.touches[0];
+        if (!touch) {
+          return;
+        }
+        handleMove(touch.clientX, touch.clientY, e);
+      };
+
+      const onTouchEnd = (e: TouchEvent) => {
+        if (!pullArmed || !isTouchGesture) {
+          return;
+        }
+        const endedActive =
+          activeTouchId === null ||
+          e.touches.length === 0 ||
+          Array.from(e.changedTouches).some((t) => t.identifier === activeTouchId);
+        if (endedActive) {
+          finishPull();
+        }
+      };
+
+      const onTouchCancel = () => {
+        if (isTouchGesture) {
+          cancelPull();
+        }
+      };
+
+      const onWindowBlur = () => {
+        cancelPull();
+      };
+
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && (pullArmed || pullEngaged)) {
+          cancelPull();
+        }
+      };
+
+      window.addEventListener('mousedown', onMouseDown);
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('touchstart', onTouchStart, { passive: true });
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend', onTouchEnd);
+      window.addEventListener('touchcancel', onTouchCancel);
+      window.addEventListener('blur', onWindowBlur);
+      window.addEventListener('keydown', onKeyDown);
+
+      this.pullCleanupFns.push(
+        () => window.removeEventListener('mousedown', onMouseDown),
+        () => window.removeEventListener('mousemove', onMouseMove),
+        () => window.removeEventListener('mouseup', onMouseUp),
+        () => window.removeEventListener('touchstart', onTouchStart),
+        () => window.removeEventListener('touchmove', onTouchMove),
+        () => window.removeEventListener('touchend', onTouchEnd),
+        () => window.removeEventListener('touchcancel', onTouchCancel),
+        () => window.removeEventListener('blur', onWindowBlur),
+        () => window.removeEventListener('keydown', onKeyDown)
+      );
+    });
+  }
+
+  private canStartPull(target: EventTarget | null, isTouch: boolean): boolean {
+    if (
+      this.pwaService.refreshing() ||
+      this.authService.isSignedOut() ||
+      this.isSignedOutRoute() ||
+      this.isUserMenuOpen() ||
+      this.settingsService.isMobileMenuOpen() ||
+      this.workItemService.isQuickCreateOpen() ||
+      this.isCreatePageOpen() ||
+      this.projectService.isProjectModalOpen()
+    ) {
+      return false;
+    }
+    if (!(target instanceof Element) || !target.closest('[data-testid="app-shell"]')) {
+      return false;
+    }
+    const commonExclusions =
+      'input, textarea, select, [contenteditable="true"], [contenteditable=""], dialog, [role="dialog"], [role="listbox"], [data-testid="user-dropdown-card"], [data-testid="app-navigation-drawer"]';
+    if (target.closest(commonExclusions)) {
+      return false;
+    }
+    if (!isTouch && target.closest('button, a, label, summary, .cdk-drag, [draggable="true"]')) {
+      return false;
+    }
+    return this.isScrolledToTop(target);
+  }
+
+  private isScrolledToTop(target: Element): boolean {
+    if ((window.scrollY || document.documentElement.scrollTop || 0) > 1) {
+      return false;
+    }
+    let el: Element | null = target;
+    while (el && el !== document.body && el !== document.documentElement) {
+      if (el instanceof HTMLElement && el.scrollTop > 1) {
+        return false;
+      }
+      el = el.parentElement;
+    }
+    return true;
   }
 
   toggleMobileNavigation(): void {

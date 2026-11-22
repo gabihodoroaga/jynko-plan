@@ -274,6 +274,12 @@ func SetupRouterWithMCP(
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.IAPAuthMiddleware(cfg))
+	// Ensure API JSON responses are never served from browser/PWA HTTP caches across reloads;
+	// attachment content handlers explicitly override Cache-Control when streaming blobs.
+	api.Use(func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.Next()
+	})
 
 	// Runtime environment & deployment metadata endpoint
 	api.GET("/meta", func(c *gin.Context) {
