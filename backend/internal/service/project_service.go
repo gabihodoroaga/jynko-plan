@@ -123,11 +123,11 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, in
 		proj.Description = strings.TrimSpace(*input.Description)
 	}
 	if input.Settings != nil {
-		input.Settings.BackgroundColor = strings.ToUpper(strings.TrimSpace(input.Settings.BackgroundColor))
-		if !model.IsValidProjectBackgroundColor(input.Settings.BackgroundColor) {
+		merged := normalizeProjectSettings(proj.Settings, input.Settings)
+		if !model.IsValidProjectBackgroundColor(merged.BackgroundColor) {
 			return nil, errors.New("settings.background_color must be one of: " + strings.Join(model.ProjectBackgroundColors, ", "))
 		}
-		proj.Settings = input.Settings
+		proj.Settings = merged
 	}
 
 	if err := s.repo.Update(ctx, proj); err != nil {
@@ -216,4 +216,68 @@ func deriveKeyPrefix(name string) string {
 		return "JYNKO"
 	}
 	return res
+}
+
+func normalizeProjectSettings(existing, incoming *model.ProjectSettings) *model.ProjectSettings {
+	base := model.DefaultProjectSettings()
+	if existing != nil {
+		*base = *existing
+		if len(existing.VisibleBoardColumns) > 0 {
+			base.VisibleBoardColumns = append([]string(nil), existing.VisibleBoardColumns...)
+		}
+	}
+	if incoming == nil {
+		return base
+	}
+
+	out := *incoming
+	if strings.TrimSpace(out.DefaultNewItemStatus) == "" {
+		out.DefaultNewItemStatus = base.DefaultNewItemStatus
+	}
+	if strings.TrimSpace(out.DefaultNewItemPriority) == "" {
+		out.DefaultNewItemPriority = base.DefaultNewItemPriority
+	}
+	if strings.TrimSpace(out.EstimationScale) == "" {
+		out.EstimationScale = base.EstimationScale
+	}
+	if strings.TrimSpace(out.CycleDurationWeeks) == "" {
+		out.CycleDurationWeeks = base.CycleDurationWeeks
+	}
+	if len(out.VisibleBoardColumns) == 0 {
+		out.VisibleBoardColumns = base.VisibleBoardColumns
+	}
+	out.BackgroundColor = strings.ToUpper(strings.TrimSpace(out.BackgroundColor))
+	if out.BackgroundColor == "" {
+		out.BackgroundColor = base.BackgroundColor
+	}
+
+	out.DefaultGitRepoURL = strings.TrimSpace(out.DefaultGitRepoURL)
+	out.DefaultBaseBranch = strings.TrimSpace(out.DefaultBaseBranch)
+	if out.DefaultBaseBranch == "" {
+		out.DefaultBaseBranch = nonEmptyOrDefault(base.DefaultBaseBranch, "dev")
+	}
+	out.ScionProjectSlug = strings.TrimSpace(out.ScionProjectSlug)
+	if out.ScionProjectSlug == "" {
+		out.ScionProjectSlug = nonEmptyOrDefault(base.ScionProjectSlug, "global")
+	}
+	out.ScionTemplate = strings.TrimSpace(out.ScionTemplate)
+	if out.ScionTemplate == "" {
+		out.ScionTemplate = nonEmptyOrDefault(base.ScionTemplate, "jynko-dev")
+	}
+	out.ImplementHarness = strings.TrimSpace(out.ImplementHarness)
+	if out.ImplementHarness == "" {
+		out.ImplementHarness = nonEmptyOrDefault(base.ImplementHarness, "claude")
+	}
+	out.ReviewHarness = strings.TrimSpace(out.ReviewHarness)
+	if out.ReviewHarness == "" {
+		out.ReviewHarness = nonEmptyOrDefault(base.ReviewHarness, "antigravity")
+	}
+	return &out
+}
+
+func nonEmptyOrDefault(val, fallback string) string {
+	if trimmed := strings.TrimSpace(val); trimmed != "" {
+		return trimmed
+	}
+	return fallback
 }

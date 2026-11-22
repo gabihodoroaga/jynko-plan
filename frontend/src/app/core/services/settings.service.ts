@@ -44,6 +44,16 @@ export interface ProjectSpecificSettings {
   autoLockPublishedRunbooks: boolean;
   createVersionOnEverySave: boolean;
   backgroundColor: ProjectBackgroundColorKey;
+  scionEnabled: boolean;
+  defaultGitRepoUrl: string;
+  defaultBaseBranch: string;
+  scionProjectSlug: string;
+  scionTemplate: string;
+  implementHarness: string;
+  reviewHarness: string;
+  implementPromptTemplate: string;
+  reviewPromptTemplate: string;
+  followupPromptTemplate: string;
 }
 
 export const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSettings => ({
@@ -59,6 +69,16 @@ export const DEFAULT_PROJECT_SETTINGS = (projectId: string): ProjectSpecificSett
   autoLockPublishedRunbooks: false,
   createVersionOnEverySave: true,
   backgroundColor: 'DEFAULT',
+  scionEnabled: false,
+  defaultGitRepoUrl: '',
+  defaultBaseBranch: 'dev',
+  scionProjectSlug: 'global',
+  scionTemplate: 'jynko-dev',
+  implementHarness: 'claude',
+  reviewHarness: 'antigravity',
+  implementPromptTemplate: '',
+  reviewPromptTemplate: '',
+  followupPromptTemplate: '',
 });
 
 export function toModelSettings(s: ProjectSpecificSettings): ProjectSettingsModel {
@@ -74,6 +94,16 @@ export function toModelSettings(s: ProjectSpecificSettings): ProjectSettingsMode
     auto_lock_published_runbooks: s.autoLockPublishedRunbooks,
     create_version_on_every_save: s.createVersionOnEverySave,
     background_color: s.backgroundColor,
+    scion_enabled: s.scionEnabled,
+    default_git_repo_url: s.defaultGitRepoUrl,
+    default_base_branch: s.defaultBaseBranch,
+    scion_project_slug: s.scionProjectSlug,
+    scion_template: s.scionTemplate,
+    implement_harness: s.implementHarness,
+    review_harness: s.reviewHarness,
+    implement_prompt_template: s.implementPromptTemplate,
+    review_prompt_template: s.reviewPromptTemplate,
+    followup_prompt_template: s.followupPromptTemplate,
   };
 }
 
@@ -98,6 +128,16 @@ export function fromModelSettings(projectId: string, m?: ProjectSettingsModel): 
     autoLockPublishedRunbooks: m.auto_lock_published_runbooks ?? d.autoLockPublishedRunbooks,
     createVersionOnEverySave: m.create_version_on_every_save ?? d.createVersionOnEverySave,
     backgroundColor: getProjectBackgroundColor(m.background_color).key,
+    scionEnabled: m.scion_enabled ?? d.scionEnabled,
+    defaultGitRepoUrl: m.default_git_repo_url ?? d.defaultGitRepoUrl,
+    defaultBaseBranch: m.default_base_branch || d.defaultBaseBranch,
+    scionProjectSlug: m.scion_project_slug || d.scionProjectSlug,
+    scionTemplate: m.scion_template || d.scionTemplate,
+    implementHarness: m.implement_harness || d.implementHarness,
+    reviewHarness: m.review_harness || d.reviewHarness,
+    implementPromptTemplate: m.implement_prompt_template ?? d.implementPromptTemplate,
+    reviewPromptTemplate: m.review_prompt_template ?? d.reviewPromptTemplate,
+    followupPromptTemplate: m.followup_prompt_template ?? d.followupPromptTemplate,
   };
 }
 

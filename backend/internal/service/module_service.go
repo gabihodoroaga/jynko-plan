@@ -22,12 +22,16 @@ type CreateModuleInput struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 	LeadUserID  string `json:"lead_user_id"`
+	GitRepoURL  string `json:"git_repo_url"`
+	BaseBranch  string `json:"base_branch"`
 }
 
 type UpdateModuleInput struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
 	LeadUserID  *string `json:"lead_user_id"`
+	GitRepoURL  *string `json:"git_repo_url"`
+	BaseBranch  *string `json:"base_branch"`
 }
 
 func (s *ModuleService) List(ctx context.Context, projectID string) ([]model.Module, error) {
@@ -48,6 +52,8 @@ func (s *ModuleService) Create(ctx context.Context, projectID string, input Crea
 		Name:        name,
 		Description: strings.TrimSpace(input.Description),
 		LeadUserID:  strings.TrimSpace(input.LeadUserID),
+		GitRepoURL:  strings.TrimSpace(input.GitRepoURL),
+		BaseBranch:  strings.TrimSpace(input.BaseBranch),
 	}
 	if err := s.repo.Create(ctx, mod); err != nil {
 		return nil, err
@@ -72,6 +78,12 @@ func (s *ModuleService) Update(ctx context.Context, projectID, moduleID string, 
 	}
 	if input.LeadUserID != nil {
 		mod.LeadUserID = strings.TrimSpace(*input.LeadUserID)
+	}
+	if input.GitRepoURL != nil {
+		mod.GitRepoURL = strings.TrimSpace(*input.GitRepoURL)
+	}
+	if input.BaseBranch != nil {
+		mod.BaseBranch = strings.TrimSpace(*input.BaseBranch)
 	}
 	if err := s.repo.Update(ctx, mod); err != nil {
 		return nil, err

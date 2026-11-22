@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -9,7 +9,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { PwaService } from '../../core/services/pwa.service';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
-import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.model';
+import { ALL_STATUSES, Project, ProjectRole, ScionDefaults } from '../../core/models/project.model';
 
 @Component({
   selector: 'app-settings',
@@ -774,6 +774,274 @@ import { ALL_STATUSES, Project, ProjectRole } from '../../core/models/project.mo
               </div>
             </div>
 
+            <!-- Card 3b: Scion AI Agents & Slash Commands -->
+            <div
+              class="bg-white border border-slate-200 rounded-lg p-5 shadow-card space-y-4"
+              data-testid="scion-settings-card"
+            >
+              <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <h2 class="text-sm font-semibold text-slate-900">Scion AI Agents &amp; Slash Commands</h2>
+                  <p class="text-xs text-slate-500">
+                    Dispatch Scion coding and review agents directly from work item comments
+                    (<code class="font-mono">/implement</code>, <code class="font-mono">/review</code>,
+                    <code class="font-mono">/fix</code>, <code class="font-mono">/plan</code>,
+                    <code class="font-mono">/ask</code>, <code class="font-mono">/stop</code>).
+                  </p>
+                </div>
+                @if (scionDefaults(); as sdef) {
+                  <span
+                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                    [ngClass]="
+                      sdef.configured
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    "
+                  >
+                    <span
+                      class="w-1.5 h-1.5 rounded-full"
+                      [ngClass]="sdef.configured ? 'bg-emerald-500' : 'bg-amber-500'"
+                    ></span>
+                    {{ sdef.configured ? 'Scion Hub connected' : 'Server env unconfigured' }}
+                  </span>
+                }
+              </div>
+
+              <label class="py-2 flex items-center justify-between gap-4 cursor-pointer">
+                <div>
+                  <div class="text-xs font-medium text-slate-800">Enable Scion Slash Commands</div>
+                  <div class="text-[11px] text-slate-500">
+                    Allow project members to trigger Scion agents from work item comments.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  name="scionEnabled"
+                  [attr.switch]="''"
+                  role="switch"
+                  aria-label="Toggle Scion AI Agents"
+                  class="jynko-switch"
+                  [checked]="pset.scionEnabled"
+                  [disabled]="!projectService.isAdmin()"
+                  (change)="settingsService.updateActiveProjectSetting('scionEnabled', $any($event.target).checked)"
+                />
+              </label>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div class="sm:col-span-2">
+                  <label for="scion-repo-url" class="block text-xs font-medium text-slate-700 mb-1">
+                    Default Git Repository URL
+                  </label>
+                  <input
+                    id="scion-repo-url"
+                    type="url"
+                    name="defaultGitRepoUrl"
+                    aria-label="Default Git Repo URL"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    [ngModel]="pset.defaultGitRepoUrl"
+                    [disabled]="!projectService.isAdmin()"
+                    (blur)="settingsService.updateActiveProjectSetting('defaultGitRepoUrl', $any($event.target).value.trim())"
+                    placeholder="https://github.com/org/repo"
+                    class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label for="scion-base-branch" class="block text-xs font-medium text-slate-700 mb-1">
+                    Default Base Branch
+                  </label>
+                  <input
+                    id="scion-base-branch"
+                    type="text"
+                    name="defaultBaseBranch"
+                    aria-label="Default Base Branch"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    [ngModel]="pset.defaultBaseBranch"
+                    [disabled]="!projectService.isAdmin()"
+                    (blur)="settingsService.updateActiveProjectSetting('defaultBaseBranch', $any($event.target).value.trim() || 'dev')"
+                    placeholder="dev"
+                    class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label for="scion-project-slug" class="block text-xs font-medium text-slate-700 mb-1">
+                    Scion Project Slug
+                  </label>
+                  <input
+                    id="scion-project-slug"
+                    type="text"
+                    name="scionProjectSlug"
+                    aria-label="Scion Project Slug"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    [ngModel]="pset.scionProjectSlug"
+                    [disabled]="!projectService.isAdmin()"
+                    (blur)="settingsService.updateActiveProjectSetting('scionProjectSlug', $any($event.target).value.trim() || 'global')"
+                    placeholder="global"
+                    class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label for="scion-template" class="block text-xs font-medium text-slate-700 mb-1">
+                    Scion Agent Template
+                  </label>
+                  <input
+                    id="scion-template"
+                    type="text"
+                    name="scionTemplate"
+                    aria-label="Scion Template"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    [ngModel]="pset.scionTemplate"
+                    [disabled]="!projectService.isAdmin()"
+                    (blur)="settingsService.updateActiveProjectSetting('scionTemplate', $any($event.target).value.trim() || 'jynko-dev')"
+                    placeholder="jynko-dev"
+                    class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Implement Harness</label>
+                    <app-dropdown
+                      [options]="harnessOptions"
+                      [value]="pset.implementHarness"
+                      [disabled]="!projectService.isAdmin()"
+                      (valueChange)="settingsService.updateActiveProjectSetting('implementHarness', $event)"
+                      [fullWidth]="true"
+                    ></app-dropdown>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Review Harness</label>
+                    <app-dropdown
+                      [options]="harnessOptions"
+                      [value]="pset.reviewHarness"
+                      [disabled]="!projectService.isAdmin()"
+                      (valueChange)="settingsService.updateActiveProjectSetting('reviewHarness', $event)"
+                      [fullWidth]="true"
+                    ></app-dropdown>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Placeholder Chips -->
+              @if (scionDefaults()?.placeholders?.length) {
+                <div class="rounded-md bg-slate-50 border border-slate-200 p-3 space-y-1.5">
+                  <div class="text-[11px] font-medium text-slate-700">
+                    Click a placeholder chip to insert it into the active prompt template:
+                  </div>
+                  <div class="flex flex-wrap gap-1.5">
+                    @for (ph of scionDefaults()?.placeholders ?? []; track ph.token) {
+                      <button
+                        type="button"
+                        [disabled]="!projectService.isAdmin()"
+                        [title]="ph.description"
+                        (click)="insertPlaceholder(ph.token, pset)"
+                        class="px-2 py-0.5 rounded-full bg-white border border-slate-200 hover:border-sky-300 hover:text-sky-700 text-[11px] font-mono text-slate-600 transition-colors disabled:opacity-50"
+                      >
+                        {{ ph.token }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Prompt Templates -->
+              <div class="space-y-3 pt-1">
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label for="scion-impl-prompt" class="text-xs font-medium text-slate-700">
+                      Implement Prompt Template (<code class="font-mono">/implement</code>, <code class="font-mono">/plan</code>)
+                    </label>
+                    <button
+                      type="button"
+                      aria-label="Reset implement prompt template"
+                      [disabled]="!projectService.isAdmin()"
+                      (click)="resetPromptTemplate('implementPromptTemplate')"
+                      class="text-[11px] text-sky-700 hover:text-sky-800 hover:underline disabled:opacity-50"
+                    >
+                      Reset to default
+                    </button>
+                  </div>
+                  <textarea
+                    id="scion-impl-prompt"
+                    name="implementPromptTemplate"
+                    rows="5"
+                    aria-label="Implement prompt template"
+                    [ngModel]="effectivePrompt(pset.implementPromptTemplate, 'implement')"
+                    [disabled]="!projectService.isAdmin()"
+                    (focus)="activePromptField = 'implementPromptTemplate'"
+                    (blur)="settingsService.updateActiveProjectSetting('implementPromptTemplate', $any($event.target).value)"
+                    class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  ></textarea>
+                </div>
+
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label for="scion-review-prompt" class="text-xs font-medium text-slate-700">
+                      Review Prompt Template (<code class="font-mono">/review</code>)
+                    </label>
+                    <button
+                      type="button"
+                      aria-label="Reset review prompt template"
+                      [disabled]="!projectService.isAdmin()"
+                      (click)="resetPromptTemplate('reviewPromptTemplate')"
+                      class="text-[11px] text-sky-700 hover:text-sky-800 hover:underline disabled:opacity-50"
+                    >
+                      Reset to default
+                    </button>
+                  </div>
+                  <textarea
+                    id="scion-review-prompt"
+                    name="reviewPromptTemplate"
+                    rows="5"
+                    aria-label="Review prompt template"
+                    [ngModel]="effectivePrompt(pset.reviewPromptTemplate, 'review')"
+                    [disabled]="!projectService.isAdmin()"
+                    (focus)="activePromptField = 'reviewPromptTemplate'"
+                    (blur)="settingsService.updateActiveProjectSetting('reviewPromptTemplate', $any($event.target).value)"
+                    class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  ></textarea>
+                </div>
+
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label for="scion-followup-prompt" class="text-xs font-medium text-slate-700">
+                      Follow-up Prompt Template (<code class="font-mono">/fix</code>, <code class="font-mono">/ask</code>)
+                    </label>
+                    <button
+                      type="button"
+                      aria-label="Reset follow-up prompt template"
+                      [disabled]="!projectService.isAdmin()"
+                      (click)="resetPromptTemplate('followupPromptTemplate')"
+                      class="text-[11px] text-sky-700 hover:text-sky-800 hover:underline disabled:opacity-50"
+                    >
+                      Reset to default
+                    </button>
+                  </div>
+                  <textarea
+                    id="scion-followup-prompt"
+                    name="followupPromptTemplate"
+                    rows="4"
+                    aria-label="Follow-up prompt template"
+                    [ngModel]="effectivePrompt(pset.followupPromptTemplate, 'followup')"
+                    [disabled]="!projectService.isAdmin()"
+                    (focus)="activePromptField = 'followupPromptTemplate'"
+                    (blur)="settingsService.updateActiveProjectSetting('followupPromptTemplate', $any($event.target).value)"
+                    class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300 disabled:bg-slate-50 disabled:text-slate-500"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
             <!-- Card 4: Per-Project RBAC Members & Roles -->
             <div class="bg-white border border-slate-200 rounded-lg shadow-card overflow-hidden">
               <div class="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -876,6 +1144,70 @@ export class SettingsComponent {
   newMemberEmail = '';
   newMemberName = '';
   newMemberRole: ProjectRole = 'MEMBER';
+
+  readonly scionDefaults = signal<ScionDefaults | null>(null);
+  activePromptField: 'implementPromptTemplate' | 'reviewPromptTemplate' | 'followupPromptTemplate' =
+    'implementPromptTemplate';
+
+  readonly harnessOptions: DropdownOption[] = [
+    { value: 'claude', label: 'claude' },
+    { value: 'antigravity', label: 'antigravity' },
+  ];
+
+  constructor() {
+    effect(() => {
+      const pid = this.projectService.activeProjectId();
+      if (!pid) return;
+      this.projectService.getScionDefaults(pid).subscribe({
+        next: (d) => this.scionDefaults.set(d),
+        error: () => {},
+      });
+    });
+  }
+
+  effectivePrompt(
+    customValue: string,
+    kind: 'implement' | 'review' | 'followup'
+  ): string {
+    if (customValue && customValue.trim().length > 0) {
+      return customValue;
+    }
+    const d = this.scionDefaults();
+    if (!d) return '';
+    if (kind === 'implement') return d.implement_prompt_template;
+    if (kind === 'review') return d.review_prompt_template;
+    return d.followup_prompt_template;
+  }
+
+  resetPromptTemplate(
+    field: 'implementPromptTemplate' | 'reviewPromptTemplate' | 'followupPromptTemplate'
+  ): void {
+    const d = this.scionDefaults();
+    const defVal =
+      field === 'implementPromptTemplate'
+        ? d?.implement_prompt_template ?? ''
+        : field === 'reviewPromptTemplate'
+          ? d?.review_prompt_template ?? ''
+          : d?.followup_prompt_template ?? '';
+    this.settingsService.updateActiveProjectSetting(field, defVal);
+  }
+
+  insertPlaceholder(token: string, pset: {
+    implementPromptTemplate: string;
+    reviewPromptTemplate: string;
+    followupPromptTemplate: string;
+  }): void {
+    const field = this.activePromptField;
+    const kind =
+      field === 'implementPromptTemplate'
+        ? 'implement'
+        : field === 'reviewPromptTemplate'
+          ? 'review'
+          : 'followup';
+    const current = this.effectivePrompt(pset[field], kind);
+    const next = current ? `${current} ${token}` : token;
+    this.settingsService.updateActiveProjectSetting(field, next);
+  }
 
   readonly landingRouteOptions: DropdownOption[] = [
     { value: '/home', label: 'Home — All Projects Overview' },

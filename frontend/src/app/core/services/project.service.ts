@@ -10,6 +10,8 @@ import {
   ProjectMember,
   ProjectRole,
   ProjectSettingsModel,
+  ScionAgent,
+  ScionDefaults,
 } from '../models/project.model';
 
 @Injectable({
@@ -307,7 +309,13 @@ export class ProjectService {
       });
   }
 
-  createModule(name: string, description: string, leadUserId: string): void {
+  createModule(
+    name: string,
+    description: string,
+    leadUserId: string,
+    gitRepoUrl?: string,
+    baseBranch?: string
+  ): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
     this.api
@@ -315,6 +323,8 @@ export class ProjectService {
         name,
         description,
         lead_user_id: leadUserId,
+        ...(gitRepoUrl?.trim() ? { git_repo_url: gitRepoUrl.trim() } : {}),
+        ...(baseBranch?.trim() ? { base_branch: baseBranch.trim() } : {}),
       })
       .subscribe({
         next: (mod) => this.modules.update((prev) => [...prev, mod]),
@@ -323,7 +333,13 @@ export class ProjectService {
 
   updateModule(
     moduleId: string,
-    patch: { name?: string; description?: string; lead_user_id?: string }
+    patch: {
+      name?: string;
+      description?: string;
+      lead_user_id?: string;
+      git_repo_url?: string;
+      base_branch?: string;
+    }
   ): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;
@@ -349,6 +365,16 @@ export class ProjectService {
       payload['lead_user_id'] = trimmed;
       optimistic.lead_user_id = trimmed;
     }
+    if (patch.git_repo_url !== undefined) {
+      const trimmed = patch.git_repo_url.trim();
+      payload['git_repo_url'] = trimmed;
+      optimistic.git_repo_url = trimmed;
+    }
+    if (patch.base_branch !== undefined) {
+      const trimmed = patch.base_branch.trim();
+      payload['base_branch'] = trimmed;
+      optimistic.base_branch = trimmed;
+    }
 
     this.modules.update((prev) =>
       prev.map((m) => (m.id === moduleId ? { ...m, ...optimistic } : m))
@@ -372,6 +398,16 @@ export class ProjectService {
     this.api.delete(`/projects/${projectId}/modules/${moduleId}`).subscribe({
       error: () => this.modules.set(snapshot),
     });
+  }
+
+  getScionDefaults(projectId: string) {
+    return this.api.get<ScionDefaults>(`/projects/${projectId}/scion/defaults`);
+  }
+
+  listScionAgents(projectId: string) {
+    return this.api.get<{ configured: boolean; hub_url: string; agents: ScionAgent[]; error?: string }>(
+      `/projects/${projectId}/scion/agents`
+    );
   }
 
   createEpic(

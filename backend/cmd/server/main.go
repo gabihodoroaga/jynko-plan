@@ -20,6 +20,7 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/middleware"
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
+	"github.com/gabihodoroaga/jynko-plan/internal/scion"
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
 	"github.com/gabihodoroaga/jynko-plan/internal/storage"
 	"github.com/gabihodoroaga/jynko-plan/internal/telemetry"
@@ -111,6 +112,16 @@ func main() {
 	stickySvc := service.NewStickyService(stickyRepo)
 	attachmentSvc := service.NewAttachmentService(attachmentRepo, storageProvider)
 
+	var scionClient scion.HubClient
+	if cfg.IsScionConfigured() {
+		scionClient = scion.NewClient(scion.ClientConfig{
+			BaseURL:     cfg.ScionHubURL,
+			Token:       cfg.ScionHubToken,
+			IapAudience: cfg.ScionIapAudience,
+		})
+	}
+	scionOrchestrator := service.NewScionOrchestrator(cfg, scionClient, projectSvc, moduleSvc, itemSvc)
+
 	// Handlers
 	authHandler := handler.NewAuthHandlerWithRepo(profileRepo)
 	projectHandler := handler.NewProjectHandler(projectSvc)
@@ -119,10 +130,11 @@ func main() {
 	cycleHandler := handler.NewCycleHandler(cycleSvc)
 	labelHandler := handler.NewLabelHandler(labelSvc)
 	itemHandler := handler.NewItemHandler(itemSvc)
-	commentHandler := handler.NewCommentHandler(itemSvc)
+	commentHandler := handler.NewCommentHandlerWithScion(itemSvc, scionOrchestrator)
 	pageHandler := handler.NewPageHandler(pageSvc)
 	stickyHandler := handler.NewStickyHandler(stickySvc)
 	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc)
+	scionHandler := handler.NewScionHandler(cfg, scionClient, projectSvc, itemSvc)
 
 	mcpCfg := mcp.Config{
 		DefaultProjectID: strings.TrimSpace(os.Getenv("DEFAULT_PROJECT_ID")),
@@ -148,7 +160,7 @@ func main() {
 		AttachmentSvc: attachmentSvc,
 	})
 
-	router := SetupRouterWithMCP(
+	router := SetupRouterWithOptions(
 		cfg,
 		projectRepo,
 		authHandler,
@@ -163,6 +175,7 @@ func main() {
 		stickyHandler,
 		attachmentHandler,
 		mcpSrv.HTTPHandler(),
+		scionHandler,
 	)
 
 	srv := &http.Server{
@@ -246,6 +259,43 @@ func SetupRouterWithMCP(
 	stickyHandler *handler.StickyHandler,
 	attachmentHandler *handler.AttachmentHandler,
 	mcpHandler http.Handler,
+) *gin.Engine {
+	return SetupRouterWithOptions(
+		cfg,
+		projectRepo,
+		authHandler,
+		projectHandler,
+		moduleHandler,
+		epicHandler,
+		cycleHandler,
+		labelHandler,
+		itemHandler,
+		commentHandler,
+		pageHandler,
+		stickyHandler,
+		attachmentHandler,
+		mcpHandler,
+		nil,
+	)
+}
+
+// SetupRouterWithOptions configures all Gin routes, /api/v1 middleware, optional /mcp handler, and optional Scion handler.
+func SetupRouterWithOptions(
+	cfg *config.Config,
+	projectRepo repository.ProjectRepository,
+	authHandler *handler.AuthHandler,
+	projectHandler *handler.ProjectHandler,
+	moduleHandler *handler.ModuleHandler,
+	epicHandler *handler.EpicHandler,
+	cycleHandler *handler.CycleHandler,
+	labelHandler *handler.LabelHandler,
+	itemHandler *handler.ItemHandler,
+	commentHandler *handler.CommentHandler,
+	pageHandler *handler.PageHandler,
+	stickyHandler *handler.StickyHandler,
+	attachmentHandler *handler.AttachmentHandler,
+	mcpHandler http.Handler,
+	scionHandler *handler.ScionHandler,
 ) *gin.Engine {
 	if !cfg.AllowDevAuth() {
 		gin.SetMode(gin.ReleaseMode)
@@ -386,6 +436,13 @@ func SetupRouterWithMCP(
 		projGroup.POST("/attachments", member, attachmentHandler.UploadAttachment)
 		projGroup.GET("/attachments/:attachmentId/content", viewer, attachmentHandler.GetAttachmentContent)
 		projGroup.DELETE("/attachments/:attachmentId", member, attachmentHandler.DeleteAttachment)
+
+		// Scion AI Agent Orchestration
+		if scionHandler != nil {
+			projGroup.GET("/scion/defaults", viewer, scionHandler.GetDefaults)
+			projGroup.GET("/scion/agents", viewer, scionHandler.ListAgents)
+			projGroup.GET("/items/:itemId/agents", viewer, scionHandler.GetItemAgents)
+		}
 	}
 
 	if mcpHandler != nil {

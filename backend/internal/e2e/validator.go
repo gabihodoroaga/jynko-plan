@@ -1463,22 +1463,26 @@ func CheckModulesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCh
 	hasDeleteModuleBtn, _, _ := page.Has(`button[aria-label^="Delete module "]`)
 	hasModuleLeadDrop, _, _ := page.Has(`button[aria-label^="Module lead for "]`)
 	hasEditModuleModal := false
+	hasModuleRepoInput := false
+	hasModuleBranchInput := false
 
 	if hasEditModuleBtn && editModuleBtn != nil {
 		editModuleBtn.MustClick()
 		time.Sleep(200 * time.Millisecond)
 		hasEditModuleModal, _, _ = page.Has(`input[aria-label="Edit module name"]`)
+		hasModuleRepoInput, _, _ = page.Has(`input[aria-label="Edit module git repo URL"]`)
+		hasModuleBranchInput, _, _ = page.Has(`input[aria-label="Edit module base branch"]`)
 		if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
 			closeBtn.MustClick()
 			time.Sleep(150 * time.Millisecond)
 		}
 	}
 
-	if hasCreateModuleBtn && hasEditModuleBtn && hasDeleteModuleBtn && hasModuleLeadDrop && hasEditModuleModal {
-		res.Assertions = append(res.Assertions, "Modules page renders '+ New Module', inline lead dropdown, 'Delete' confirmation, and 'Edit Feature Module' modal")
+	if hasCreateModuleBtn && hasEditModuleBtn && hasDeleteModuleBtn && hasModuleLeadDrop && hasEditModuleModal && hasModuleRepoInput && hasModuleBranchInput {
+		res.Assertions = append(res.Assertions, "Modules page renders '+ New Module', inline lead dropdown, 'Delete' confirmation, and 'Edit Feature Module' modal with Git Repo URL & Base Branch inputs")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Modules page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasLeadDrop=%v, hasEditModal=%v", hasCreateModuleBtn, hasEditModuleBtn, hasDeleteModuleBtn, hasModuleLeadDrop, hasEditModuleModal))
+		res.Errors = append(res.Errors, fmt.Sprintf("Modules page failed assertions: hasCreate=%v, hasEdit=%v, hasDelete=%v, hasLeadDrop=%v, hasEditModal=%v, hasRepo=%v, hasBranch=%v", hasCreateModuleBtn, hasEditModuleBtn, hasDeleteModuleBtn, hasModuleLeadDrop, hasEditModuleModal, hasModuleRepoInput, hasModuleBranchInput))
 	}
 
 	assertFullWidthPageContainer(page, &res, "Modules")
@@ -1758,6 +1762,7 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 			}
 
 			assertProjectBackgroundColorPicker(page, &res, baseURL)
+			assertScionProjectSettingsCard(page, &res)
 		} else {
 			res.Passed = false
 			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")
@@ -1835,6 +1840,24 @@ func assertProjectBackgroundColorPicker(page *rod.Page, res *ValidationCheckResu
 			defBtn.MustClick()
 			time.Sleep(500 * time.Millisecond)
 		}
+	}
+}
+
+func assertScionProjectSettingsCard(page *rod.Page, res *ValidationCheckResult) {
+	hasCard, _, _ := page.Has(`[data-testid="scion-settings-card"]`)
+	hasToggle, _, _ := page.Has(`input[aria-label="Toggle Scion AI Agents"]`)
+	hasRepo, _, _ := page.Has(`input[aria-label="Default Git Repo URL"]`)
+	hasBranch, _, _ := page.Has(`input[aria-label="Default Base Branch"]`)
+	hasImplPrompt, _, _ := page.Has(`textarea[aria-label="Implement prompt template"]`)
+	hasResetImpl, _, _ := page.Has(`button[aria-label="Reset implement prompt template"]`)
+	hasResetReview, _, _ := page.Has(`button[aria-label="Reset review prompt template"]`)
+	hasResetFollowup, _, _ := page.Has(`button[aria-label="Reset follow-up prompt template"]`)
+
+	if hasCard && hasToggle && hasRepo && hasBranch && hasImplPrompt && hasResetImpl && hasResetReview && hasResetFollowup {
+		res.Assertions = append(res.Assertions, "Per-Project Settings renders Scion AI Agents & Slash Commands card with repo/branch/template inputs and prompt reset buttons")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Per-Project Settings missing Scion card controls: card=%v toggle=%v repo=%v branch=%v implPrompt=%v resets=(%v,%v,%v)", hasCard, hasToggle, hasRepo, hasBranch, hasImplPrompt, hasResetImpl, hasResetReview, hasResetFollowup))
 	}
 }
 

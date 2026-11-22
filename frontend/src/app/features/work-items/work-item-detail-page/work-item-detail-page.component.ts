@@ -21,6 +21,8 @@ import {
 import { DropdownComponent, DropdownOption } from '../../../shared/components/dropdown.component';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { WorkItemAttachmentsComponent } from '../work-item-attachments/work-item-attachments.component';
+import { WorkItemScionBarComponent } from '../work-item-scion/work-item-scion-bar.component';
+import { ScionSlashMenuComponent } from '../work-item-scion/scion-slash-menu.component';
 
 const STATUS_DOT_COLORS: Record<WorkItemStatus, string> = {
   BACKLOG: '#94a3b8',
@@ -49,6 +51,8 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
     DropdownComponent,
     MarkdownPipe,
     WorkItemAttachmentsComponent,
+    WorkItemScionBarComponent,
+    ScionSlashMenuComponent,
   ],
   template: `
     <div class="flex flex-col h-full bg-white" (click)="openPopover.set(null)">
@@ -548,7 +552,14 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
             }
           </div>
 
-          <!-- 5. Threaded Discussion Comments -->
+          <!-- 5. Scion AI Agents & Threaded Discussion Comments -->
+          <app-work-item-scion-bar
+            [item]="item"
+            [canEdit]="projectService.canEdit()"
+            [scionEnabled]="isScionEnabled()"
+            (commandPrefill)="prefillSlashCommand($event)"
+          ></app-work-item-scion-bar>
+
           <div class="space-y-3">
             <h4 class="text-xs font-semibold text-slate-900">
               Discussion Comments ({{ currentComments().length }})
@@ -556,9 +567,34 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
 
             <div class="space-y-2.5">
               @for (cmt of currentComments(); track cmt.id) {
-                <div class="p-3 rounded-md bg-slate-50 border border-slate-200 space-y-2">
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs font-semibold text-slate-800">{{ cmt.author_name }}</span>
+                <div
+                  class="p-3 rounded-md border space-y-2"
+                  [ngClass]="cmt.is_system ? 'bg-sky-50/70 border-sky-200' : 'bg-slate-50 border-slate-200'"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-xs font-semibold text-slate-800">{{ cmt.author_name }}</span>
+                      @if (cmt.is_system) {
+                        <span class="px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200 text-[10px] font-medium">
+                          Scion Dispatch
+                        </span>
+                      }
+                      @if (cmt.slash_command) {
+                        <span class="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-mono">
+                          /{{ cmt.slash_command }}
+                        </span>
+                      }
+                      @if (cmt.agent_url) {
+                        <a
+                          [href]="cmt.agent_url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-[11px] text-sky-600 hover:underline font-medium"
+                        >
+                          Open Agent →
+                        </a>
+                      }
+                    </div>
                     <div class="flex items-center gap-2">
                       <span class="text-[10px] font-mono text-slate-400">
                         {{ cmt.created_at | date: 'MMM d, HH:mm' }}
@@ -694,6 +730,15 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                   </div>
                 </div>
 
+                <app-scion-slash-menu
+                  #slashMenu
+                  [enabled]="isScionEnabled()"
+                  [queryText]="newCommentBody"
+                  [dismissed]="slashMenuDismissed()"
+                  (select)="onSelectSlashCommand($event)"
+                  (dismiss)="slashMenuDismissed.set(true)"
+                ></app-scion-slash-menu>
+
                 @if (previewNewComment()) {
                   <div
                     class="p-3 rounded-md bg-slate-50 border border-slate-200 min-h-[90px] max-h-[30vh] overflow-y-auto text-xs text-slate-800"
@@ -707,15 +752,38 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                     <textarea
                       rows="3"
                       [(ngModel)]="newCommentBody"
-                      (input)="syncGrowableTextarea($event)"
+                      (input)="onCommentInput($event)"
                       (keydown)="handleCommentKeydown($event, item.id)"
                       (paste)="onPasteUpload($event, item.id, 'comment')"
                       (drop)="onDropUpload($event, item.id, 'comment')"
                       (dragover)="$event.preventDefault()"
                       aria-label="Work item comment"
-                      placeholder="Add a detailed Markdown comment... (⌘+Enter to submit, drop or paste files)"
+                      placeholder="Add a detailed Markdown comment or /implement, /review... (⌘+Enter to submit)"
                       class="auto-grow-comment w-full min-h-[90px] max-h-[30vh] p-2.5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
                     ></textarea>
+                  </div>
+                }
+
+                @if (isScionEnabled() && newCommentBody.trimStart().startsWith('/')) {
+                  <div class="flex flex-wrap items-center gap-2 pt-1">
+                    <span class="text-[11px] font-medium text-slate-600">
+                      Target Agent (optional):
+                    </span>
+                    <app-dropdown
+                      [options]="targetAgentOptions(item)"
+                      [value]="targetAgentId"
+                      (valueChange)="targetAgentId = $event"
+                      ariaLabel="Target Scion agent"
+                    ></app-dropdown>
+                  </div>
+                }
+
+                @if (commentError()) {
+                  <div
+                    role="alert"
+                    class="px-2.5 py-1.5 rounded-md bg-rose-50 border border-rose-200 text-xs text-rose-700"
+                  >
+                    {{ commentError() }}
                   </div>
                 }
 
@@ -791,10 +859,18 @@ export class WorkItemDetailPageComponent implements OnInit {
 
   newSubTitle = '';
   newCommentBody = '';
+  targetAgentId = '';
+  readonly slashMenuRef = viewChild<ScionSlashMenuComponent>('slashMenu');
+  readonly slashMenuDismissed = signal<boolean>(false);
+  readonly commentError = signal<string | null>(null);
   readonly previewNewComment = signal<boolean>(false);
   readonly editingCommentId = signal<string | null>(null);
   editingCommentBody = '';
   readonly previewEditingComment = signal<boolean>(false);
+
+  readonly isScionEnabled = computed<boolean>(() => {
+    return !!this.projectService.activeProject()?.settings?.scion_enabled;
+  });
 
   readonly currentItem = computed<WorkItem | null>(() => {
     const id = this.routeItemId();
@@ -958,15 +1034,56 @@ export class WorkItemDetailPageComponent implements OnInit {
     this.workItemService.toggleSubItem(itemId, sub);
   }
 
+  targetAgentOptions(item: WorkItem): DropdownOption[] {
+    const opts: DropdownOption[] = [{ value: '', label: 'Auto (bound impl / review)' }];
+    if (item.impl_agent_id) {
+      opts.push({ value: item.impl_agent_id, label: `Impl: ${item.impl_agent_name || item.impl_agent_id}` });
+    }
+    if (item.review_agent_id) {
+      opts.push({ value: item.review_agent_id, label: `Review: ${item.review_agent_name || item.review_agent_id}` });
+    }
+    return opts;
+  }
+
+  prefillSlashCommand(prefix: string): void {
+    this.newCommentBody = prefix;
+    this.slashMenuDismissed.set(true);
+    this.commentError.set(null);
+  }
+
+  onSelectSlashCommand(prefix: string): void {
+    this.newCommentBody = prefix;
+    this.slashMenuDismissed.set(false);
+    this.commentError.set(null);
+  }
+
+  onCommentInput(event: Event): void {
+    this.slashMenuDismissed.set(false);
+    this.commentError.set(null);
+    this.syncGrowableTextarea(event);
+  }
+
   postComment(itemId: string): void {
     const b = this.newCommentBody.trim();
     if (!b) return;
-    this.workItemService.addComment(itemId, b);
-    this.newCommentBody = '';
-    this.previewNewComment.set(false);
+    this.commentError.set(null);
+    this.workItemService.addComment(itemId, b, {
+      targetAgentId: this.targetAgentId,
+      onSuccess: () => {
+        this.newCommentBody = '';
+        this.targetAgentId = '';
+        this.previewNewComment.set(false);
+      },
+      onError: (msg) => {
+        this.commentError.set(msg);
+      },
+    });
   }
 
   handleCommentKeydown(event: KeyboardEvent, itemId: string): void {
+    if (this.slashMenuRef()?.handleKey(event)) {
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
       event.preventDefault();
       if (event.isComposing || event.keyCode === 229) {

@@ -37,6 +37,11 @@ type Config struct {
 	EnableCloudMetrics      bool
 	EnablePrometheusMetrics bool
 	OTelSampleRatio         float64
+	ScionHubURL             string
+	ScionHubToken           string
+	ScionIapAudience        string
+	ScionDefaultProjectSlug string
+	ScionDefaultTemplate    string
 }
 
 // Valid aligned environment values: strictly prd, stg, dev.
@@ -154,7 +159,17 @@ func Load() *Config {
 		EnableCloudMetrics:      getEnvBool("ENABLE_CLOUD_METRICS", isPrd),
 		EnablePrometheusMetrics: getEnvBool("ENABLE_PROMETHEUS_METRICS", true),
 		OTelSampleRatio:         getEnvFloat("OTEL_SAMPLE_RATIO", 1.0),
+		ScionHubURL:             strings.TrimRight(getEnv("SCION_HUB_URL", ""), "/"),
+		ScionHubToken:           getEnv("SCION_HUB_TOKEN", ""),
+		ScionIapAudience:        getEnv("SCION_IAP_AUDIENCE", ""),
+		ScionDefaultProjectSlug: getEnv("SCION_DEFAULT_PROJECT_SLUG", "global"),
+		ScionDefaultTemplate:    getEnv("SCION_DEFAULT_TEMPLATE", "jynko-dev"),
 	}
+}
+
+// IsScionConfigured reports whether Scion Hub URL and token are both configured.
+func (c *Config) IsScionConfigured() bool {
+	return c != nil && strings.TrimSpace(c.ScionHubURL) != "" && strings.TrimSpace(c.ScionHubToken) != ""
 }
 
 // Validate checks startup invariants and fails closed on misconfiguration.
