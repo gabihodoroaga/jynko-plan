@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -14,15 +15,22 @@ import (
 )
 
 type mcpUserCtxKey struct{}
+type mcpBaseURLCtxKey struct{}
 
 // WithUserContext attaches a per-request authenticated UserContext to ctx (used in HTTP/SSE mode).
 func WithUserContext(ctx context.Context, user model.UserContext) context.Context {
 	return context.WithValue(ctx, mcpUserCtxKey{}, user)
 }
 
+// WithBaseURL attaches the request's public base URL (scheme://host) to ctx.
+func WithBaseURL(ctx context.Context, baseURL string) context.Context {
+	return context.WithValue(ctx, mcpBaseURLCtxKey{}, strings.TrimRight(strings.TrimSpace(baseURL), "/"))
+}
+
 // Config holds runtime configuration and fallback user identity (for STDIO mode) for the MCP server.
 type Config struct {
 	DefaultProjectID string
+	BaseURL          string
 	User             model.UserContext
 }
 
@@ -48,6 +56,16 @@ func (r *Resolver) UserFromContext(ctx context.Context) model.UserContext {
 		}
 	}
 	return r.cfg.User
+}
+
+// BaseURLFromContext returns the request's base URL from ctx if present, falling back to Config.BaseURL.
+func (r *Resolver) BaseURLFromContext(ctx context.Context) string {
+	if ctx != nil {
+		if baseURL, ok := ctx.Value(mcpBaseURLCtxKey{}).(string); ok && baseURL != "" {
+			return baseURL
+		}
+	}
+	return strings.TrimRight(strings.TrimSpace(r.cfg.BaseURL), "/")
 }
 
 // ResolveProjectID extracts the project_id argument or falls back to Config.DefaultProjectID.

@@ -221,13 +221,22 @@ func (s *AttachmentService) UploadAttachment(
 	return att, nil
 }
 
+// GetAttachmentMetadata returns the attachment metadata without opening the stored blob.
+func (s *AttachmentService) GetAttachmentMetadata(ctx context.Context, projectID, attachmentID string) (*model.Attachment, error) {
+	att, err := s.repo.GetByID(ctx, projectID, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	s.PopulateURLAndMarkdown(att)
+	return att, nil
+}
+
 // GetAttachment returns the attachment metadata and a stream to its content.
 func (s *AttachmentService) GetAttachment(ctx context.Context, projectID, attachmentID string) (*model.Attachment, io.ReadCloser, error) {
-	att, err := s.repo.GetByID(ctx, projectID, attachmentID)
+	att, err := s.GetAttachmentMetadata(ctx, projectID, attachmentID)
 	if err != nil {
 		return nil, nil, err
 	}
-	s.PopulateURLAndMarkdown(att)
 
 	rc, err := s.storage.Open(ctx, att.StoragePath)
 	if err != nil {

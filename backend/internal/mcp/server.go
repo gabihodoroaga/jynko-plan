@@ -114,8 +114,39 @@ func (s *Server) HTTPHandler() http.Handler {
 		}
 
 		ctx := WithUserContext(r.Context(), userCtx)
+		if baseURL := requestBaseURL(r); baseURL != "" {
+			ctx = WithBaseURL(ctx, baseURL)
+		}
 		streamable.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func requestBaseURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if idx := strings.Index(host, ","); idx != -1 {
+		host = strings.TrimSpace(host[:idx])
+	}
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" {
+		return ""
+	}
+	scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if idx := strings.Index(scheme, ","); idx != -1 {
+		scheme = strings.TrimSpace(scheme[:idx])
+	}
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
 // ServeSSE starts the MCP server over streamable HTTP / SSE with authentication and safe timeouts.

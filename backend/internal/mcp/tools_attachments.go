@@ -18,10 +18,13 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
 )
 
-// AttachmentDownloadResult contains metadata and data for a downloaded attachment.
+// AttachmentDownloadResult contains metadata and either a direct download URL (mode="url")
+// or base64/text content (mode="data") for an attachment.
 type AttachmentDownloadResult struct {
 	Attachment  *model.Attachment `json:"attachment"`
-	Data        string            `json:"data"`
+	Mode        string            `json:"mode"`
+	DownloadURL string            `json:"download_url"`
+	Data        string            `json:"data,omitempty"`
 	Text        string            `json:"text,omitempty"`
 	FileName    string            `json:"file_name"`
 	ContentType string            `json:"content_type"`
@@ -140,6 +143,44 @@ func registerAttachmentTools(
 			return mcp.NewToolResultError("attachment_id is required"), nil
 		}
 
+		mode := strings.ToLower(strings.TrimSpace(req.GetString("mode", "url")))
+		if mode == "" {
+			mode = "url"
+		}
+		if mode != "url" && mode != "data" {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid mode %q: expected 'url' or 'data'", mode)), nil
+		}
+
+		buildDownloadURL := func(att *model.Attachment) string {
+			if att == nil {
+				return ""
+			}
+			if baseURL := r.BaseURLFromContext(ctx); baseURL != "" && strings.HasPrefix(att.URL, "/") {
+				return baseURL + att.URL
+			}
+			return att.URL
+		}
+
+		if mode == "url" {
+			att, err := attSvc.GetAttachmentMetadata(ctx, projID, attID)
+			if err != nil {
+				if errors.Is(err, repository.ErrNotFound) {
+					return mcp.NewToolResultError(fmt.Sprintf("attachment %q not found in project %q", attID, projID)), nil
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("failed to get attachment: %v", err)), nil
+			}
+
+			resView := AttachmentDownloadResult{
+				Attachment:  att,
+				Mode:        "url",
+				DownloadURL: buildDownloadURL(att),
+				FileName:    att.FileName,
+				ContentType: att.ContentType,
+				SizeBytes:   att.SizeBytes,
+			}
+			return jsonResult(resView)
+		}
+
 		att, rc, err := attSvc.GetAttachment(ctx, projID, attID)
 		if err != nil {
 			if errors.Is(err, repository.ErrNotFound) {
@@ -157,6 +198,8 @@ func registerAttachmentTools(
 		base64Data := base64.StdEncoding.EncodeToString(data)
 		resView := AttachmentDownloadResult{
 			Attachment:  att,
+			Mode:        "data",
+			DownloadURL: buildDownloadURL(att),
 			Data:        base64Data,
 			FileName:    att.FileName,
 			ContentType: att.ContentType,
@@ -195,8 +238,9 @@ func registerAttachmentTools(
 	// 2. get_attachment
 	s.AddTool(
 		mcp.NewTool("get_attachment",
-			mcp.WithDescription("Get an attachment's metadata and content/data by ID."),
+			mcp.WithDescription("Get an attachment's metadata and direct download URL (mode='url', default) or inline base64/text content (mode='data')."),
 			mcp.WithString("attachment_id", mcp.Required(), mcp.Description("ID of the attachment to retrieve")),
+			mcp.WithString("mode", mcp.Description("Response mode: 'url' (default) returns metadata and download_url; 'data' returns base64 data (and text/image content when applicable)."), mcp.Enum("url", "data")),
 			mcp.WithString("project_id", mcp.Description("Target project ID. Uses DEFAULT_PROJECT_ID if omitted.")),
 			mcp.WithString("id", mcp.Description("Alias for attachment_id")),
 			mcp.WithString("item_id", mcp.Description("Optional work item ID or key fallback if only one attachment exists")),
@@ -207,8 +251,9 @@ func registerAttachmentTools(
 	// 3. download_attachment
 	s.AddTool(
 		mcp.NewTool("download_attachment",
-			mcp.WithDescription("Download an attachment's content (base64 data and text if applicable) and metadata by attachment ID."),
+			mcp.WithDescription("Download an attachment: returns a direct download URL by default (mode='url'), or inline base64/text content when mode='data'."),
 			mcp.WithString("attachment_id", mcp.Required(), mcp.Description("ID of the attachment to download")),
+			mcp.WithString("mode", mcp.Description("Response mode: 'url' (default) returns metadata and download_url; 'data' returns base64 data (and text/image content when applicable)."), mcp.Enum("url", "data")),
 			mcp.WithString("project_id", mcp.Description("Target project ID. Uses DEFAULT_PROJECT_ID if omitted.")),
 			mcp.WithString("id", mcp.Description("Alias for attachment_id")),
 			mcp.WithString("item_id", mcp.Description("Optional work item ID or key fallback if only one attachment exists")),

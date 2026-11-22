@@ -603,24 +603,47 @@ func TestAttachmentTools_ListAndDownload(t *testing.T) {
 		t.Fatalf("expected general.txt in list_attachments all, got: %s", wListAll.Body.String())
 	}
 
-	// 5. Test get_attachment for text file
-	wGetTxt := doMCP(fmt.Sprintf(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_attachment","arguments":{"attachment_id":%q}}}`, textAtt.ID))
+	// 5. Test get_attachment default mode (mode=url) returns download_url without inline data/text
+	wGetTxtURL := doMCP(fmt.Sprintf(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_attachment","arguments":{"attachment_id":%q}}}`, textAtt.ID))
+	if wGetTxtURL.Code != http.StatusOK {
+		t.Fatalf("get_attachment default url mode failed: %d: %s", wGetTxtURL.Code, wGetTxtURL.Body.String())
+	}
+	getTxtURLBody := wGetTxtURL.Body.String()
+	expectedTxtURL := fmt.Sprintf("http://example.com/api/v1/projects/proj-1/attachments/%s/content", textAtt.ID)
+	if !strings.Contains(getTxtURLBody, expectedTxtURL) {
+		t.Fatalf("expected download_url %q in get_attachment default mode, got: %s", expectedTxtURL, getTxtURLBody)
+	}
+	if strings.Contains(getTxtURLBody, "Hello, Jynko Plan MCP!") {
+		t.Fatalf("did not expect inline text content in default url mode, got: %s", getTxtURLBody)
+	}
+
+	// 5b. Test get_attachment with mode=data returns text and base64 data
+	wGetTxt := doMCP(fmt.Sprintf(`{"jsonrpc":"2.0","id":51,"method":"tools/call","params":{"name":"get_attachment","arguments":{"attachment_id":%q,"mode":"data"}}}`, textAtt.ID))
 	if wGetTxt.Code != http.StatusOK {
 		t.Fatalf("get_attachment text failed: %d: %s", wGetTxt.Code, wGetTxt.Body.String())
 	}
 	getTxtBody := wGetTxt.Body.String()
 	if !strings.Contains(getTxtBody, "Hello, Jynko Plan MCP!") {
-		t.Fatalf("expected text content in get_attachment, got: %s", getTxtBody)
+		t.Fatalf("expected text content in get_attachment mode=data, got: %s", getTxtBody)
 	}
 
-	// 6. Test download_attachment for image file (includes ImageContent and base64 data)
-	wDlImg := doMCP(fmt.Sprintf(`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"download_attachment","arguments":{"attachment_id":%q}}}`, imgAtt.ID))
+	// 6. Test download_attachment with mode=data for image file (includes ImageContent and base64 data)
+	wDlImg := doMCP(fmt.Sprintf(`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"download_attachment","arguments":{"attachment_id":%q,"mode":"data"}}}`, imgAtt.ID))
 	if wDlImg.Code != http.StatusOK {
 		t.Fatalf("download_attachment image failed: %d: %s", wDlImg.Code, wDlImg.Body.String())
 	}
 	expectedImgB64 := base64.StdEncoding.EncodeToString(imgContent)
 	if !strings.Contains(wDlImg.Body.String(), expectedImgB64) {
-		t.Fatalf("expected base64 image data in download_attachment, got: %s", wDlImg.Body.String())
+		t.Fatalf("expected base64 image data in download_attachment mode=data, got: %s", wDlImg.Body.String())
+	}
+
+	// 6b. Test invalid mode returns tool error
+	wInvalidMode := doMCP(fmt.Sprintf(`{"jsonrpc":"2.0","id":61,"method":"tools/call","params":{"name":"download_attachment","arguments":{"attachment_id":%q,"mode":"signed"}}}`, imgAtt.ID))
+	if wInvalidMode.Code != http.StatusOK {
+		t.Fatalf("expected JSON-RPC 200 for tool error, got: %d: %s", wInvalidMode.Code, wInvalidMode.Body.String())
+	}
+	if !strings.Contains(wInvalidMode.Body.String(), "invalid mode") {
+		t.Fatalf("expected invalid mode error, got: %s", wInvalidMode.Body.String())
 	}
 
 	// 7. Test get_work_item includes attachments array
