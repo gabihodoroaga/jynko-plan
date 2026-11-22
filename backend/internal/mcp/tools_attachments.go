@@ -238,9 +238,9 @@ func registerAttachmentTools(
 	// 2. get_attachment
 	s.AddTool(
 		mcp.NewTool("get_attachment",
-			mcp.WithDescription("Get an attachment's metadata and direct download URL (mode='url', default) or inline base64/text content (mode='data')."),
+			mcp.WithDescription("Get an attachment using either mode='url' (default, returns metadata and download_url) or mode='data' (returns inline base64/text/image content directly via MCP). Note: if using mode='url' from Bash, fetch download_url with header 'Authorization: Bearer $(jynko token)' (e.g. curl -fsSL -H \"Authorization: Bearer $(jynko token)\" \"<download_url>\")."),
 			mcp.WithString("attachment_id", mcp.Required(), mcp.Description("ID of the attachment to retrieve")),
-			mcp.WithString("mode", mcp.Description("Response mode: 'url' (default) returns metadata and download_url; 'data' returns base64 data (and text/image content when applicable)."), mcp.Enum("url", "data")),
+			mcp.WithString("mode", mcp.Description("Both 'url' and 'data' options are available: 'url' (default) returns metadata and download_url (fetch with 'Authorization: Bearer $(jynko token)'); 'data' returns inline base64 data (plus text/image content when applicable) directly in the MCP response."), mcp.Enum("url", "data")),
 			mcp.WithString("project_id", mcp.Description("Target project ID. Uses DEFAULT_PROJECT_ID if omitted.")),
 			mcp.WithString("id", mcp.Description("Alias for attachment_id")),
 			mcp.WithString("item_id", mcp.Description("Optional work item ID or key fallback if only one attachment exists")),
@@ -251,9 +251,9 @@ func registerAttachmentTools(
 	// 3. download_attachment
 	s.AddTool(
 		mcp.NewTool("download_attachment",
-			mcp.WithDescription("Download an attachment: returns a direct download URL by default (mode='url'), or inline base64/text content when mode='data'."),
+			mcp.WithDescription("Download an attachment using either mode='url' (default, returns metadata and download_url) or mode='data' (returns inline base64/text/image content directly via MCP). Note: if using mode='url' from Bash, fetch download_url with header 'Authorization: Bearer $(jynko token)' (e.g. curl -fsSL -H \"Authorization: Bearer $(jynko token)\" \"<download_url>\")."),
 			mcp.WithString("attachment_id", mcp.Required(), mcp.Description("ID of the attachment to download")),
-			mcp.WithString("mode", mcp.Description("Response mode: 'url' (default) returns metadata and download_url; 'data' returns base64 data (and text/image content when applicable)."), mcp.Enum("url", "data")),
+			mcp.WithString("mode", mcp.Description("Both 'url' and 'data' options are available: 'url' (default) returns metadata and download_url (fetch with 'Authorization: Bearer $(jynko token)'); 'data' returns inline base64 data (plus text/image content when applicable) directly in the MCP response."), mcp.Enum("url", "data")),
 			mcp.WithString("project_id", mcp.Description("Target project ID. Uses DEFAULT_PROJECT_ID if omitted.")),
 			mcp.WithString("id", mcp.Description("Alias for attachment_id")),
 			mcp.WithString("item_id", mcp.Description("Optional work item ID or key fallback if only one attachment exists")),
