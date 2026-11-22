@@ -514,9 +514,120 @@ func CheckAppShell(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 		res.Errors = append(res.Errors, "Missing button[aria-label='Collapse secondary panel']")
 	}
 
+	assertHeaderAndDragRefresh(page, &res)
+
 	page.MustScreenshot(res.Screenshot)
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res
+}
+
+func waitForPageRefreshAndReady(page *rod.Page, markerExpr string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	reloaded := false
+	for time.Now().Before(deadline) {
+		evalRes, err := page.Eval(markerExpr)
+		if err == nil && evalRes.Value.Bool() {
+			reloaded = true
+			if bodyEl, err := page.Element("body"); err == nil && bodyEl != nil {
+				if bodyText, err := bodyEl.Text(); err == nil && strings.Contains(bodyText, "hodo") {
+					time.Sleep(300 * time.Millisecond)
+					return true
+				}
+			}
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return reloaded
+}
+
+func assertHeaderAndDragRefresh(page *rod.Page, res *ValidationCheckResult) {
+	hasRefreshBtn := page.MustEval(`() => {
+		const el = document.querySelector('header button[data-testid="app-refresh-btn"][aria-label="Refresh page"]');
+		if (!el) return false;
+		const r = el.getBoundingClientRect();
+		return r.width > 0 && r.height > 0;
+	}`).Bool()
+	if !hasRefreshBtn {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing visible top-bar refresh button header button[data-testid='app-refresh-btn'][aria-label='Refresh page']")
+		return
+	}
+
+	// 1. Verify clicking the top-bar refresh button reloads the page cleanly
+	page.MustEval(`() => { window.__e2eBeforeTopRefresh = true; }`)
+	page.MustElement(`header button[data-testid="app-refresh-btn"]`).MustClick()
+	if waitForPageRefreshAndReady(page, `() => typeof window.__e2eBeforeTopRefresh === 'undefined'`, 8*time.Second) {
+		res.Assertions = append(res.Assertions, "Clicking top-bar refresh button reloads the application and restores live workspace data")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Clicking top-bar refresh button did not reload the page within 8s")
+	}
+
+	// 2. Verify click-and-drag-down gesture shows pull-to-refresh indicator and reloads on release
+	page.MustEval(`() => { window.__e2eBeforeDragRefresh = true; }`)
+	coords := page.MustEval(`() => {
+		const main = document.querySelector('main');
+		if (!main) return { ok: false, x: 0, y: 0 };
+		const r = main.getBoundingClientRect();
+		return { ok: true, x: r.left + 48, y: r.top + 12 };
+	}`)
+	if !coords.Get("ok").Bool() {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing <main> container for click-and-drag refresh check")
+		return
+	}
+	startX := coords.Get("x").Num()
+	startY := coords.Get("y").Num()
+	leftButtons := 1
+
+	_ = proto.InputDispatchMouseEvent{
+		Type:       proto.InputDispatchMouseEventTypeMousePressed,
+		X:          startX,
+		Y:          startY,
+		Button:     proto.InputMouseButtonLeft,
+		Buttons:    &leftButtons,
+		ClickCount: 1,
+	}.Call(page)
+	time.Sleep(50 * time.Millisecond)
+
+	_ = proto.InputDispatchMouseEvent{
+		Type:    proto.InputDispatchMouseEventTypeMouseMoved,
+		X:       startX,
+		Y:       startY + 30,
+		Button:  proto.InputMouseButtonLeft,
+		Buttons: &leftButtons,
+	}.Call(page)
+	time.Sleep(50 * time.Millisecond)
+
+	_ = proto.InputDispatchMouseEvent{
+		Type:    proto.InputDispatchMouseEventTypeMouseMoved,
+		X:       startX,
+		Y:       startY + 140,
+		Button:  proto.InputMouseButtonLeft,
+		Buttons: &leftButtons,
+	}.Call(page)
+	time.Sleep(100 * time.Millisecond)
+
+	hasReadyIndicator, _, _ := page.Has(`[data-testid="pull-to-refresh-indicator"][data-pull-ready="true"]`)
+	if !hasReadyIndicator {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Click-and-drag down did not render [data-testid='pull-to-refresh-indicator'][data-pull-ready='true']")
+	}
+
+	_ = proto.InputDispatchMouseEvent{
+		Type:       proto.InputDispatchMouseEventTypeMouseReleased,
+		X:          startX,
+		Y:          startY + 140,
+		Button:     proto.InputMouseButtonLeft,
+		ClickCount: 1,
+	}.Call(page)
+
+	if waitForPageRefreshAndReady(page, `() => typeof window.__e2eBeforeDragRefresh === 'undefined'`, 8*time.Second) && hasReadyIndicator {
+		res.Assertions = append(res.Assertions, "Click-and-drag down displays pull-to-refresh indicator and reloads the application on release")
+	} else if hasReadyIndicator {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Releasing pull-to-refresh drag did not reload the page within 8s")
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -1744,20 +1855,24 @@ func CheckMobileResponsiveLayout(browser *rod.Browser, baseURL, outDir string) V
 	page := newMobileViewportPage(browser, url)
 	defer page.MustClose()
 
-	// 1. Assert mobile hamburger button is visible and bottom navigation bar is omitted to maximize vertical screen space
+	// 1. Assert mobile hamburger button and top-bar refresh button are visible, and bottom navigation bar is omitted to maximize vertical screen space
 	hasHamburger := page.MustEval(`() => {
 		const el = document.querySelector('button[aria-label="Toggle mobile navigation"]');
+		return Boolean(el && el.getBoundingClientRect().width > 0);
+	}`).Bool()
+	hasMobileRefreshBtn := page.MustEval(`() => {
+		const el = document.querySelector('header button[data-testid="app-refresh-btn"][aria-label="Refresh page"]');
 		return Boolean(el && el.getBoundingClientRect().width > 0);
 	}`).Bool()
 	hasBottomNav := page.MustEval(`() => {
 		const el = document.querySelector('nav[aria-label="Mobile bottom navigation"]');
 		return Boolean(el);
 	}`).Bool()
-	if hasHamburger && !hasBottomNav {
-		res.Assertions = append(res.Assertions, "Mobile top hamburger button renders and bottom navigation bar is omitted to maximize vertical screen space at 390x844")
+	if hasHamburger && hasMobileRefreshBtn && !hasBottomNav {
+		res.Assertions = append(res.Assertions, "Mobile top hamburger and refresh buttons render while bottom navigation bar is omitted to maximize vertical screen space at 390x844")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v) and bottom nav omitted (!%v) at 390x844", hasHamburger, hasBottomNav))
+		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v), refresh button (%v), and bottom nav omitted (!%v) at 390x844", hasHamburger, hasMobileRefreshBtn, hasBottomNav))
 	}
 
 	// 2. Assert <main> receives full mobile viewport width (>= 350px) instead of being crushed by desktop sidebars

@@ -9,6 +9,11 @@
   --focus-color: #0b57d0;
 }
 
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
 body {
   background-color: #f0f4f9;
   color: #1f1f1f;

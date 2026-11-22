@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, NgZone, inject, signal } from '@angular/core';
 import { SwUpdate, VersionEvent } from '@angular/service-worker';
 import { SettingsService } from './settings.service';
 
@@ -14,6 +14,7 @@ interface BeforeInstallPromptEvent extends Event {
 export class PwaService {
   private readonly swUpdate = inject(SwUpdate, { optional: true });
   private readonly settingsService = inject(SettingsService);
+  private readonly ngZone = inject(NgZone);
 
   private deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
   private updateIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -24,6 +25,7 @@ export class PwaService {
   readonly swEnabled = signal<boolean>(Boolean(this.swUpdate?.isEnabled));
   readonly updateAvailable = signal<boolean>(false);
   readonly checkingForUpdate = signal<boolean>(false);
+  readonly refreshing = signal<boolean>(false);
   readonly lastCheckedAt = signal<string | null>(null);
   readonly statusMessage = signal<string | null>(null);
   readonly showInstallGuide = signal<boolean>(false);
@@ -65,12 +67,24 @@ export class PwaService {
         }
       });
 
-      // Periodically poll for updates in background if pwaAutoUpdate is enabled (every 30 minutes)
-      this.updateIntervalId = setInterval(() => {
-        if (this.settingsService.generalSettings().pwaAutoUpdate && this.isOnline()) {
-          void this.checkForUpdates(true);
-        }
-      }, 30 * 60 * 1000);
+      this.swUpdate.unrecoverable.subscribe(() => {
+        this.updateAvailable.set(true);
+        this.statusMessage.set(
+          'Application cache is out of date — refresh to load the latest version.'
+        );
+      });
+
+      // Run outside Angular zone so the 30-minute timer does not block Angular stability
+      // and delay registerWhenStable:30000 Service Worker registration.
+      this.ngZone.runOutsideAngular(() => {
+        this.updateIntervalId = setInterval(() => {
+          if (this.settingsService.generalSettings().pwaAutoUpdate && this.isOnline()) {
+            this.ngZone.run(() => {
+              void this.checkForUpdates(true);
+            });
+          }
+        }, 30 * 60 * 1000);
+      });
     }
   }
 
@@ -161,6 +175,87 @@ export class PwaService {
 
   dismissUpdateBanner(): void {
     this.updateAvailable.set(false);
+  }
+
+  /**
+   * Checks for and activates any available Service Worker update, bypasses stale cached HTML
+   * when a Service Worker controls the page online, and reloads the application.
+   */
+  async refreshApp(): Promise<void> {
+    if (this.refreshing()) {
+      return;
+    }
+    this.refreshing.set(true);
+    const startedAt = Date.now();
+    let shouldBypassSw = false;
+
+    if (this.isOnline()) {
+      if (this.swUpdate?.isEnabled) {
+        try {
+          const res = await this.withTimeout(
+            this.swUpdate.checkForUpdate(),
+            4000,
+            'timeout' as const
+          );
+          if (res === true || this.updateAvailable()) {
+            await this.withTimeout(this.swUpdate.activateUpdate(), 2500, false);
+          } else if (res === 'timeout') {
+            shouldBypassSw = true;
+          }
+        } catch {
+          shouldBypassSw = true;
+        }
+      }
+
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        await this.withTimeout(
+          navigator.serviceWorker.getRegistration().then((r) => r?.update()),
+          1500,
+          undefined
+        ).catch(() => {});
+        if (navigator.serviceWorker.controller) {
+          shouldBypassSw = true;
+        }
+      }
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < 180) {
+      await new Promise((resolve) => setTimeout(resolve, 180 - elapsed));
+    }
+
+    this.performPageReload(shouldBypassSw && this.isOnline());
+  }
+
+  protected performPageReload(bypassServiceWorker: boolean): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (bypassServiceWorker) {
+      try {
+        const target = new URL(window.location.href);
+        target.searchParams.set('ngsw-bypass', 'true');
+        window.location.replace(target.toString());
+        return;
+      } catch {}
+    }
+    window.location.reload();
+  }
+
+  private async withTimeout<T, F>(promise: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<F>((resolve) => {
+          timerId = setTimeout(() => resolve(fallback), ms);
+        }),
+      ]);
+    } finally {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
+    }
   }
 
   async clearCacheAndReload(): Promise<void> {

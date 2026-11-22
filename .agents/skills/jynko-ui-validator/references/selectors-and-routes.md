@@ -27,10 +27,12 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 ## 2. Stable DOM Selectors & `aria-label` Hooks
 
 ### App Shell & Navigation (`frontend/src/app/app.component.ts`)
-- **Top Header Brand**:
+- **Top Header Brand & Global Actions**:
   - Brand title text: `Jynko` (must **not** contain a dropdown caret `⌄` or workspace switcher).
   - Non-production environment badge (`ENV=dev` or `ENV=stg`, omitted in `ENV=prd`): `header [data-testid="env-badge"]` (`DEV` or `STG`, with browser tab `document.title` prefixed as `[DEV] Jynko` or `[STG] Jynko`).
   - Global search input: `header input[type="search"]`.
+  - Top-bar page refresh button (checks SW updates & reloads app): `header button[data-testid="app-refresh-btn"][aria-label="Refresh page"]` (with update indicator dot `[data-testid="app-refresh-update-dot"]` when a new version is ready).
+  - Pull / click-and-drag-down refresh indicator pill: `[data-testid="pull-to-refresh-indicator"]` (`data-pull-ready="true"` once threshold is reached).
   - Mobile hamburger button (`< 768px`): `button[aria-label="Toggle mobile navigation"]`.
 - **Mobile Navigation (`< 768px`)**:
   - Off-canvas navigation drawer container: `[data-testid="app-navigation-drawer"]`
@@ -87,7 +89,7 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
     - Project top bar (Overview, Work items, Cycles, Epics, Modules — PLAN-7): `main [data-testid="project-top-bar"]`. The only element tinted with the project background colour (`.project-bg`, from the `--project-bg` CSS variable set on `main`; `main[data-project-bg="<KEY>"]`). Shared layout: `px-3 sm:px-4 py-2` with a 1px `border-b border-slate-100` hairline.
     - Project page content (below the top bar): `main [data-testid="project-page-content"]` — default `bg-slate-50` canvas with `p-2.5 sm:p-4` padding on every project page.
     - Work Items view/filter toolbar (List/Board/... switcher, Columns, Filters): `main [data-testid="work-items-toolbar"]` — white (`bg-white`), not tinted.
-    - User menu PWA install shortcut: `button[aria-label="Install Jynko PWA"]`
+    - User menu PWA install / refresh shortcuts: `button[aria-label="Install Jynko PWA"]` (browser tab), `button[aria-label="Refresh Jynko app"]` (standalone PWA mode)
   - Kanban Board Column Configurator (`/work-items` in `BOARD` mode):
     - Toolbar columns button: `button[aria-label="Configure Kanban board columns"]`
     - Popover dialog: `[role="dialog"][aria-label="Kanban Board Columns Configuration"]`
