@@ -46,30 +46,41 @@ type ClientConfig struct {
 
 // Agent represents a Scion Hub agent summary/status.
 type Agent struct {
-	ID          string `json:"id"`
-	Slug        string `json:"slug,omitempty"`
-	Name        string `json:"name"`
-	ProjectSlug string `json:"project_slug,omitempty"`
-	Template    string `json:"template,omitempty"`
-	Harness     string `json:"harness,omitempty"`
-	Phase       string `json:"phase"`
-	Activity    string `json:"activity,omitempty"`
-	URL         string `json:"url,omitempty"`
+	ID            string `json:"id"`
+	Slug          string `json:"slug,omitempty"`
+	Name          string `json:"name"`
+	ProjectID     string `json:"projectId,omitempty"`
+	Project       string `json:"project,omitempty"`
+	Template      string `json:"template,omitempty"`
+	Harness       string `json:"harness,omitempty"`
+	HarnessConfig string `json:"harnessConfig,omitempty"`
+	Phase         string `json:"phase"`
+	Activity      string `json:"activity,omitempty"`
+	URL           string `json:"url,omitempty"`
+}
+
+func normalizeAgent(a *Agent) {
+	if a == nil {
+		return
+	}
+	if a.Harness == "" && a.HarnessConfig != "" {
+		a.Harness = a.HarnessConfig
+	}
 }
 
 // AgentConfig holds runtime container configuration passed to Scion Hub on agent creation.
 type AgentConfig struct {
-	Harness string            `json:"harness,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
+	Harness       string            `json:"harness,omitempty"`
+	HarnessConfig string            `json:"harness_config,omitempty"`
+	Env           map[string]string `json:"env,omitempty"`
 }
 
 // CreateAgentRequest represents the payload sent to POST /api/v1/agents.
 type CreateAgentRequest struct {
 	Name              string       `json:"name"`
-	Slug              string       `json:"slug,omitempty"`
-	ProjectSlug       string       `json:"project_slug,omitempty"`
-	GroveID           string       `json:"grove_id,omitempty"`
+	ProjectID         string       `json:"projectId"`
 	Template          string       `json:"template,omitempty"`
+	HarnessConfig     string       `json:"harnessConfig,omitempty"`
 	Task              string       `json:"task,omitempty"`
 	AcceptAsyncLaunch bool         `json:"acceptAsyncLaunch"`
 	Config            *AgentConfig `json:"config,omitempty"`
@@ -113,11 +124,11 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
-// ListAgents returns agents from Scion Hub, optionally filtered by projectSlug.
+// ListAgents returns agents from Scion Hub, optionally filtered by projectId (slug or UUID).
 func (c *Client) ListAgents(ctx context.Context, projectSlug string) ([]Agent, error) {
 	path := "/api/v1/agents"
 	if slug := strings.TrimSpace(projectSlug); slug != "" {
-		path += "?project_slug=" + url.QueryEscape(slug)
+		path += "?projectId=" + url.QueryEscape(slug)
 	}
 	var raw json.RawMessage
 	if err := c.doJSON(ctx, http.MethodGet, path, nil, &raw); err != nil {
@@ -125,6 +136,9 @@ func (c *Client) ListAgents(ctx context.Context, projectSlug string) ([]Agent, e
 	}
 	var list []Agent
 	if err := json.Unmarshal(raw, &list); err == nil {
+		for i := range list {
+			normalizeAgent(&list[i])
+		}
 		return list, nil
 	}
 	var wrapped struct {
@@ -135,6 +149,9 @@ func (c *Client) ListAgents(ctx context.Context, projectSlug string) ([]Agent, e
 	}
 	if wrapped.Agents == nil {
 		return []Agent{}, nil
+	}
+	for i := range wrapped.Agents {
+		normalizeAgent(&wrapped.Agents[i])
 	}
 	return wrapped.Agents, nil
 }
@@ -149,21 +166,19 @@ func (c *Client) GetAgent(ctx context.Context, agentID string) (*Agent, error) {
 	return decodeAgent(raw)
 }
 
-// CreateAgent creates a new Scion agent, retrying with a unique slug suffix on 409 Conflict.
+// CreateAgent creates a new Scion agent, retrying with a unique name suffix on 409 Conflict.
 func (c *Client) CreateAgent(ctx context.Context, req CreateAgentRequest) (*Agent, error) {
 	req.AcceptAsyncLaunch = true
-	baseSlug := strings.TrimSpace(req.Slug)
 	baseName := strings.TrimSpace(req.Name)
+	if baseName == "" {
+		baseName = "agent"
+		req.Name = baseName
+	}
 
 	for attempt := 0; attempt < 4; attempt++ {
 		if attempt > 0 {
 			suffix := fmt.Sprintf("%d", time.Now().UnixNano()%100000)
-			if baseSlug != "" {
-				req.Slug = baseSlug + "-" + suffix
-			}
-			if baseName != "" {
-				req.Name = baseName + "-" + suffix
-			}
+			req.Name = baseName + "-" + suffix
 		}
 		var raw json.RawMessage
 		err := c.doJSON(ctx, http.MethodPost, "/api/v1/agents", req, &raw)
@@ -174,7 +189,7 @@ func (c *Client) CreateAgent(ctx context.Context, req CreateAgentRequest) (*Agen
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("%w: exhausted unique slug retries", ErrConflict)
+	return nil, fmt.Errorf("%w: exhausted unique agent name retries", ErrConflict)
 }
 
 // StartAgent calls POST /api/v1/agents/{id}/start.
@@ -221,32 +236,43 @@ func (c *Client) EnsureRunningAndSendMessage(ctx context.Context, agentID, messa
 	switch phase {
 	case "running", "suspended":
 		// Ready for wake=true message directly.
+	case "starting", "provisioning":
+		if err := c.waitForAgentRunning(ctx, agentID); err != nil {
+			return err
+		}
 	default:
 		if _, err := c.StartAgent(ctx, agentID); err != nil {
 			return fmt.Errorf("failed to start agent %s: %w", agentID, err)
 		}
-		deadline := time.Now().Add(c.startTimeout)
-		for time.Now().Before(deadline) {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(c.pollInterval):
-			}
-			curr, err := c.GetAgent(ctx, agentID)
-			if err != nil {
-				return err
-			}
-			currPhase := strings.ToLower(strings.TrimSpace(curr.Phase))
-			if currPhase == "running" || currPhase == "suspended" {
-				break
-			}
-			if currPhase == "error" || currPhase == "failed" {
-				return fmt.Errorf("agent %s entered %s phase while starting", agentID, currPhase)
-			}
+		if err := c.waitForAgentRunning(ctx, agentID); err != nil {
+			return err
 		}
 	}
 
 	return c.SendMessage(ctx, agentID, messageText, true)
+}
+
+func (c *Client) waitForAgentRunning(ctx context.Context, agentID string) error {
+	deadline := time.Now().Add(c.startTimeout)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(c.pollInterval):
+		}
+		curr, err := c.GetAgent(ctx, agentID)
+		if err != nil {
+			return err
+		}
+		currPhase := strings.ToLower(strings.TrimSpace(curr.Phase))
+		if currPhase == "running" || currPhase == "suspended" {
+			return nil
+		}
+		if currPhase == "error" || currPhase == "failed" {
+			return fmt.Errorf("agent %s entered %s phase while starting", agentID, currPhase)
+		}
+	}
+	return nil
 }
 
 func decodeAgent(raw json.RawMessage) (*Agent, error) {
@@ -256,12 +282,14 @@ func decodeAgent(raw json.RawMessage) (*Agent, error) {
 	}
 	var direct Agent
 	if err := json.Unmarshal(trimmed, &direct); err == nil && (direct.ID != "" || direct.Name != "" || direct.Phase != "") {
+		normalizeAgent(&direct)
 		return &direct, nil
 	}
 	var wrapped struct {
 		Agent *Agent `json:"agent"`
 	}
 	if err := json.Unmarshal(trimmed, &wrapped); err == nil && wrapped.Agent != nil {
+		normalizeAgent(wrapped.Agent)
 		return wrapped.Agent, nil
 	}
 	return nil, fmt.Errorf("unexpected agent payload: %s", string(trimmed))

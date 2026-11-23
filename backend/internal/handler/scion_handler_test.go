@@ -195,17 +195,22 @@ func (f *fakeHubClient) GetAgent(_ context.Context, agentID string) (*scion.Agen
 }
 func (f *fakeHubClient) CreateAgent(_ context.Context, req scion.CreateAgentRequest) (*scion.Agent, error) {
 	f.createdReqs = append(f.createdReqs, req)
-	id := "agent-" + req.Slug
-	harness := ""
-	if req.Config != nil {
+	id := "11111111-1111-4111-8111-" + req.Name
+	if len(id) > 36 {
+		id = id[:36]
+	}
+	harness := req.HarnessConfig
+	if harness == "" && req.Config != nil {
 		harness = req.Config.Harness
 	}
 	a := scion.Agent{
-		ID:      id,
-		Slug:    req.Slug,
-		Name:    req.Name,
-		Phase:   "running",
-		Harness: harness,
+		ID:            id,
+		Slug:          req.Name,
+		Name:          req.Name,
+		ProjectID:     req.ProjectID,
+		Harness:       harness,
+		HarnessConfig: req.HarnessConfig,
+		Phase:         "running",
 	}
 	f.agents[id] = a
 	return &a, nil
@@ -360,6 +365,37 @@ func TestCommentHandler_SlashCommandsAndScionHandler(t *testing.T) {
 	}
 	if itemRepo.items["item-1"].ReviewAgentID == "" {
 		t.Fatalf("expected item.ReviewAgentID to be persisted")
+	}
+	if len(hub.createdReqs) != 2 {
+		t.Fatalf("expected 2 created agent requests, got %d", len(hub.createdReqs))
+	}
+	revReq := hub.createdReqs[1]
+	if revReq.ProjectID != "global" || revReq.HarnessConfig != "antigravity" ||
+		revReq.Config == nil || revReq.Config.Harness != "antigravity" || revReq.Config.HarnessConfig != "antigravity" {
+		t.Fatalf("unexpected review CreateAgentRequest wire contract: %+v", revReq)
+	}
+
+	// 5b. Inline --agent=<slug> resolves slug via ListAgents to Hub UUID before messaging/stopping
+	hub.agents["22222222-2222-4222-8222-222222222222"] = scion.Agent{
+		ID:    "22222222-2222-4222-8222-222222222222",
+		Slug:  "custom-slug-agent",
+		Name:  "custom-slug-agent",
+		Phase: "running",
+	}
+	w = callCommentCreate(ch, "/ask --agent=custom-slug-agent what is the status?")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("/ask --agent=slug status = %d, want 201 (%s)", w.Code, w.Body.String())
+	}
+	foundUUIDMsg := false
+	for _, m := range hub.messaged {
+		if m == "22222222-2222-4222-8222-222222222222:"+m[len("22222222-2222-4222-8222-222222222222:"):] &&
+			len(m) > len("22222222-2222-4222-8222-222222222222:") {
+			foundUUIDMsg = true
+			break
+		}
+	}
+	if !foundUUIDMsg {
+		t.Fatalf("expected /ask --agent=custom-slug-agent to resolve to UUID, messaged=%v", hub.messaged)
 	}
 
 	// 6. /stop --all stops both agents
