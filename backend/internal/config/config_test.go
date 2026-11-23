@@ -190,3 +190,34 @@ func TestCloudRunDevIsolationAndGCSPrefixes(t *testing.T) {
 		t.Fatalf("expected AttachmentsGCSPrefix '' on ENV=prd, got %q", cfgPrd.AttachmentsGCSPrefix)
 	}
 }
+
+func TestScionConfig(t *testing.T) {
+	defer func() {
+		_ = os.Unsetenv("SCION_HUB_URL")
+		_ = os.Unsetenv("SCION_HUB_TOKEN")
+		_ = os.Unsetenv("SCION_IAP_AUDIENCE")
+		_ = os.Unsetenv("SCION_DEFAULT_PROJECT_SLUG")
+		_ = os.Unsetenv("SCION_DEFAULT_TEMPLATE")
+	}()
+
+	_ = os.Unsetenv("SCION_HUB_URL")
+	_ = os.Unsetenv("SCION_HUB_TOKEN")
+	cfgEmpty := Load()
+	if cfgEmpty.IsScionConfigured() {
+		t.Fatalf("expected IsScionConfigured() == false when SCION_HUB_URL and SCION_HUB_TOKEN are unset")
+	}
+	if cfgEmpty.ScionDefaultProjectSlug != "global" || cfgEmpty.ScionDefaultTemplate != "jynko-dev" {
+		t.Fatalf("expected Scion defaults global / jynko-dev, got %q / %q", cfgEmpty.ScionDefaultProjectSlug, cfgEmpty.ScionDefaultTemplate)
+	}
+
+	_ = os.Setenv("SCION_HUB_URL", "https://scion.aparaturafiscala.ro/")
+	_ = os.Setenv("SCION_HUB_TOKEN", "scion_pat_secret")
+	_ = os.Setenv("SCION_IAP_AUDIENCE", "12345.apps.googleusercontent.com")
+	cfgSet := Load()
+	if !cfgSet.IsScionConfigured() {
+		t.Fatalf("expected IsScionConfigured() == true when URL and token are set")
+	}
+	if cfgSet.ScionHubURL != "https://scion.aparaturafiscala.ro" {
+		t.Fatalf("expected trailing slash trimmed from ScionHubURL, got %q", cfgSet.ScionHubURL)
+	}
+}

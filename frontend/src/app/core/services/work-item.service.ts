@@ -5,6 +5,8 @@ import { AuthService } from './auth.service';
 import { SettingsService } from './settings.service';
 import {
   Comment,
+  CreateCommentResponse,
+  ItemAgentsStatus,
   SubWorkItem,
   WorkItem,
   WorkItemFilterState,
@@ -41,6 +43,7 @@ export class WorkItemService {
   readonly items = signal<WorkItem[]>([]);
   readonly subItemsByItem = signal<Record<string, SubWorkItem[]>>({});
   readonly commentsByItem = signal<Record<string, Comment[]>>({});
+  readonly itemAgentsByItem = signal<Record<string, ItemAgentsStatus>>({});
   private readonly updateSeqByItem = new Map<string, number>();
   private readonly loadedProjects = new Set<string>();
   private readonly projectIdsKey = computed(() =>
@@ -401,17 +404,67 @@ export class WorkItemService {
       });
   }
 
-  addComment(itemId: string, body: string): void {
+  loadItemAgents(itemId: string): void {
     const projectId = this.resolveProjectIdForItem(itemId);
     if (!projectId) return;
-    this.api.post<Comment>(`/projects/${projectId}/items/${itemId}/comments`, { body }).subscribe({
-      next: (cmt) => {
-        this.commentsByItem.update((m) => ({
-          ...m,
-          [itemId]: [...(m[itemId] ?? []), cmt],
-        }));
+    this.api.get<ItemAgentsStatus>(`/projects/${projectId}/items/${itemId}/agents`).subscribe({
+      next: (status) => {
+        this.itemAgentsByItem.update((m) => ({ ...m, [itemId]: status }));
       },
+      error: () => {},
     });
+  }
+
+  reloadItem(itemId: string): void {
+    const projectId = this.resolveProjectIdForItem(itemId);
+    if (!projectId) return;
+    this.api.get<WorkItem>(`/projects/${projectId}/items/${itemId}`).subscribe({
+      next: (item) => {
+        this.items.update((list) => list.map((it) => (it.id === itemId ? item : it)));
+      },
+      error: () => {},
+    });
+  }
+
+  addComment(
+    itemId: string,
+    body: string,
+    options?: {
+      targetAgentId?: string;
+      onSuccess?: (res: CreateCommentResponse) => void;
+      onError?: (errMsg: string) => void;
+    }
+  ): void {
+    const projectId = this.resolveProjectIdForItem(itemId);
+    if (!projectId) return;
+    const payload: Record<string, string> = { body };
+    if (options?.targetAgentId?.trim()) {
+      payload['target_agent_id'] = options.targetAgentId.trim();
+    }
+    this.api
+      .post<CreateCommentResponse>(`/projects/${projectId}/items/${itemId}/comments`, payload)
+      .subscribe({
+        next: (res) => {
+          const { dispatch_comment, dispatch, ...userComment } = res;
+          const added: Comment[] = [userComment];
+          if (dispatch_comment) {
+            added.push(dispatch_comment);
+          }
+          this.commentsByItem.update((m) => ({
+            ...m,
+            [itemId]: [...(m[itemId] ?? []), ...added],
+          }));
+          if (dispatch) {
+            this.reloadItem(itemId);
+            this.loadItemAgents(itemId);
+          }
+          options?.onSuccess?.(res);
+        },
+        error: (err) => {
+          const msg = err?.error?.error || err?.message || 'Failed to post comment';
+          options?.onError?.(msg);
+        },
+      });
   }
 
   updateComment(itemId: string, commentId: string, body: string): void {

@@ -31,6 +31,18 @@ type ProjectSettings struct {
 	// BackgroundColor is a palette key (see ProjectBackgroundColors) used to tint project pages so
 	// users can tell projects apart at a glance. Empty or "DEFAULT" means the standard slate-50 canvas.
 	BackgroundColor string `firestore:"background_color,omitempty" json:"background_color,omitempty"`
+
+	// Scion AI Agent & Slash-Command Integration Settings
+	ScionEnabled            bool   `firestore:"scion_enabled" json:"scion_enabled"`
+	DefaultGitRepoURL       string `firestore:"default_git_repo_url,omitempty" json:"default_git_repo_url"`
+	DefaultBaseBranch       string `firestore:"default_base_branch,omitempty" json:"default_base_branch"`
+	ScionProjectSlug        string `firestore:"scion_project_slug,omitempty" json:"scion_project_slug"`
+	ScionTemplate           string `firestore:"scion_template,omitempty" json:"scion_template"`
+	ImplementHarness        string `firestore:"implement_harness,omitempty" json:"implement_harness"`
+	ReviewHarness           string `firestore:"review_harness,omitempty" json:"review_harness"`
+	ImplementPromptTemplate string `firestore:"implement_prompt_template,omitempty" json:"implement_prompt_template"`
+	ReviewPromptTemplate    string `firestore:"review_prompt_template,omitempty" json:"review_prompt_template"`
+	FollowupPromptTemplate  string `firestore:"followup_prompt_template,omitempty" json:"followup_prompt_template"`
 }
 
 // ProjectBackgroundColors lists the allowed palette keys for ProjectSettings.BackgroundColor.
@@ -66,6 +78,12 @@ func DefaultProjectSettings() *ProjectSettings {
 		AutoLockPublishedRunbooks:        false,
 		CreateVersionOnEverySave:         true,
 		BackgroundColor:                  "DEFAULT",
+		ScionEnabled:                     false,
+		DefaultBaseBranch:                "dev",
+		ScionProjectSlug:                 "global",
+		ScionTemplate:                    "jynko-dev",
+		ImplementHarness:                 "claude",
+		ReviewHarness:                    "antigravity",
 	}
 }
 
@@ -76,6 +94,8 @@ type Module struct {
 	Name        string    `firestore:"name" json:"name"`
 	Description string    `firestore:"description" json:"description"`
 	LeadUserID  string    `firestore:"lead_user_id" json:"lead_user_id"`
+	GitRepoURL  string    `firestore:"git_repo_url,omitempty" json:"git_repo_url,omitempty"`
+	BaseBranch  string    `firestore:"base_branch,omitempty" json:"base_branch,omitempty"`
 	CreatedAt   time.Time `firestore:"created_at" json:"created_at"`
 	UpdatedAt   time.Time `firestore:"updated_at" json:"updated_at"`
 }
@@ -158,10 +178,16 @@ type WorkItem struct {
 	Estimate          *int       `firestore:"estimate,omitempty" json:"estimate,omitempty"` // Story points / effort estimate
 	StartDate         *time.Time `firestore:"start_date,omitempty" json:"start_date,omitempty"`
 	DueDate           *time.Time `firestore:"due_date,omitempty" json:"due_date,omitempty"`
-	SubItemCount      int        `firestore:"sub_item_count" json:"sub_item_count"`
-	CompletedSubCount int        `firestore:"completed_sub_count" json:"completed_sub_count"`
-	CreatedAt         time.Time  `firestore:"created_at" json:"created_at"`
-	UpdatedAt         time.Time  `firestore:"updated_at" json:"updated_at"`
+	SubItemCount       int        `firestore:"sub_item_count" json:"sub_item_count"`
+	CompletedSubCount  int        `firestore:"completed_sub_count" json:"completed_sub_count"`
+	ImplAgentID        string     `firestore:"impl_agent_id,omitempty" json:"impl_agent_id,omitempty"`
+	ImplAgentName      string     `firestore:"impl_agent_name,omitempty" json:"impl_agent_name,omitempty"`
+	ImplAgentHarness   string     `firestore:"impl_agent_harness,omitempty" json:"impl_agent_harness,omitempty"`
+	ReviewAgentID      string     `firestore:"review_agent_id,omitempty" json:"review_agent_id,omitempty"`
+	ReviewAgentName    string     `firestore:"review_agent_name,omitempty" json:"review_agent_name,omitempty"`
+	ReviewAgentHarness string     `firestore:"review_agent_harness,omitempty" json:"review_agent_harness,omitempty"`
+	CreatedAt          time.Time  `firestore:"created_at" json:"created_at"`
+	UpdatedAt          time.Time  `firestore:"updated_at" json:"updated_at"`
 }
 
 // WorkItemFilter holds query filter parameters for listing work items.
@@ -189,13 +215,17 @@ type SubWorkItem struct {
 
 // Comment represents a message on a WorkItem.
 type Comment struct {
-	ID         string    `firestore:"id" json:"id"`
-	WorkItemID string    `firestore:"work_item_id" json:"work_item_id"`
-	AuthorID   string    `firestore:"author_id" json:"author_id"`
-	AuthorName string    `firestore:"author_name" json:"author_name"`
-	Body       string    `firestore:"body" json:"body"`
-	CreatedAt  time.Time `firestore:"created_at" json:"created_at"`
-	UpdatedAt  time.Time `firestore:"updated_at" json:"updated_at"`
+	ID           string    `firestore:"id" json:"id"`
+	WorkItemID   string    `firestore:"work_item_id" json:"work_item_id"`
+	AuthorID     string    `firestore:"author_id" json:"author_id"`
+	AuthorName   string    `firestore:"author_name" json:"author_name"`
+	Body         string    `firestore:"body" json:"body"`
+	IsSystem     bool      `firestore:"is_system,omitempty" json:"is_system,omitempty"`
+	SlashCommand string    `firestore:"slash_command,omitempty" json:"slash_command,omitempty"`
+	AgentID      string    `firestore:"agent_id,omitempty" json:"agent_id,omitempty"`
+	AgentURL     string    `firestore:"agent_url,omitempty" json:"agent_url,omitempty"`
+	CreatedAt    time.Time `firestore:"created_at" json:"created_at"`
+	UpdatedAt    time.Time `firestore:"updated_at" json:"updated_at"`
 }
 
 // StickyColor constants for playful sticky notes.

@@ -92,7 +92,12 @@ type UpdateSubItemInput struct {
 }
 
 type CreateCommentInput struct {
-	Body string `json:"body" binding:"required"`
+	Body          string `json:"body" binding:"required"`
+	TargetAgentID string `json:"target_agent_id,omitempty"`
+	IsSystem      bool   `json:"-"`
+	SlashCommand  string `json:"-"`
+	AgentID       string `json:"-"`
+	AgentURL      string `json:"-"`
 }
 
 type UpdateCommentInput struct {
@@ -320,15 +325,27 @@ func (s *ItemService) CreateComment(ctx context.Context, projectID, itemID strin
 		return nil, ErrInvalidInput
 	}
 	comment := &model.Comment{
-		WorkItemID: itemID,
-		AuthorID:   author.UserID,
-		AuthorName: author.Name,
-		Body:       body,
+		WorkItemID:   itemID,
+		AuthorID:     author.UserID,
+		AuthorName:   author.Name,
+		Body:         body,
+		IsSystem:     input.IsSystem,
+		SlashCommand: input.SlashCommand,
+		AgentID:      input.AgentID,
+		AgentURL:     input.AgentURL,
 	}
 	if err := s.repo.CreateComment(ctx, projectID, comment); err != nil {
 		return nil, err
 	}
 	return comment, nil
+}
+
+// SaveItem persists direct modifications to a WorkItem (e.g. Scion agent bindings).
+func (s *ItemService) SaveItem(ctx context.Context, item *model.WorkItem) error {
+	if item == nil {
+		return ErrInvalidInput
+	}
+	return s.repo.Update(ctx, item)
 }
 
 func (s *ItemService) UpdateComment(

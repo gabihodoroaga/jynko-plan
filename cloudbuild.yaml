@@ -100,15 +100,28 @@ steps:
         if [ -n "$_ATTACHMENTS_GCS_PREFIX" ]; then
           ENV_VARS="$${ENV_VARS},ATTACHMENTS_GCS_PREFIX=$_ATTACHMENTS_GCS_PREFIX"
         fi
+        if [ -n "$_SCION_HUB_URL" ]; then
+          ENV_VARS="$${ENV_VARS},SCION_HUB_URL=$_SCION_HUB_URL"
+        fi
+        if [ -n "$_SCION_IAP_AUDIENCE" ]; then
+          ENV_VARS="$${ENV_VARS},SCION_IAP_AUDIENCE=$_SCION_IAP_AUDIENCE"
+        fi
 
-        gcloud run deploy "$$SERVICE" \
-          --image "eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA" \
-          --region "$_REGION" \
-          --platform managed \
-          --iap \
-          --service-account "$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com" \
-          --update-env-vars "$$ENV_VARS" \
+        DEPLOY_ARGS=(
+          run deploy "$$SERVICE"
+          --image "eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA"
+          --region "$_REGION"
+          --platform managed
+          --iap
+          --service-account "$_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com"
+          --update-env-vars "$$ENV_VARS"
           --no-allow-unauthenticated
+        )
+        if [ -n "$_SCION_HUB_TOKEN_SECRET" ]; then
+          DEPLOY_ARGS+=(--set-secrets="SCION_HUB_TOKEN=$_SCION_HUB_TOKEN_SECRET")
+        fi
+
+        gcloud "$${DEPLOY_ARGS[@]}"
 
 substitutions:
   _ENV_PREFIX: 'auto'
@@ -120,6 +133,9 @@ substitutions:
   _IAP_AUDIENCE: ''
   _ATTACHMENTS_GCS_BUCKET: ''
   _ATTACHMENTS_GCS_PREFIX: ''
+  _SCION_HUB_URL: ''
+  _SCION_IAP_AUDIENCE: ''
+  _SCION_HUB_TOKEN_SECRET: ''
 
 images:
   - 'eu.gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'

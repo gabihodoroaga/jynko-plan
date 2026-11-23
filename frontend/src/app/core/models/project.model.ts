@@ -39,6 +39,16 @@ export interface ProjectSettingsModel {
   auto_lock_published_runbooks: boolean;
   create_version_on_every_save: boolean;
   background_color?: string;
+  scion_enabled?: boolean;
+  default_git_repo_url?: string;
+  default_base_branch?: string;
+  scion_project_slug?: string;
+  scion_template?: string;
+  implement_harness?: string;
+  review_harness?: string;
+  implement_prompt_template?: string;
+  review_prompt_template?: string;
+  followup_prompt_template?: string;
 }
 
 export interface Project {
@@ -68,6 +78,8 @@ export interface Module {
   name: string;
   description: string;
   lead_user_id: string;
+  git_repo_url?: string;
+  base_branch?: string;
   created_at: string;
   updated_at: string;
 }
@@ -124,6 +136,12 @@ export interface WorkItem {
   due_date?: string;
   sub_item_count: number;
   completed_sub_count: number;
+  impl_agent_id?: string;
+  impl_agent_name?: string;
+  impl_agent_harness?: string;
+  review_agent_id?: string;
+  review_agent_name?: string;
+  review_agent_harness?: string;
   created_at: string;
   updated_at: string;
 }
@@ -144,8 +162,63 @@ export interface Comment {
   author_id: string;
   author_name: string;
   body: string;
+  is_system?: boolean;
+  slash_command?: string;
+  agent_id?: string;
+  agent_url?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ScionPlaceholder {
+  token: string;
+  description: string;
+}
+
+export interface ScionDefaults {
+  configured: boolean;
+  hub_url: string;
+  default_project_slug: string;
+  default_template: string;
+  implement_prompt_template: string;
+  review_prompt_template: string;
+  followup_prompt_template: string;
+  placeholders: ScionPlaceholder[];
+}
+
+export interface ScionAgent {
+  id: string;
+  slug?: string;
+  name: string;
+  project_slug?: string;
+  template?: string;
+  harness?: string;
+  phase: string;
+  activity?: string;
+  url?: string;
+}
+
+export interface ScionDispatchSummary {
+  ok: boolean;
+  command: string;
+  action?: string;
+  agent_id?: string;
+  agent_name?: string;
+  agent_url?: string;
+  harness?: string;
+  error?: string;
+}
+
+export interface CreateCommentResponse extends Comment {
+  dispatch_comment?: Comment;
+  dispatch?: ScionDispatchSummary;
+}
+
+export interface ItemAgentsStatus {
+  configured: boolean;
+  hub_url: string;
+  impl?: ScionAgent | null;
+  review?: ScionAgent | null;
 }
 
 export interface WorkItemFilterState {

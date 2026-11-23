@@ -171,6 +171,36 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
                 [fullWidth]="true"
               ></app-dropdown>
             </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div class="sm:col-span-2">
+                <label for="new-module-repo" class="block text-xs font-medium text-slate-700 mb-1">
+                  Git Repo URL <span class="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  id="new-module-repo"
+                  type="url"
+                  name="gitRepoUrl"
+                  [(ngModel)]="newRepoUrl"
+                  aria-label="New module git repo URL"
+                  placeholder="https://github.com/org/repo"
+                  class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+              <div>
+                <label for="new-module-branch" class="block text-xs font-medium text-slate-700 mb-1">
+                  Base Branch
+                </label>
+                <input
+                  id="new-module-branch"
+                  type="text"
+                  name="baseBranch"
+                  [(ngModel)]="newBaseBranch"
+                  aria-label="New module base branch"
+                  placeholder="dev"
+                  class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+            </div>
             <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
               <button
                 type="button"
@@ -227,6 +257,36 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
                 [fullWidth]="true"
               ></app-dropdown>
             </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div class="sm:col-span-2">
+                <label for="edit-module-repo" class="block text-xs font-medium text-slate-700 mb-1">
+                  Git Repo URL <span class="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  id="edit-module-repo"
+                  type="url"
+                  name="editGitRepoUrl"
+                  [(ngModel)]="editRepoUrl"
+                  aria-label="Edit module git repo URL"
+                  placeholder="https://github.com/org/repo"
+                  class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+              <div>
+                <label for="edit-module-branch" class="block text-xs font-medium text-slate-700 mb-1">
+                  Base Branch
+                </label>
+                <input
+                  id="edit-module-branch"
+                  type="text"
+                  name="editBaseBranch"
+                  [(ngModel)]="editBaseBranch"
+                  aria-label="Edit module base branch"
+                  placeholder="dev"
+                  class="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-md focus:outline-none focus:border-slate-300"
+                />
+              </div>
+            </div>
             <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
               <button
                 type="button"
@@ -262,10 +322,14 @@ export class ModulesComponent {
   newName = '';
   newDesc = '';
   newLeadId = 'dev-user-1';
+  newRepoUrl = '';
+  newBaseBranch = '';
 
   editName = '';
   editDesc = '';
   editLeadId = '';
+  editRepoUrl = '';
+  editBaseBranch = '';
 
   readonly memberOptions = computed<DropdownOption[]>(() => [
     { value: '', label: 'Unassigned' },
@@ -300,6 +364,8 @@ export class ModulesComponent {
   openCreateModal(): void {
     this.newName = '';
     this.newDesc = '';
+    this.newRepoUrl = '';
+    this.newBaseBranch = '';
     const firstMember = this.projectService.members()[0]?.user_id || '';
     this.newLeadId = firstMember;
     this.isCreateOpen.set(true);
@@ -310,6 +376,8 @@ export class ModulesComponent {
     this.editName = module.name;
     this.editDesc = module.description || '';
     this.editLeadId = module.lead_user_id || '';
+    this.editRepoUrl = module.git_repo_url || '';
+    this.editBaseBranch = module.base_branch || '';
     this.isEditOpen.set(true);
   }
 
@@ -341,9 +409,17 @@ export class ModulesComponent {
   submitCreate(): void {
     const trimmedName = this.newName.trim();
     if (!trimmedName) return;
-    this.projectService.createModule(trimmedName, this.newDesc.trim(), this.newLeadId);
+    this.projectService.createModule(
+      trimmedName,
+      this.newDesc.trim(),
+      this.newLeadId,
+      this.newRepoUrl.trim(),
+      this.newBaseBranch.trim()
+    );
     this.newName = '';
     this.newDesc = '';
+    this.newRepoUrl = '';
+    this.newBaseBranch = '';
     this.isCreateOpen.set(false);
   }
 
@@ -355,6 +431,8 @@ export class ModulesComponent {
       name: trimmedName,
       description: this.editDesc.trim(),
       lead_user_id: this.editLeadId,
+      git_repo_url: this.editRepoUrl.trim(),
+      base_branch: this.editBaseBranch.trim(),
     });
     this.closeEditModal();
   }
