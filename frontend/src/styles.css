@@ -281,3 +281,10 @@ textarea.auto-grow-comment {
   background-color: var(--project-bg, #f8fafc);
   transition: background-color 0.2s ease;
 }
+
+/* Reserve room for the always-visible top-right copy icon on the description
+   editor. Applies to both the textarea and its auto-grow mirror so wrapping matches. */
+.growable-textarea.growable-textarea--with-action::after,
+.growable-textarea.growable-textarea--with-action > textarea.auto-grow-description {
+  padding-right: 2.25rem;
+}

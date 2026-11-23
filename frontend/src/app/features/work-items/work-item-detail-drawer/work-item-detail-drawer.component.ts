@@ -20,6 +20,7 @@ import {
 } from '../../../core/models/project.model';
 import { DropdownComponent, DropdownOption } from '../../../shared/components/dropdown.component';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
+import { CopyButtonComponent } from '../../../shared/components/copy-button.component';
 import { WorkItemAttachmentsComponent } from '../work-item-attachments/work-item-attachments.component';
 import { WorkItemScionBarComponent } from '../work-item-scion/work-item-scion-bar.component';
 import { ScionSlashMenuComponent } from '../work-item-scion/scion-slash-menu.component';
@@ -45,6 +46,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
   selector: 'app-work-item-detail-drawer',
   standalone: true,
   imports: [
+    CopyButtonComponent,
     CommonModule,
     FormsModule,
     DropdownComponent,
@@ -460,32 +462,39 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                 </div>
               </div>
 
-              @if (previewDesc()) {
-                <div
-                  class="p-3 rounded-md bg-slate-50 border border-slate-200 min-h-[120px] max-h-[200vh] overflow-y-auto"
-                  [innerHTML]="item.description | markdown"
-                ></div>
-              } @else {
-                <div
-                  class="growable-textarea text-xs font-mono leading-relaxed"
-                  [attr.data-replicated-value]="item.description || ''"
-                >
-                  <textarea
-                    #descTextareaRef
-                    [ngModel]="item.description"
-                    [ngModelOptions]="{ updateOn: 'blur' }"
-                    (ngModelChange)="workItemService.updateItem(item.id, { description: $event })"
-                    (input)="syncGrowableTextarea($event)"
-                    (paste)="onPasteUpload($event, item.id, 'description')"
-                    (drop)="onDropUpload($event, item.id, 'description')"
-                    (dragover)="$event.preventDefault()"
-                    [disabled]="!projectService.canEdit()"
-                    aria-label="Work item description"
-                    placeholder="Add a detailed Markdown description... (Drop files or paste images here)"
-                    class="auto-grow-description w-full min-h-[140px] max-h-[200vh] p-2.5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
-                  ></textarea>
-                </div>
-              }
+              <div class="relative" data-testid="work-item-description-container">
+                <app-copy-button
+                  class="absolute top-1.5 right-1.5 z-10"
+                  label="Copy description"
+                  [text]="item.description"
+                ></app-copy-button>
+                @if (previewDesc()) {
+                  <div
+                    class="p-3 rounded-md bg-slate-50 border border-slate-200 min-h-[120px] max-h-[200vh] overflow-y-auto pr-9"
+                    [innerHTML]="item.description | markdown"
+                  ></div>
+                } @else {
+                  <div
+                    class="growable-textarea growable-textarea--with-action text-xs font-mono leading-relaxed"
+                    [attr.data-replicated-value]="item.description || ''"
+                  >
+                    <textarea
+                      #descTextareaRef
+                      [ngModel]="item.description"
+                      [ngModelOptions]="{ updateOn: 'blur' }"
+                      (ngModelChange)="workItemService.updateItem(item.id, { description: $event })"
+                      (input)="syncGrowableTextarea($event)"
+                      (paste)="onPasteUpload($event, item.id, 'description')"
+                      (drop)="onDropUpload($event, item.id, 'description')"
+                      (dragover)="$event.preventDefault()"
+                      [disabled]="!projectService.canEdit()"
+                      aria-label="Work item description"
+                      placeholder="Add a detailed Markdown description... (Drop files or paste images here)"
+                      class="auto-grow-description w-full min-h-[140px] max-h-[200vh] p-2.5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none focus:border-slate-300 resize-y"
+                    ></textarea>
+                  </div>
+                }
+              </div>
             </div>
 
             <!-- Attachments Section -->
@@ -620,6 +629,7 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
                             Delete
                           </button>
                         }
+                        <app-copy-button label="Copy comment" [text]="cmt.body"></app-copy-button>
                       </div>
                     </div>
 
