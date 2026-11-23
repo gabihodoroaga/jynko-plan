@@ -1,4 +1,6 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { ApiService } from './api.service';
 import { UserContext } from '../models/project.model';
 import { environment } from '../../../environments/environment';
@@ -53,11 +55,19 @@ export const DEFAULT_DEV_ACCOUNTS: DevAccountPreset[] = [
 
 const AVATAR_PALETTE = ['#ea580c', '#0284c7', '#7c3aed', '#059669', '#db2777', '#4f46e5'];
 
+const UNAUTHENTICATED_USER: UserContext = {
+  user_id: '',
+  email: '',
+  name: '',
+  avatar_color: '#64748b',
+};
+
 @Injectable({
   providedIn: 'root',
 })
 export class AuthService {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   private readonly resetCallbacks: Array<() => void> = [];
   private readonly reloadCallbacks: Array<() => void> = [];
 
@@ -120,9 +130,21 @@ export class AuthService {
         const merged = this.mergeStoredProfile(user);
         this.currentUser.set(merged);
       },
-      error: () => {
-        const fallback = this.mergeStoredProfile(this.currentUser());
-        this.currentUser.set(fallback);
+      error: (err: unknown) => {
+        if (environment.devMode) {
+          const fallback = this.mergeStoredProfile(this.currentUser());
+          this.currentUser.set(fallback);
+          return;
+        }
+        this.currentUser.set({ ...UNAUTHENTICATED_USER });
+        if (
+          err instanceof HttpErrorResponse &&
+          (err.status === 401 || err.status === 403) &&
+          !this.isSignedOut()
+        ) {
+          this.isSignedOut.set(true);
+          void this.router.navigate(['/signed-out']);
+        }
       },
     });
   }
@@ -383,7 +405,10 @@ export class AuthService {
   }
 
   private readInitialUser(): UserContext {
-    if (environment.devMode && typeof sessionStorage !== 'undefined') {
+    if (!environment.devMode) {
+      return { ...UNAUTHENTICATED_USER };
+    }
+    if (typeof sessionStorage !== 'undefined') {
       try {
         const raw = sessionStorage.getItem(DEV_ACTIVE_USER_SESSION_KEY);
         if (raw) {
@@ -454,7 +479,7 @@ export class AuthService {
   }
 
   private mergeStoredProfile(user: UserContext): UserContext {
-    if (typeof localStorage === 'undefined') {
+    if (!user.user_id || typeof localStorage === 'undefined') {
       return {
         ...user,
         avatar_color: user.avatar_color || '#ea580c',
