@@ -163,6 +163,9 @@ func (o *ScionOrchestrator) Execute(
 		parsed.NewAgent = true
 		explicitTarget = ""
 	}
+	if explicitTarget != "" {
+		explicitTarget = o.resolveTargetAgentID(ctx, projectSlug, explicitTarget)
+	}
 
 	summary := &DispatchSummary{
 		OK:      true,
@@ -361,20 +364,60 @@ func (o *ScionOrchestrator) dispatchToAgent(ctx context.Context, p dispatchParam
 
 	created, err := o.client.CreateAgent(ctx, scion.CreateAgentRequest{
 		Name:              p.DefaultSlug,
-		Slug:              p.DefaultSlug,
-		ProjectSlug:       p.ProjectSlug,
+		ProjectID:         p.ProjectSlug,
 		Template:          p.Template,
+		HarnessConfig:     p.Harness,
 		Task:              p.Prompt,
 		AcceptAsyncLaunch: true,
 		Config: &scion.AgentConfig{
-			Harness: p.Harness,
-			Env:     env,
+			Harness:       p.Harness,
+			HarnessConfig: p.Harness,
+			Env:           env,
 		},
 	})
 	if err != nil {
 		return nil, "", err
 	}
 	return created, "created", nil
+}
+
+func (o *ScionOrchestrator) resolveTargetAgentID(ctx context.Context, projectSlug, targetRef string) string {
+	ref := strings.TrimSpace(targetRef)
+	if ref == "" || isCanonicalUUID(ref) || o.client == nil {
+		return ref
+	}
+	agents, err := o.client.ListAgents(ctx, projectSlug)
+	if err != nil {
+		return ref
+	}
+	for _, a := range agents {
+		if strings.EqualFold(a.ID, ref) || strings.EqualFold(a.Slug, ref) || strings.EqualFold(a.Name, ref) {
+			if a.ID != "" {
+				return a.ID
+			}
+			return ref
+		}
+	}
+	return ref
+}
+
+func isCanonicalUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return false
+			}
+			continue
+		}
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (o *ScionOrchestrator) agentWebURL(agentID string) string {
