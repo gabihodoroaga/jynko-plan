@@ -1248,6 +1248,7 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 			hasEstBtn, _, _ := drawerEl.Has(`button[aria-label="Work item estimate"]`)
 			hasAttachmentsComp, _, _ := drawerEl.Has(`app-work-item-attachments`)
 			hasUploadBtn, _, _ := drawerEl.Has(`button[aria-label="Upload attachment"]`)
+			hasDrawerDescCopy, _, _ := drawerEl.Has(`[data-testid="work-item-description-container"] button[aria-label="Copy description"]`)
 			hasDrawerLabelBtn, labelDropBtn, _ := drawerEl.Has(`button[aria-label="Toggle work item label dropdown"]`)
 			hasDrawerLabelOption := false
 			if hasDrawerLabelBtn && labelDropBtn != nil {
@@ -1255,11 +1256,11 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 				time.Sleep(150 * time.Millisecond)
 				hasDrawerLabelOption, _, _ = drawerEl.Has(`button[aria-label^="Toggle work item label "]`)
 			}
-			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && hasAttachmentsComp && hasUploadBtn && !strings.Contains(drawerText, "Delete Work Item") {
-				res.Assertions = append(res.Assertions, "Work Item side drawer renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, Attachments section, and separate 'Labels:' line with multi-select dropdown")
+			if hasFullViewBtn && hasCloseDrawerBtn && rightAlignedControls && hasTopProps && hasStartBtn && hasDueBtn && hasEstBtn && hasDrawerLabelOption && hasAttachmentsComp && hasUploadBtn && hasDrawerDescCopy && !strings.Contains(drawerText, "Delete Work Item") {
+				res.Assertions = append(res.Assertions, "Work Item side drawer renders top value-only property dropdown pills with 'Full view' and Close ('✕') buttons pinned to the right, Attachments section, icon-only description copy button, and separate 'Labels:' line with multi-select dropdown")
 			} else {
 				res.Passed = false
-				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side drawer failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v, hasAttachments=%v, hasUploadBtn=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption, hasAttachmentsComp, hasUploadBtn))
+				res.Errors = append(res.Errors, fmt.Sprintf("Work Item side drawer failed assertions: hasFullView=%v, hasClose=%v, rightAligned=%v, hasTopProps=%v, hasStart=%v, hasDue=%v, hasEst=%v, hasLabelOption=%v, hasAttachments=%v, hasUploadBtn=%v, hasDescCopy=%v", hasFullViewBtn, hasCloseDrawerBtn, rightAlignedControls, hasTopProps, hasStartBtn, hasDueBtn, hasEstBtn, hasDrawerLabelOption, hasAttachmentsComp, hasUploadBtn, hasDrawerDescCopy))
 			}
 		} else {
 			res.Passed = false
@@ -1280,6 +1281,24 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 	hasAutoGrowDesc, _, _ := detailPage.Has(`textarea.auto-grow-description[aria-label="Work item description"]`)
 	hasBackLink, _, _ := detailPage.Has(`a[aria-label="Back to Work Items"]`)
 	hasAttachmentsPage, _, _ := detailPage.Has(`app-work-item-attachments`)
+	// Description copy icon must be visible (not hover-only) in the top-right corner of the description box
+	descCopyTopRight := detailPage.MustEval(`() => {
+		const box = document.querySelector('[data-testid="work-item-description-container"]');
+		const btn = box && box.querySelector('button[aria-label="Copy description"]');
+		if (!box || !btn) return false;
+		const b = box.getBoundingClientRect();
+		const r = btn.getBoundingClientRect();
+		const style = getComputedStyle(btn);
+		const visible = r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0;
+		const iconOnly = btn.textContent.trim() === '' && !!btn.querySelector('svg');
+		return visible && iconOnly && r.right > b.left + b.width / 2 && r.top < b.top + b.height / 2;
+	}`).Bool()
+	if descCopyTopRight {
+		res.Assertions = append(res.Assertions, "Work item description shows an always-visible icon-only copy button in its top-right corner")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing always-visible icon-only top-right button[aria-label='Copy description'] inside [data-testid='work-item-description-container']")
+	}
 
 	if strings.Contains(detailMain, "HODO-1") && hasTopPropsPage && hasStartDateBtn && hasDueDateBtn && hasEstimateBtn && hasAutoGrowDesc && hasBackLink && strings.Contains(detailMain, "Sub-Work Items") && hasAttachmentsPage {
 		res.Assertions = append(res.Assertions, "Full-page Work Item view renders single-column layout with top property pills, auto-growing Description, Attachments section, and sub-items checklist")
@@ -1322,6 +1341,12 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 				time.Sleep(350 * time.Millisecond)
 				if hasEditComment, _, _ := detailPage.Has(`button[aria-label="Edit comment"]`); hasEditComment {
 					res.Assertions = append(res.Assertions, "Posted Markdown comment renders formatted HTML and exposes inline 'Edit' action")
+				}
+				if hasCopyComment, _, _ := detailPage.Has(`button[aria-label="Copy comment"]`); hasCopyComment {
+					res.Assertions = append(res.Assertions, "Discussion comments expose an always-visible icon-only 'Copy comment' button")
+				} else {
+					res.Passed = false
+					res.Errors = append(res.Errors, "Posted comment is missing button[aria-label='Copy comment']")
 				}
 			}
 		}
