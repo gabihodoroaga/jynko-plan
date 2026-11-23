@@ -278,8 +278,19 @@ export class AuthService {
     if (!this.isDevMode && typeof window !== 'undefined') {
       const host = window.location.hostname;
       if (host !== 'localhost' && host !== '127.0.0.1') {
+        if (clearCookieFirst && typeof fetch === 'function') {
+          fetch('/_gcp_iap/clear_login_cookie', {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            redirect: 'manual',
+          }).catch(() => {});
+        }
+        // Navigate directly to __gcp_iap_oauth_prompt=1 with ngsw-bypass=true so IAP
+        // does not 302 through ?gcp-iap-mode=CLEAR_LOGIN_COOKIE -> /?__gcp_iap_oauth_prompt=1
+        // (which strips ngsw-bypass=true and lets ngsw-worker.js serve cached index.html).
         const target = clearCookieFirst
-          ? '/?gcp-iap-mode=CLEAR_LOGIN_COOKIE&ngsw-bypass=true'
+          ? '/?__gcp_iap_oauth_prompt=1&ngsw-bypass=true'
           : '/?ngsw-bypass=true';
         window.location.assign(target);
         return true;
