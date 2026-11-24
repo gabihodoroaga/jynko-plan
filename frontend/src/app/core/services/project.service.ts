@@ -295,6 +295,30 @@ export class ProjectService {
     });
   }
 
+  updateMemberName(userId: string, name: string): void {
+    const projectId = this.activeProjectId();
+    if (!projectId || !userId) return;
+    const current = this.members().find((m) => m.user_id === userId);
+    const cleanName = (name ?? '').trim();
+    if (!current || !cleanName || cleanName === current.name) return;
+    this.members.update((list) =>
+      list.map((m) => (m.user_id === userId ? { ...m, name: cleanName } : m))
+    );
+    this.api
+      .patch<ProjectMember>(`/projects/${projectId}/members/${encodeURIComponent(userId)}`, {
+        name: cleanName,
+      })
+      .subscribe({
+        next: (saved) => {
+          this.members.update((list) => list.map((m) => (m.user_id === userId ? saved : m)));
+        },
+        error: () => {
+          // Roll back only this member so concurrent edits to other members are preserved.
+          this.members.update((list) => list.map((m) => (m.user_id === userId ? current : m)));
+        },
+      });
+  }
+
   removeMember(userId: string): void {
     const projectId = this.activeProjectId();
     if (!projectId || !userId) return;
