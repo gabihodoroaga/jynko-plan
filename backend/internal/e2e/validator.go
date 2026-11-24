@@ -325,6 +325,99 @@ func assertProjectBreadcrumbNavigatesToOverview(page *rod.Page, res *ValidationC
 	}
 }
 
+// countAPIRequests returns how many network requests (fetch / XHR resource-timing entries) the page has
+// issued whose URL path ends with pathSuffix (e.g. "/projects/proj-jynko-core/cycles"). Used by PLAN-12
+// checks to prove each page fetches its own items from the server.
+func countAPIRequests(page *rod.Page, pathSuffix string) int {
+	return page.MustEval(`(suffix) => performance.getEntriesByType('resource').filter((e) => {
+		try { return new URL(e.name).pathname.endsWith(suffix); } catch (_) { return false; }
+	}).length`, pathSuffix).Int()
+}
+
+// waitForAPIRequests polls until at least minCount requests ending with pathSuffix were issued.
+func waitForAPIRequests(page *rod.Page, pathSuffix string, minCount int, timeout time.Duration) int {
+	deadline := time.Now().Add(timeout)
+	count := countAPIRequests(page, pathSuffix)
+	for count < minCount && time.Now().Before(deadline) {
+		time.Sleep(150 * time.Millisecond)
+		count = countAPIRequests(page, pathSuffix)
+	}
+	return count
+}
+
+// assertPageRefreshButton verifies PLAN-12 on a project page: opening the page fetches its items from the
+// server (apiSuffix), an icon-only refresh button sits in the project top bar on the left of the
+// "+ Add ..." primary action (when present), and clicking it re-fetches the page's items.
+func assertPageRefreshButton(page *rod.Page, res *ValidationCheckResult, pageLabel, apiSuffix string) {
+	if n := waitForAPIRequests(page, apiSuffix, 1, 4*time.Second); n >= 1 {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s page fetches its latest items from the server when opened (GET ...%s)", pageLabel, apiSuffix))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s page did not request GET ...%s when opened", pageLabel, apiSuffix))
+	}
+
+	info := page.MustEval(`() => {
+		const bar = document.querySelector('main [data-testid="project-top-bar"]');
+		const btn = bar && bar.querySelector('button[data-testid="page-refresh-btn"]');
+		if (!btn) return { ok: false };
+		const r = btn.getBoundingClientRect();
+		const primary = bar.querySelector('[data-testid="page-primary-action-btn"]');
+		let leftOfPrimary = true;
+		if (primary) {
+			const p = primary.getBoundingClientRect();
+			leftOfPrimary = r.right <= p.left + 1 && Math.abs((r.top + r.height / 2) - (p.top + p.height / 2)) < 12;
+		}
+		return {
+			ok: true,
+			visible: r.width > 0 && r.height > 0,
+			iconOnly: btn.textContent.trim() === '' && !!btn.querySelector('svg'),
+			hasLabel: (btn.getAttribute('aria-label') || '').trim().length > 0,
+			leftOfPrimary,
+			hasPrimary: !!primary,
+		};
+	}`)
+	if !info.Get("ok").Bool() {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s page missing refresh button main [data-testid='project-top-bar'] button[data-testid='page-refresh-btn']", pageLabel))
+		return
+	}
+	if info.Get("visible").Bool() && info.Get("iconOnly").Bool() && info.Get("hasLabel").Bool() && info.Get("leftOfPrimary").Bool() {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s page shows an icon-only refresh button in the top bar, left of the primary '+ Add' action (primary present=%v)", pageLabel, info.Get("hasPrimary").Bool()))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s refresh button failed assertions: visible=%v, iconOnly=%v, hasAriaLabel=%v, leftOfPrimary=%v", pageLabel, info.Get("visible").Bool(), info.Get("iconOnly").Bool(), info.Get("hasLabel").Bool(), info.Get("leftOfPrimary").Bool()))
+		return
+	}
+
+	before := countAPIRequests(page, apiSuffix)
+	page.MustElement(`main [data-testid="project-top-bar"] button[data-testid="page-refresh-btn"]`).MustClick()
+	if after := waitForAPIRequests(page, apiSuffix, before+1, 5*time.Second); after > before {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("Clicking the %s refresh button re-fetches GET ...%s without navigating away", pageLabel, apiSuffix))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Clicking the %s refresh button did not issue a new GET ...%s request", pageLabel, apiSuffix))
+	}
+	time.Sleep(300 * time.Millisecond)
+}
+
+// assertNoEagerProjectCollections verifies PLAN-12 "not all at once": a freshly opened page must not fetch
+// the collections owned by other project pages.
+func assertNoEagerProjectCollections(page *rod.Page, res *ValidationCheckResult, pageLabel string, suffixes []string) {
+	time.Sleep(800 * time.Millisecond)
+	var eager []string
+	for _, suffix := range suffixes {
+		if countAPIRequests(page, suffix) > 0 {
+			eager = append(eager, suffix)
+		}
+	}
+	if len(eager) == 0 {
+		res.Assertions = append(res.Assertions, fmt.Sprintf("%s page fetches only its own data (no eager requests to %s)", pageLabel, strings.Join(suffixes, ", ")))
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("%s page eagerly requested other pages' collections: %s", pageLabel, strings.Join(eager, ", ")))
+	}
+}
+
 // assertProjectPageLayout verifies PLAN-5 / PLAN-6 / PLAN-7 on project pages (Work Items, Cycles, Epics,
 // Modules): every page has the same project top bar (breadcrumb row) tinted with the project background
 // colour, a 1px bottom hairline, and identical top/left padding; the page content below keeps the default
@@ -541,26 +634,14 @@ func waitForPageRefreshAndReady(page *rod.Page, markerExpr string, timeout time.
 }
 
 func assertHeaderAndDragRefresh(page *rod.Page, res *ValidationCheckResult) {
-	hasRefreshBtn := page.MustEval(`() => {
-		const el = document.querySelector('header button[data-testid="app-refresh-btn"][aria-label="Refresh page"]');
-		if (!el) return false;
-		const r = el.getBoundingClientRect();
-		return r.width > 0 && r.height > 0;
-	}`).Bool()
+	// 1. PLAN-12: the global top-bar refresh button (left of the user avatar) was removed in favour of
+	// per-page refresh buttons next to each page's "+ Add" action.
+	hasRefreshBtn, _, _ := page.Has(`header button[data-testid="app-refresh-btn"]`)
 	if !hasRefreshBtn {
-		res.Passed = false
-		res.Errors = append(res.Errors, "Missing visible top-bar refresh button header button[data-testid='app-refresh-btn'][aria-label='Refresh page']")
-		return
-	}
-
-	// 1. Verify clicking the top-bar refresh button reloads the page cleanly
-	page.MustEval(`() => { window.__e2eBeforeTopRefresh = true; }`)
-	page.MustElement(`header button[data-testid="app-refresh-btn"]`).MustClick()
-	if waitForPageRefreshAndReady(page, `() => typeof window.__e2eBeforeTopRefresh === 'undefined'`, 8*time.Second) {
-		res.Assertions = append(res.Assertions, "Clicking top-bar refresh button reloads the application and restores live workspace data")
+		res.Assertions = append(res.Assertions, "Top-bar refresh button (header button[data-testid='app-refresh-btn']) is no longer rendered next to the user avatar")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, "Clicking top-bar refresh button did not reload the page within 8s")
+		res.Errors = append(res.Errors, "Top-bar refresh button header button[data-testid='app-refresh-btn'] should have been removed (PLAN-12)")
 	}
 
 	// 2. Verify click-and-drag-down gesture shows pull-to-refresh indicator and reloads on release
@@ -934,6 +1015,16 @@ func CheckProjectsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationC
 		res.Errors = append(res.Errors, fmt.Sprintf("Expected URL to include '/projects/proj-jynko-core', got: %q", currentURL))
 	}
 
+	// PLAN-12: the Overview fetches only its own data (project, members, labels) — not every project
+	// collection at once — and offers an icon-only refresh button in the project top bar.
+	assertNoEagerProjectCollections(page, &res, "Overview", []string{
+		"/projects/proj-jynko-core/items",
+		"/projects/proj-jynko-core/cycles",
+		"/projects/proj-jynko-core/epics",
+		"/projects/proj-jynko-core/modules",
+	})
+	assertPageRefreshButton(page, &res, "Overview", "/projects/proj-jynko-core")
+
 	// Verify project switching via left tree
 	if hasCloudOverview, cloudLink, _ := page.Has(`a[aria-label="Open cloud-infra overview"]`); hasCloudOverview && cloudLink != nil {
 		cloudLink.MustClick()
@@ -1203,6 +1294,7 @@ func CheckWorkItemsViews(browser *rod.Browser, baseURL, outDir string) Validatio
 		res.Errors = append(res.Errors, "Missing [data-testid='open-create-work-item-btn'] button")
 	}
 
+	assertPageRefreshButton(page, &res, "Work Items", "/projects/proj-jynko-core/items")
 	assertProjectPageLayout(page, &res, "Work Items")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Work Items")
 	res.DurationMs = time.Since(start).Milliseconds()
@@ -1228,8 +1320,16 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 
 	// Open Work Item side drawer
 	if hasCard, cardEl, _ := page.Has(`[data-item-key="HODO-1"]`); hasCard && cardEl != nil {
+		itemFetchesBefore := countAPIRequests(page, "/projects/proj-jynko-core/items/item-1")
 		cardEl.MustClick()
 		time.Sleep(300 * time.Millisecond)
+		// PLAN-12: opening the drawer fetches the latest server version of the item
+		if n := waitForAPIRequests(page, "/projects/proj-jynko-core/items/item-1", itemFetchesBefore+1, 4*time.Second); n > itemFetchesBefore {
+			res.Assertions = append(res.Assertions, "Opening a work item in the side drawer fetches its latest version from the server (GET .../items/item-1)")
+		} else {
+			res.Passed = false
+			res.Errors = append(res.Errors, "Opening the work item drawer did not request GET .../items/item-1")
+		}
 		if hasDrawer, drawerEl, _ := page.Has(`app-work-item-detail-drawer aside`); hasDrawer && drawerEl != nil {
 			drawerText := drawerEl.MustText()
 			hasFullViewBtn, _, _ := drawerEl.Has(`button[aria-label="Open work item full page"]`)
@@ -1273,6 +1373,13 @@ func CheckWorkItemDetail(browser *rod.Browser, baseURL, outDir string) Validatio
 	// Verify full-page Work Item route (/projects/proj-jynko-core/work-items/item-1)
 	detailPage := newViewportPage(browser, baseURL+"/projects/proj-jynko-core/work-items/item-1")
 	defer detailPage.MustClose()
+	// PLAN-12: the full page fetches the latest server version of the item (not the whole project list)
+	if n := waitForAPIRequests(detailPage, "/projects/proj-jynko-core/items/item-1", 1, 4*time.Second); n >= 1 {
+		res.Assertions = append(res.Assertions, "Opening a work item full page fetches its latest version from the server (GET .../items/item-1)")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Work item full page did not request GET .../items/item-1")
+	}
 	detailMain := detailPage.MustElement("main").MustText()
 	hasTopPropsPage, _, _ := detailPage.Has(`[data-testid="work-item-top-properties"]`)
 	hasStartDateBtn, _, _ := detailPage.Has(`button[aria-label="Work item start date"]`)
@@ -1400,6 +1507,7 @@ func CheckCyclesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChe
 	assertFullWidthPageContainer(page, &res, "Cycles")
 
 	page.MustScreenshot(res.Screenshot)
+	assertPageRefreshButton(page, &res, "Cycles", "/projects/proj-jynko-core/cycles")
 	assertProjectPageLayout(page, &res, "Cycles")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Cycles")
 	res.DurationMs = time.Since(start).Milliseconds()
@@ -1460,6 +1568,7 @@ func CheckEpicsCRUD(browser *rod.Browser, baseURL, outDir string) ValidationChec
 	assertFullWidthPageContainer(page, &res, "Epics")
 
 	page.MustScreenshot(res.Screenshot)
+	assertPageRefreshButton(page, &res, "Epics", "/projects/proj-jynko-core/epics")
 	assertProjectPageLayout(page, &res, "Epics")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Epics")
 	res.DurationMs = time.Since(start).Milliseconds()
@@ -1513,6 +1622,7 @@ func CheckModulesCRUD(browser *rod.Browser, baseURL, outDir string) ValidationCh
 	assertFullWidthPageContainer(page, &res, "Modules")
 
 	page.MustScreenshot(res.Screenshot)
+	assertPageRefreshButton(page, &res, "Modules", "/projects/proj-jynko-core/modules")
 	assertProjectPageLayout(page, &res, "Modules")
 	assertProjectBreadcrumbNavigatesToOverview(page, &res, "Modules")
 	res.DurationMs = time.Since(start).Milliseconds()
@@ -1904,24 +2014,24 @@ func CheckMobileResponsiveLayout(browser *rod.Browser, baseURL, outDir string) V
 	page := newMobileViewportPage(browser, url)
 	defer page.MustClose()
 
-	// 1. Assert mobile hamburger button and top-bar refresh button are visible, and bottom navigation bar is omitted to maximize vertical screen space
+	// 1. Assert mobile hamburger button is visible, the removed top-bar refresh button is absent (PLAN-12), and bottom navigation bar is omitted to maximize vertical screen space
 	hasHamburger := page.MustEval(`() => {
 		const el = document.querySelector('button[aria-label="Toggle mobile navigation"]');
 		return Boolean(el && el.getBoundingClientRect().width > 0);
 	}`).Bool()
 	hasMobileRefreshBtn := page.MustEval(`() => {
-		const el = document.querySelector('header button[data-testid="app-refresh-btn"][aria-label="Refresh page"]');
+		const el = document.querySelector('header button[data-testid="app-refresh-btn"]');
 		return Boolean(el && el.getBoundingClientRect().width > 0);
 	}`).Bool()
 	hasBottomNav := page.MustEval(`() => {
 		const el = document.querySelector('nav[aria-label="Mobile bottom navigation"]');
 		return Boolean(el);
 	}`).Bool()
-	if hasHamburger && hasMobileRefreshBtn && !hasBottomNav {
-		res.Assertions = append(res.Assertions, "Mobile top hamburger and refresh buttons render while bottom navigation bar is omitted to maximize vertical screen space at 390x844")
+	if hasHamburger && !hasMobileRefreshBtn && !hasBottomNav {
+		res.Assertions = append(res.Assertions, "Mobile top hamburger renders (global top-bar refresh button removed, PLAN-12) while bottom navigation bar is omitted to maximize vertical screen space at 390x844")
 	} else {
 		res.Passed = false
-		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v), refresh button (%v), and bottom nav omitted (!%v) at 390x844", hasHamburger, hasMobileRefreshBtn, hasBottomNav))
+		res.Errors = append(res.Errors, fmt.Sprintf("Expected mobile hamburger (%v), top-bar refresh button removed (!%v), and bottom nav omitted (!%v) at 390x844", hasHamburger, hasMobileRefreshBtn, hasBottomNav))
 	}
 
 	// 2. Assert <main> receives full mobile viewport width (>= 350px) instead of being crushed by desktop sidebars

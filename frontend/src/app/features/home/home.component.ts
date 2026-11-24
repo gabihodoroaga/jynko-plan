@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, effect, inject, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { ProjectService } from '../../core/services/project.service';
@@ -223,6 +223,18 @@ export class HomeComponent {
   readonly pageService = inject(PageService);
   readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+
+  constructor() {
+    // PLAN-12: work items are no longer preloaded for every project on startup;
+    // this cross-project view fetches the latest items of each project when opened.
+    effect(
+      () => {
+        if (!this.projectService.hasProjects()) return;
+        untracked(() => void this.workItemService.loadItemsForAllProjects());
+      },
+      { allowSignalWrites: true }
+    );
+  }
 
   readonly totalInProgressCount = computed(
     () => this.workItemService.items().filter((i) => i.status === 'IN_PROGRESS').length
