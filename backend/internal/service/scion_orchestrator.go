@@ -233,15 +233,16 @@ func (o *ScionOrchestrator) Execute(
 		}
 
 		agent, action, err := o.dispatchToAgent(ctx, dispatchParams{
-			TargetID:    targetID,
-			ForceNew:    parsed.NewAgent,
-			DefaultSlug: fmt.Sprintf("impl-%s", strings.ToLower(item.Key)),
-			ProjectSlug: projectSlug,
-			Template:    templateName,
-			Harness:     harness,
-			Prompt:      prompt,
-			ProjectID:   proj.ID,
-			User:        user,
+			TargetID:     targetID,
+			StrictTarget: explicitTarget != "",
+			ForceNew:     parsed.NewAgent,
+			DefaultSlug:  fmt.Sprintf("impl-%s", strings.ToLower(item.Key)),
+			ProjectSlug:  projectSlug,
+			Template:     templateName,
+			Harness:      harness,
+			Prompt:       prompt,
+			ProjectID:    proj.ID,
+			User:         user,
 		})
 		if err != nil {
 			summary.OK = false
@@ -276,15 +277,16 @@ func (o *ScionOrchestrator) Execute(
 		}
 
 		agent, action, err := o.dispatchToAgent(ctx, dispatchParams{
-			TargetID:    targetID,
-			ForceNew:    parsed.NewAgent,
-			DefaultSlug: fmt.Sprintf("rev-%s", strings.ToLower(item.Key)),
-			ProjectSlug: projectSlug,
-			Template:    templateName,
-			Harness:     harness,
-			Prompt:      prompt,
-			ProjectID:   proj.ID,
-			User:        user,
+			TargetID:     targetID,
+			StrictTarget: explicitTarget != "",
+			ForceNew:     parsed.NewAgent,
+			DefaultSlug:  fmt.Sprintf("rev-%s", strings.ToLower(item.Key)),
+			ProjectSlug:  projectSlug,
+			Template:     templateName,
+			Harness:      harness,
+			Prompt:       prompt,
+			ProjectID:    proj.ID,
+			User:         user,
 		})
 		if err != nil {
 			summary.OK = false
@@ -322,15 +324,16 @@ func (o *ScionOrchestrator) Execute(
 }
 
 type dispatchParams struct {
-	TargetID    string
-	ForceNew    bool
-	DefaultSlug string
-	ProjectSlug string
-	Template    string
-	Harness     string
-	Prompt      string
-	ProjectID   string
-	User        model.UserContext
+	TargetID     string
+	StrictTarget bool
+	ForceNew     bool
+	DefaultSlug  string
+	ProjectSlug  string
+	Template     string
+	Harness      string
+	Prompt       string
+	ProjectID    string
+	User         model.UserContext
 }
 
 func (o *ScionOrchestrator) dispatchToAgent(ctx context.Context, p dispatchParams) (*scion.Agent, string, error) {
@@ -343,8 +346,8 @@ func (o *ScionOrchestrator) dispatchToAgent(ctx context.Context, p dispatchParam
 			}
 			return agent, "messaged", nil
 		}
-		if !errors.Is(err, scion.ErrAgentNotFound) {
-			return nil, "", err
+		if !errors.Is(err, scion.ErrAgentNotFound) || p.StrictTarget {
+			return nil, "", fmt.Errorf("target agent %q not found or unreachable: %w", p.TargetID, err)
 		}
 	}
 
@@ -396,6 +399,18 @@ func (o *ScionOrchestrator) resolveTargetAgentID(ctx context.Context, projectSlu
 				return a.ID
 			}
 			return ref
+		}
+	}
+	slugPrefix := strings.TrimSpace(projectSlug)
+	if slugPrefix != "" && strings.HasPrefix(strings.ToLower(ref), strings.ToLower(slugPrefix)+"--") {
+		trimmedRef := ref[len(slugPrefix)+2:]
+		for _, a := range agents {
+			if strings.EqualFold(a.Slug, trimmedRef) || strings.EqualFold(a.Name, trimmedRef) {
+				if a.ID != "" {
+					return a.ID
+				}
+				return ref
+			}
 		}
 	}
 	return ref
