@@ -9,7 +9,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { PwaService } from '../../core/services/pwa.service';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
-import { ALL_STATUSES, Project, ProjectRole, ScionDefaults } from '../../core/models/project.model';
+import { ALL_STATUSES, Project, ProjectMember, ProjectRole, ScionDefaults } from '../../core/models/project.model';
 
 @Component({
   selector: 'app-settings',
@@ -1058,8 +1058,24 @@ import { ALL_STATUSES, Project, ProjectRole, ScionDefaults } from '../../core/mo
               <div class="divide-y divide-slate-200">
                 @for (mem of projectService.members(); track mem.user_id) {
                   <div class="px-5 py-2.5 flex items-center justify-between text-xs">
-                    <div>
-                      <div class="font-medium text-slate-900">{{ mem.name }}</div>
+                    <div class="min-w-0 flex-1 mr-3">
+                      @if (projectService.isAdmin()) {
+                        <input
+                          #memberNameInput
+                          type="text"
+                          [ngModel]="mem.name"
+                          [ngModelOptions]="{ updateOn: 'blur' }"
+                          (ngModelChange)="onMemberNameChange(mem, $event, memberNameInput)"
+                          (keydown.enter)="$any($event.target).blur()"
+                          maxlength="100"
+                          aria-label="Edit member display name"
+                          [attr.data-member-email]="mem.email"
+                          title="Click to edit display name"
+                          class="w-full max-w-xs -ml-1.5 px-1.5 py-0.5 font-medium text-slate-900 bg-transparent border border-transparent rounded-md hover:border-slate-200 focus:bg-white focus:border-slate-300 focus:outline-none"
+                        />
+                      } @else {
+                        <div class="font-medium text-slate-900">{{ mem.name }}</div>
+                      }
                       <div class="text-[11px] font-mono text-slate-400">{{ mem.email }}</div>
                     </div>
                     <div class="flex items-center gap-2.5">
@@ -1268,6 +1284,17 @@ export class SettingsComponent {
 
   onRoleChange(val: string): void {
     this.newMemberRole = val as ProjectRole;
+  }
+
+  onMemberNameChange(mem: ProjectMember, value: string, input: HTMLInputElement): void {
+    const name = (value ?? '').trim();
+    if (!name) {
+      // Display name is required; revert an emptied field to the stored name.
+      input.value = mem.name;
+      return;
+    }
+    if (name !== value) input.value = name;
+    this.projectService.updateMemberName(mem.user_id, name);
   }
 
   addMember(): void {

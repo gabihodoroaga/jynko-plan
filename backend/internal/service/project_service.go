@@ -182,6 +182,41 @@ func (s *ProjectService) UpsertMember(ctx context.Context, projectID string, inp
 	return member, nil
 }
 
+// UpdateMemberInput holds the editable fields of an existing project member.
+// Email and user ID are identity fields and cannot be changed.
+type UpdateMemberInput struct {
+	Name *string `json:"name"`
+}
+
+// UpdateMember updates editable fields (display name) of an existing project member.
+// The member's email, user ID, role, and joined date are preserved.
+func (s *ProjectService) UpdateMember(ctx context.Context, projectID, userID string, input UpdateMemberInput) (*model.ProjectMember, error) {
+	trimmedID := strings.TrimSpace(userID)
+	if trimmedID == "" || strings.Contains(trimmedID, "/") {
+		return nil, ErrInvalidInput
+	}
+	if input.Name == nil {
+		return nil, ErrInvalidInput
+	}
+	name := strings.TrimSpace(*input.Name)
+	if name == "" || len([]rune(name)) > 100 {
+		return nil, ErrInvalidInput
+	}
+
+	member, err := s.repo.GetMember(ctx, projectID, trimmedID)
+	if err != nil {
+		return nil, err
+	}
+	if member.Name == name {
+		return member, nil
+	}
+	member.Name = name
+	if err := s.repo.UpsertMember(ctx, projectID, member); err != nil {
+		return nil, err
+	}
+	return member, nil
+}
+
 func (s *ProjectService) RemoveMember(ctx context.Context, projectID, userID string) error {
 	trimmed := strings.TrimSpace(userID)
 	if trimmed == "" || strings.Contains(trimmed, "/") {

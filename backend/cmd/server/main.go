@@ -364,6 +364,7 @@ func SetupRouterWithOptions(
 		// RBAC Members
 		projGroup.GET("/members", viewer, projectHandler.ListMembers)
 		projGroup.POST("/members", admin, projectHandler.UpsertMember)
+		projGroup.PATCH("/members/:userId", admin, projectHandler.UpdateMember)
 		projGroup.DELETE("/members/:userId", admin, projectHandler.RemoveMember)
 
 		// Modules

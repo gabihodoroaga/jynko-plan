@@ -1788,6 +1788,7 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 
 			assertProjectBackgroundColorPicker(page, &res, baseURL)
 			assertScionProjectSettingsCard(page, &res)
+			assertMemberDisplayNameInlineEdit(page, &res)
 		} else {
 			res.Passed = false
 			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")
@@ -2073,5 +2074,83 @@ func cleanupTestProjectByName(name string) {
 				_ = r.Body.Close()
 			}
 		}
+	}
+}
+
+// assertMemberDisplayNameInlineEdit verifies that project ADMINs can edit a member's display name
+// in place (PLAN-10): the name is an inline input saved on blur, the email stays read-only, and the
+// change persists across a full browser reload. The original name is restored afterwards.
+func assertMemberDisplayNameInlineEdit(page *rod.Page, res *ValidationCheckResult) {
+	const sel = `input[aria-label="Edit member display name"]`
+	hasInput, nameInput, _ := page.Has(sel)
+	if !hasInput || nameInput == nil {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing inline member display name input (input[aria-label='Edit member display name']) in Per-Project RBAC Members card")
+		return
+	}
+	email := nameInput.MustEval(`() => this.getAttribute('data-member-email') || ''`).String()
+	original := nameInput.MustEval(`() => this.value`).String()
+	if email == "" {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Inline member display name input is missing data-member-email attribute")
+		return
+	}
+
+	hasEmailInput, _, _ := page.Has(fmt.Sprintf(`input[value=%q]`, email))
+	if hasEmailInput {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Member email must not be editable in the RBAC Members card")
+	} else {
+		res.Assertions = append(res.Assertions, "Member email is rendered as read-only text next to the editable display name")
+	}
+
+	setName := func(value string) {
+		page.MustEval(`(sel, email, value) => {
+			const el = Array.from(document.querySelectorAll(sel)).find((x) => x.getAttribute('data-member-email') === email);
+			if (!el) return;
+			el.focus();
+			el.value = value;
+			el.dispatchEvent(new Event('input', { bubbles: true }));
+			el.blur();
+		}`, sel, email, value)
+		time.Sleep(800 * time.Millisecond)
+	}
+	readName := func() string {
+		return page.MustEval(`(sel, email) => {
+			const el = Array.from(document.querySelectorAll(sel)).find((x) => x.getAttribute('data-member-email') === email);
+			return el ? el.value : '';
+		}`, sel, email).String()
+	}
+	reopenHodo := func() {
+		page.MustReload()
+		page.MustWaitLoad()
+		time.Sleep(600 * time.Millisecond)
+		if hasBtn, hodoBtn, _ := page.Has(`button[aria-label="Open project settings for hodo"]`); hasBtn && hodoBtn != nil {
+			hodoBtn.MustClick()
+			time.Sleep(600 * time.Millisecond)
+		}
+	}
+
+	newName := fmt.Sprintf("E2E Member %d", time.Now().Unix()%100000)
+	setName(newName)
+	reopenHodo()
+	if got := readName(); got == newName {
+		res.Assertions = append(res.Assertions, "Member display name is editable in place (save on blur, no explicit Save button) and persists across reload")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Member display name edit did not persist (expected %q, got %q)", newName, got))
+	}
+
+	// Emptying the field must revert to the stored name rather than saving a blank name.
+	setName("   ")
+	if got := readName(); got == newName {
+		res.Assertions = append(res.Assertions, "Clearing the member display name reverts to the stored name")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Empty member display name was not reverted (got %q)", got))
+	}
+
+	if original != "" && original != newName {
+		setName(original)
 	}
 }

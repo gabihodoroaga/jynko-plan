@@ -128,6 +128,31 @@ func (h *ProjectHandler) UpsertMember(c *gin.Context) {
 	c.JSON(http.StatusOK, member)
 }
 
+func (h *ProjectHandler) UpdateMember(c *gin.Context) {
+	projectID := c.Param("projectId")
+	userID := c.Param("userId")
+	var input service.UpdateMemberInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	member, err := h.svc.UpdateMember(c.Request.Context(), projectID, userID, input)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "member not found"})
+			return
+		}
+		if errors.Is(err, service.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name must be a non-empty string of at most 100 characters"})
+			return
+		}
+		respondInternalError(c, "failed to update project member", err)
+		return
+	}
+	c.JSON(http.StatusOK, member)
+}
+
 func (h *ProjectHandler) RemoveMember(c *gin.Context) {
 	projectID := c.Param("projectId")
 	userID := c.Param("userId")
