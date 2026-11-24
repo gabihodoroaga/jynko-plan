@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, WritableSignal, computed, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import {
@@ -14,6 +14,8 @@ import {
   ScionDefaults,
 } from '../models/project.model';
 
+export type ProjectCollectionKind = 'cycles' | 'epics' | 'modules';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -28,6 +30,9 @@ export class ProjectService {
   readonly activeProject = computed<Project | undefined>(() =>
     this.projects().find((p) => p.id === this.activeProjectId()) ?? this.projects()[0]
   );
+
+  /** True once the accessible project list has been loaded (changes only on empty <-> non-empty). */
+  readonly hasProjects = computed<boolean>(() => this.projects().length > 0);
 
   getProjectById(projectId: string): Project | undefined {
     return this.projects().find((p) => p.id === projectId);
@@ -95,6 +100,14 @@ export class ProjectService {
 
   readonly isAdmin = computed<boolean>(() => this.currentUserRole() === 'ADMIN');
 
+  /**
+   * PLAN-12: tracks which project each lazily loaded collection (cycles, epics,
+   * modules) currently holds, so pages fetch only their own data on navigation
+   * and supporting pickers can lazily "ensure" a collection without refetching.
+   */
+  private readonly loadedCollections = new Map<ProjectCollectionKind, string>();
+  private readonly inflightRequests = new Map<string, Promise<void>>();
+
   readonly isProjectModalOpen = signal<boolean>(false);
   readonly editingProject = signal<Project | null>(null);
 
@@ -112,6 +125,8 @@ export class ProjectService {
     this.epics.set([]);
     this.cycles.set([]);
     this.labels.set([]);
+    this.loadedCollections.clear();
+    this.inflightRequests.clear();
     this.pendingRouteProject = null;
     this.closeProjectModal();
   }
@@ -164,41 +179,116 @@ export class ProjectService {
       this.epics.set([]);
       this.cycles.set([]);
       this.labels.set([]);
+      this.loadedCollections.clear();
     }
     this.loadProjectMetadata(projectId);
   }
 
-  loadProjectMetadata(projectId: string): void {
-    if (!projectId || this.auth.isSignedOut()) return;
-    this.api.get<ProjectMember[]>(`/projects/${projectId}/members`).subscribe({
-      next: (res) => {
-        if (this.activeProjectId() !== projectId) return;
-        this.members.set(res ?? []);
-      },
+  /**
+   * Loads the lightweight project metadata every project page depends on
+   * (members for RBAC, labels for badges). Page-specific collections
+   * (cycles, epics, modules) are fetched by the page that shows them.
+   */
+  loadProjectMetadata(projectId: string): Promise<void> {
+    if (!projectId || this.auth.isSignedOut()) return Promise.resolve();
+    return Promise.all([
+      this.dedupe(`members:${projectId}`, () =>
+        this.fetchInto<ProjectMember>(projectId, 'members', this.members)
+      ),
+      this.dedupe(`labels:${projectId}`, () =>
+        this.fetchInto<Label>(projectId, 'labels', this.labels)
+      ),
+    ]).then(() => undefined);
+  }
+
+  /** Re-fetches the project record itself plus its members and labels (Overview page). */
+  refreshProjectOverview(projectId: string = this.activeProjectId()): Promise<void> {
+    if (!projectId || this.auth.isSignedOut()) return Promise.resolve();
+    const projectReq = new Promise<void>((resolve) => {
+      this.api.get<Project>(`/projects/${projectId}`).subscribe({
+        next: (saved) => {
+          if (saved) {
+            this.projects.update((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+          }
+          resolve();
+        },
+        error: () => resolve(),
+      });
     });
-    this.api.get<Module[]>(`/projects/${projectId}/modules`).subscribe({
-      next: (res) => {
-        if (this.activeProjectId() !== projectId) return;
-        this.modules.set(res ?? []);
-      },
-    });
-    this.api.get<Epic[]>(`/projects/${projectId}/epics`).subscribe({
-      next: (res) => {
-        if (this.activeProjectId() !== projectId) return;
-        this.epics.set(res ?? []);
-      },
-    });
-    this.api.get<Cycle[]>(`/projects/${projectId}/cycles`).subscribe({
-      next: (res) => {
-        if (this.activeProjectId() !== projectId) return;
-        this.cycles.set(res ?? []);
-      },
-    });
-    this.api.get<Label[]>(`/projects/${projectId}/labels`).subscribe({
-      next: (res) => {
-        if (this.activeProjectId() !== projectId) return;
-        this.labels.set(res ?? []);
-      },
+    return Promise.all([projectReq, this.loadProjectMetadata(projectId)]).then(() => undefined);
+  }
+
+  /** Always fetches the latest cycles of the project from the server. */
+  loadCycles(projectId: string = this.activeProjectId()): Promise<void> {
+    return this.loadCollection<Cycle>('cycles', projectId, this.cycles);
+  }
+
+  /** Always fetches the latest epics of the project from the server. */
+  loadEpics(projectId: string = this.activeProjectId()): Promise<void> {
+    return this.loadCollection<Epic>('epics', projectId, this.epics);
+  }
+
+  /** Always fetches the latest modules of the project from the server. */
+  loadModules(projectId: string = this.activeProjectId()): Promise<void> {
+    return this.loadCollection<Module>('modules', projectId, this.modules);
+  }
+
+  /** True when the given collection already holds data for the project. */
+  isCollectionLoaded(kind: ProjectCollectionKind, projectId: string = this.activeProjectId()): boolean {
+    return !!projectId && this.loadedCollections.get(kind) === projectId;
+  }
+
+  /**
+   * Fetches cycles / epics / modules only if they have not been loaded yet for
+   * the project. Used by pickers (filters, drawer, quick-create) that need the
+   * options but are not the page that owns those collections.
+   */
+  ensurePlanningCollections(projectId: string = this.activeProjectId()): Promise<void> {
+    if (!projectId) return Promise.resolve();
+    const pending: Promise<void>[] = [];
+    if (!this.isCollectionLoaded('cycles', projectId)) pending.push(this.loadCycles(projectId));
+    if (!this.isCollectionLoaded('epics', projectId)) pending.push(this.loadEpics(projectId));
+    if (!this.isCollectionLoaded('modules', projectId)) pending.push(this.loadModules(projectId));
+    return Promise.all(pending).then(() => undefined);
+  }
+
+  private loadCollection<T>(
+    kind: ProjectCollectionKind,
+    projectId: string,
+    target: WritableSignal<T[]>
+  ): Promise<void> {
+    if (!projectId || this.auth.isSignedOut()) return Promise.resolve();
+    return this.dedupe(`${kind}:${projectId}`, () =>
+      this.fetchInto<T>(projectId, kind, target, () => this.loadedCollections.set(kind, projectId))
+    );
+  }
+
+  /** Shares a single in-flight request between concurrent callers of the same key. */
+  private dedupe(key: string, start: () => Promise<void>): Promise<void> {
+    const inflight = this.inflightRequests.get(key);
+    if (inflight) return inflight;
+    const req = start().finally(() => this.inflightRequests.delete(key));
+    this.inflightRequests.set(key, req);
+    return req;
+  }
+
+  private fetchInto<T>(
+    projectId: string,
+    path: string,
+    target: WritableSignal<T[]>,
+    onLoaded?: () => void
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.api.get<T[]>(`/projects/${projectId}/${path}`).subscribe({
+        next: (res) => {
+          if (this.activeProjectId() === projectId) {
+            target.set(res ?? []);
+            onLoaded?.();
+          }
+          resolve();
+        },
+        error: () => resolve(),
+      });
     });
   }
 

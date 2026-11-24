@@ -46,7 +46,9 @@ func (h *ItemHandler) ListItems(c *gin.Context) {
 func (h *ItemHandler) GetItem(c *gin.Context) {
 	projectID := c.Param("projectId")
 	itemID := c.Param("itemId")
-	item, err := h.svc.GetByID(c.Request.Context(), projectID, itemID)
+	// Accept either the internal ID or the human key (e.g. PLAN-12) so the UI can fetch
+	// the latest server version of an item opened from a deep link (PLAN-12).
+	item, err := h.svc.GetByIDOrKey(c.Request.Context(), projectID, itemID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "work item not found"})

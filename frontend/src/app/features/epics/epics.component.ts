@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,12 +7,13 @@ import { WorkItemService } from '../../core/services/work-item.service';
 import { Epic, EpicStatus } from '../../core/models/project.model';
 import { ModalComponent } from '../../shared/components/modal.component';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
+import { RefreshButtonComponent } from '../../shared/components/refresh-button.component';
 import { ProjectBreadcrumbComponent } from '../../shared/components/project-breadcrumb.component';
 
 @Component({
   selector: 'app-epics',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, DropdownComponent, ProjectBreadcrumbComponent, RefreshButtonComponent],
   template: `
     <div class="flex flex-col w-full min-h-full">
       <!-- Project Top Bar: project breadcrumb + primary action, tinted with the project background colour (PLAN-7) -->
@@ -24,17 +25,24 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
           sectionLabel="Epics"
           [sectionRoute]="['/projects', projectService.activeProjectId(), 'epics']"
         ></app-project-breadcrumb>
-        @if (projectService.canEdit()) {
-          <button
-            type="button"
-            data-testid="page-primary-action-btn"
-            aria-label="Create new epic"
-            (click)="openCreateModal()"
-            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
-          >
-            + New Epic
-          </button>
-        }
+        <div class="flex items-center gap-2 shrink-0">
+          <app-refresh-button
+            label="Refresh epics"
+            [refreshing]="refreshing()"
+            (refresh)="refresh()"
+          ></app-refresh-button>
+          @if (projectService.canEdit()) {
+            <button
+              type="button"
+              data-testid="page-primary-action-btn"
+              aria-label="Create new epic"
+              (click)="openCreateModal()"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+            >
+              + New Epic
+            </button>
+          }
+        </div>
       </div>
 
       <!-- Page Content: default slate-50 canvas, same padding as the Work Items view canvas -->
@@ -331,6 +339,43 @@ export class EpicsComponent {
   readonly projectService = inject(ProjectService);
   readonly workItemService = inject(WorkItemService);
   private readonly router = inject(Router);
+
+  /** Number of in-flight page loads; drives the refresh button spinner (PLAN-12). */
+  private readonly pendingLoads = signal<number>(0);
+  readonly refreshing = computed<boolean>(() => this.pendingLoads() > 0);
+
+  constructor() {
+    // PLAN-12: fetch the latest epics from the server whenever this page is
+    // opened or the active project changes, instead of relying on a one-off
+    // project-wide preload.
+    effect(
+      () => {
+        const projectId = this.projectService.activeProjectId();
+        // Wait until the project list is known so route slugs resolve to IDs first.
+        if (!this.projectService.hasProjects()) return;
+        untracked(() => void this.loadPageData(projectId, false));
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  /** Re-fetches the current page's items without navigating away. */
+  refresh(): void {
+    void this.loadPageData(this.projectService.activeProjectId(), true);
+  }
+
+  private async loadPageData(projectId: string, force: boolean): Promise<void> {
+    if (!projectId) return;
+    this.pendingLoads.update((n) => n + 1);
+    try {
+      await Promise.all([
+        this.projectService.loadEpics(projectId),
+        force ? this.workItemService.loadItems(projectId) : this.workItemService.ensureItems(projectId),
+      ]);
+    } finally {
+      this.pendingLoads.update((n) => Math.max(0, n - 1));
+    }
+  }
 
   readonly isCreateOpen = signal(false);
   readonly isEditOpen = signal(false);

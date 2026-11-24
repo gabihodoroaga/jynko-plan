@@ -171,7 +171,7 @@ import {
           </div>
         </div>
 
-        <!-- Right: Offline Indicator + Refresh Action + User Avatar & Account Popover Card -->
+        <!-- Right: Offline Indicator + User Avatar & Account Popover Card (page-level refresh lives next to each page's primary action, PLAN-12) -->
         <div class="relative flex items-center gap-1.5 sm:gap-2 shrink-0">
           @if (!pwaService.isOnline() && settingsService.generalSettings().pwaOfflineBanner) {
             <span
@@ -183,38 +183,6 @@ import {
               <span class="hidden sm:inline">Offline</span>
             </span>
           }
-
-          <button
-            type="button"
-            data-testid="app-refresh-btn"
-            aria-label="Refresh page"
-            [title]="pwaService.updateAvailable() ? 'Update available — click to refresh' : 'Refresh page'"
-            [disabled]="pwaService.refreshing()"
-            (click)="triggerRefresh()"
-            class="relative w-8 h-8 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-[#e1e9f4] active:bg-[#d3e3fd] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 transition-colors disabled:opacity-60 shrink-0"
-          >
-            <svg
-              class="w-4 h-4 transition-transform"
-              [class.animate-spin]="pwaService.refreshing()"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <path d="M21 3v6h-6" />
-            </svg>
-            @if (pwaService.updateAvailable() && !pwaService.refreshing()) {
-              <span
-                data-testid="app-refresh-update-dot"
-                class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-sky-600 ring-2 ring-[#f0f4f9]"
-                aria-hidden="true"
-              ></span>
-            }
-          </button>
 
           <button
             type="button"
@@ -1477,6 +1445,9 @@ export class AppComponent implements OnInit, OnDestroy {
           if (ALL_PRIORITIES.some((p) => p.value === pset.defaultNewItemPriority)) {
             this.newPriority = pset.defaultNewItemPriority as WorkItemPriority;
           }
+          // PLAN-12: cycles are loaded by the page that shows them; make sure
+          // the quick-create picker has its options.
+          void this.projectService.ensurePlanningCollections();
           const activeFilterCycle = this.workItemService.filter().cycle_id;
           const cycles = this.projectService.cycles();
           this.newCycleId =
@@ -1943,7 +1914,6 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.projectService.activeProjectId() !== projectId) {
       this.projectService.selectProject(projectId);
       this.workItemService.clearProjectScopedFilters();
-      this.workItemService.loadItems(projectId);
       this.pageService.loadWiki(projectId);
     }
   }
@@ -1952,7 +1922,6 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.projectService.activeProjectId() !== projectId) {
       this.projectService.selectProject(projectId);
       this.workItemService.clearProjectScopedFilters();
-      this.workItemService.loadItems(projectId);
       this.pageService.loadWiki(projectId);
       this.expandedProjects.update((m) => ({ ...m, [projectId]: true }));
 

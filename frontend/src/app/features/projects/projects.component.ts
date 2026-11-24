@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -8,13 +8,14 @@ import { WorkItemService } from '../../core/services/work-item.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Project, ProjectRole } from '../../core/models/project.model';
 import { Page } from '../../core/models/page.model';
+import { RefreshButtonComponent } from '../../shared/components/refresh-button.component';
 import { ProjectBreadcrumbComponent } from '../../shared/components/project-breadcrumb.component';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
 
 @Component({
   selector: 'app-projects',
   standalone: true,
-  imports: [CommonModule, FormsModule, DropdownComponent, ProjectBreadcrumbComponent],
+  imports: [CommonModule, FormsModule, DropdownComponent, ProjectBreadcrumbComponent, RefreshButtonComponent],
   template: `
     <div class="flex flex-col w-full min-h-full">
       <!-- Project Top Bar: project breadcrumb + primary action, tinted with the project background colour (PLAN-7) -->
@@ -26,6 +27,13 @@ import { DropdownComponent, DropdownOption } from '../../shared/components/dropd
           sectionLabel="Overview"
           [sectionRoute]="['/projects', projectService.activeProjectId()]"
         ></app-project-breadcrumb>
+        <div class="flex items-center gap-2 shrink-0">
+          <app-refresh-button
+            label="Refresh project overview"
+            [refreshing]="refreshing()"
+            (refresh)="refresh()"
+          ></app-refresh-button>
+        </div>
       </div>
 
       <!-- Page Content: default slate-50 canvas, same padding as the Work Items view canvas -->
@@ -293,6 +301,42 @@ export class ProjectsComponent {
   readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   protected readonly Math = Math;
+
+  /** Number of in-flight page loads; drives the refresh button spinner (PLAN-12). */
+  private readonly pendingLoads = signal<number>(0);
+  readonly refreshing = computed<boolean>(() => this.pendingLoads() > 0);
+
+  constructor() {
+    // PLAN-12: fetch the latest project overview from the server whenever this page is
+    // opened or the active project changes, instead of relying on a one-off
+    // project-wide preload.
+    effect(
+      () => {
+        const projectId = this.projectService.activeProjectId();
+        // Wait until the project list is known so route slugs resolve to IDs first.
+        if (!this.projectService.hasProjects()) return;
+        untracked(() => void this.loadPageData(projectId));
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  /** Re-fetches the current page's items without navigating away. */
+  refresh(): void {
+    void this.loadPageData(this.projectService.activeProjectId());
+  }
+
+  private async loadPageData(projectId: string): Promise<void> {
+    if (!projectId) return;
+    this.pendingLoads.update((n) => n + 1);
+    try {
+      await Promise.all([
+        this.projectService.refreshProjectOverview(projectId),
+      ]);
+    } finally {
+      this.pendingLoads.update((n) => Math.max(0, n - 1));
+    }
+  }
 
   readonly activeProjectPages = computed<Page[]>(() => {
     const proj = this.projectService.activeProject();

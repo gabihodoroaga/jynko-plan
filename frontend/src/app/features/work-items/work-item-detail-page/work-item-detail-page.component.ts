@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpEvent, HttpEventType } from '@angular/common/http';
@@ -816,8 +816,12 @@ const PRIORITY_DOT_COLORS: Record<WorkItemPriority, string> = {
           </div>
         </div>
       } @else {
-        <div class="w-full p-6 text-xs text-slate-400">
-          Loading work item details...
+        <div class="w-full p-6 text-xs text-slate-400" data-testid="work-item-detail-loading">
+          @if (itemLoadState() === 'missing') {
+            Work item not found or you no longer have access to it.
+          } @else {
+            Loading work item details...
+          }
         </div>
       }
     </div>
@@ -901,8 +905,20 @@ export class WorkItemDetailPageComponent implements OnInit {
   });
 
   private loadedRelationsKey = '';
+  private itemLoadSeq = 0;
+  readonly itemLoadState = signal<'loading' | 'loaded' | 'missing'>('loading');
 
   constructor() {
+    effect(
+      () => {
+        const projectId = this.projectService.activeProjectId();
+        const itemId = this.routeItemId();
+        if (!projectId || !itemId || !this.projectService.hasProjects()) return;
+        untracked(() => this.loadItemFromServer(projectId, itemId));
+      },
+      { allowSignalWrites: true }
+    );
+
     effect(() => {
       const item = this.currentItem();
       if (item) {
@@ -920,11 +936,26 @@ export class WorkItemDetailPageComponent implements OnInit {
     this.route.paramMap.subscribe((params) => {
       const projectId = params.get('projectId') || '';
       const itemId = params.get('itemId') || '';
+      this.itemLoadState.set('loading');
       this.routeItemId.set(itemId);
-      if (projectId && projectId !== this.projectService.activeProjectId()) {
-        this.projectService.selectProject(projectId);
-        this.workItemService.loadItems(projectId);
+      if (projectId) {
+        this.projectService.activateProjectFromRoute(projectId);
       }
+    });
+  }
+
+  /**
+   * PLAN-12: always fetch the opened work item from the server so the full page
+   * shows its latest version (and works on a deep link without loading every
+   * item of the project).
+   */
+  private loadItemFromServer(projectId: string, itemIdOrKey: string): void {
+    const seq = ++this.itemLoadSeq;
+    this.itemLoadState.set('loading');
+    void this.projectService.ensurePlanningCollections(projectId);
+    void this.workItemService.fetchItem(projectId, itemIdOrKey).then((item) => {
+      if (seq !== this.itemLoadSeq) return;
+      this.itemLoadState.set(item || this.currentItem() ? 'loaded' : 'missing');
     });
   }
 

@@ -31,7 +31,8 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
   - Brand title text: `Jynko` (must **not** contain a dropdown caret `⌄` or workspace switcher).
   - Non-production environment badge (`ENV=dev` or `ENV=stg`, omitted in `ENV=prd`): `header [data-testid="env-badge"]` (`DEV` or `STG`, with browser tab `document.title` prefixed as `[DEV] Jynko` or `[STG] Jynko`).
   - Global search input: `header input[type="search"]`.
-  - Top-bar page refresh button (checks SW updates & reloads app): `header button[data-testid="app-refresh-btn"][aria-label="Refresh page"]` (with update indicator dot `[data-testid="app-refresh-update-dot"]` when a new version is ready).
+  - **Removed (PLAN-12)**: the global top-bar refresh button `header button[data-testid="app-refresh-btn"]` no longer exists; E2E asserts it is absent. App reload stays available via the user menu (`Refresh Jynko app`), pull-to-refresh and the PWA update toast.
+  - Per-page refresh button (PLAN-12, icon-only, left of the `+ Add ...` primary action on Overview, Work items, Cycles, Epics, Modules): `main [data-testid="project-top-bar"] button[data-testid="page-refresh-btn"]` (`aria-label` = `Refresh project overview` / `Refresh work items` / `Refresh cycles` / `Refresh epics` / `Refresh modules`). Clicking it re-fetches only the current page's items from the server.
   - Pull / click-and-drag-down refresh indicator pill: `[data-testid="pull-to-refresh-indicator"]` (`data-pull-ready="true"` once threshold is reached).
   - Mobile hamburger button (`< 768px`): `button[aria-label="Toggle mobile navigation"]`.
 - **Mobile Navigation (`< 768px`)**:

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,12 +7,13 @@ import { WorkItemService } from '../../core/services/work-item.service';
 import { SettingsService } from '../../core/services/settings.service';
 import { Cycle } from '../../core/models/project.model';
 import { ModalComponent } from '../../shared/components/modal.component';
+import { RefreshButtonComponent } from '../../shared/components/refresh-button.component';
 import { ProjectBreadcrumbComponent } from '../../shared/components/project-breadcrumb.component';
 
 @Component({
   selector: 'app-cycles',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ProjectBreadcrumbComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ProjectBreadcrumbComponent, RefreshButtonComponent],
   template: `
     <div class="flex flex-col w-full min-h-full">
       <!-- Project Top Bar: project breadcrumb + primary action, tinted with the project background colour (PLAN-7) -->
@@ -24,17 +25,24 @@ import { ProjectBreadcrumbComponent } from '../../shared/components/project-brea
           sectionLabel="Cycles"
           [sectionRoute]="['/projects', projectService.activeProjectId(), 'cycles']"
         ></app-project-breadcrumb>
-        @if (projectService.canEdit()) {
-          <button
-            type="button"
-            data-testid="page-primary-action-btn"
-            aria-label="Create new cycle"
-            (click)="openCreateModal()"
-            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
-          >
-            + New Cycle
-          </button>
-        }
+        <div class="flex items-center gap-2 shrink-0">
+          <app-refresh-button
+            label="Refresh cycles"
+            [refreshing]="refreshing()"
+            (refresh)="refresh()"
+          ></app-refresh-button>
+          @if (projectService.canEdit()) {
+            <button
+              type="button"
+              data-testid="page-primary-action-btn"
+              aria-label="Create new cycle"
+              (click)="openCreateModal()"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+            >
+              + New Cycle
+            </button>
+          }
+        </div>
       </div>
 
       <!-- Page Content: default slate-50 canvas, same padding as the Work Items view canvas -->
@@ -317,6 +325,43 @@ export class CyclesComponent {
   readonly workItemService = inject(WorkItemService);
   private readonly settingsService = inject(SettingsService);
   private readonly router = inject(Router);
+
+  /** Number of in-flight page loads; drives the refresh button spinner (PLAN-12). */
+  private readonly pendingLoads = signal<number>(0);
+  readonly refreshing = computed<boolean>(() => this.pendingLoads() > 0);
+
+  constructor() {
+    // PLAN-12: fetch the latest cycles from the server whenever this page is
+    // opened or the active project changes, instead of relying on a one-off
+    // project-wide preload.
+    effect(
+      () => {
+        const projectId = this.projectService.activeProjectId();
+        // Wait until the project list is known so route slugs resolve to IDs first.
+        if (!this.projectService.hasProjects()) return;
+        untracked(() => void this.loadPageData(projectId, false));
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  /** Re-fetches the current page's items without navigating away. */
+  refresh(): void {
+    void this.loadPageData(this.projectService.activeProjectId(), true);
+  }
+
+  private async loadPageData(projectId: string, force: boolean): Promise<void> {
+    if (!projectId) return;
+    this.pendingLoads.update((n) => n + 1);
+    try {
+      await Promise.all([
+        this.projectService.loadCycles(projectId),
+        force ? this.workItemService.loadItems(projectId) : this.workItemService.ensureItems(projectId),
+      ]);
+    } finally {
+      this.pendingLoads.update((n) => Math.max(0, n - 1));
+    }
+  }
 
   readonly isCreateOpen = signal(false);
   readonly isEditOpen = signal(false);

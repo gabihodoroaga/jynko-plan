@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ApiService } from './api.service';
 import { ProjectService } from './project.service';
 import { AuthService } from './auth.service';
@@ -46,6 +46,7 @@ export class WorkItemService {
   readonly itemAgentsByItem = signal<Record<string, ItemAgentsStatus>>({});
   private readonly updateSeqByItem = new Map<string, number>();
   private readonly loadedProjects = new Set<string>();
+  private readonly inflightLoads = new Map<string, Promise<void>>();
   private readonly projectIdsKey = computed(() =>
     this.projectService
       .projects()
@@ -58,28 +59,23 @@ export class WorkItemService {
       onReset: () => this.resetState(),
     });
 
+    // PLAN-12: items are no longer fetched for every project up-front. Each page
+    // requests the items it shows; here we only prune items of projects that
+    // the user no longer has access to.
     effect(
       () => {
         const key = this.projectIdsKey();
         const ids = key ? key.split(',').filter(Boolean) : [];
+        if (ids.length === 0) return;
         const currentSet = new Set(ids);
-
-        let pruned = false;
         for (const existing of Array.from(this.loadedProjects)) {
-          if (!currentSet.has(existing)) {
-            this.loadedProjects.delete(existing);
-            pruned = true;
+          if (!currentSet.has(existing)) this.loadedProjects.delete(existing);
+        }
+        untracked(() => {
+          if (this.items().some((i) => !currentSet.has(i.project_id))) {
+            this.items.update((prev) => prev.filter((i) => currentSet.has(i.project_id)));
           }
-        }
-        if (pruned) {
-          this.items.update((prev) => prev.filter((i) => currentSet.has(i.project_id)));
-        }
-        for (const id of ids) {
-          if (!this.loadedProjects.has(id)) {
-            this.loadedProjects.add(id);
-            this.loadItems(id);
-          }
-        }
+        });
       },
       { allowSignalWrites: true }
     );
@@ -87,6 +83,7 @@ export class WorkItemService {
 
   resetState(): void {
     this.loadedProjects.clear();
+    this.inflightLoads.clear();
     this.updateSeqByItem.clear();
     this.items.set([]);
     this.subItemsByItem.set({});
@@ -152,17 +149,44 @@ export class WorkItemService {
     return this.items().filter((item) => item.project_id === projectId);
   }
 
-  loadItems(projectId: string): void {
-    if (!projectId) return;
-    this.api.get<WorkItem[]>(`/projects/${projectId}/items`).subscribe({
-      next: (res) => {
-        const incoming = res ?? [];
-        this.items.update((prev) => [
-          ...prev.filter((i) => i.project_id !== projectId),
-          ...incoming,
-        ]);
-      },
-    });
+  /** True once the work items of the project have been fetched at least once. */
+  isProjectLoaded(projectId: string): boolean {
+    return !!projectId && this.loadedProjects.has(projectId);
+  }
+
+  /** Always fetches the latest work items of a single project from the server. */
+  loadItems(projectId: string): Promise<void> {
+    if (!projectId || this.authService.isSignedOut()) return Promise.resolve();
+    const inflight = this.inflightLoads.get(projectId);
+    if (inflight) return inflight;
+    const req = new Promise<void>((resolve) => {
+      this.api.get<WorkItem[]>(`/projects/${projectId}/items`).subscribe({
+        next: (res) => {
+          const incoming = res ?? [];
+          this.loadedProjects.add(projectId);
+          this.items.update((prev) => [
+            ...prev.filter((i) => i.project_id !== projectId),
+            ...incoming,
+          ]);
+          resolve();
+        },
+        error: () => resolve(),
+      });
+    }).finally(() => this.inflightLoads.delete(projectId));
+    this.inflightLoads.set(projectId, req);
+    return req;
+  }
+
+  /** Fetches the project's work items only when they have not been loaded yet. */
+  ensureItems(projectId: string): Promise<void> {
+    if (this.isProjectLoaded(projectId)) return Promise.resolve();
+    return this.loadItems(projectId);
+  }
+
+  /** Fetches items for every accessible project (cross-project Home / My Work views). */
+  loadItemsForAllProjects(): Promise<void> {
+    const ids = this.projectService.projects().map((p) => p.id);
+    return Promise.all(ids.map((id) => this.loadItems(id))).then(() => undefined);
   }
 
   updateFilter(patch: Partial<WorkItemFilterState>): void {
@@ -202,7 +226,13 @@ export class WorkItemService {
     this.selectedItemId.set(itemId);
     const projectId = this.resolveProjectIdForItem(itemId);
     if (!projectId) return;
+    // PLAN-12: always show the latest server version of the opened item.
+    this.reloadItem(itemId, projectId);
     this.loadItemRelations(projectId, itemId);
+    if (projectId === this.projectService.activeProjectId()) {
+      // Drawer pickers (cycle / epic / module) need their options available.
+      void this.projectService.ensurePlanningCollections(projectId);
+    }
   }
 
   loadItemRelations(projectId: string, itemId: string): void {
@@ -415,14 +445,46 @@ export class WorkItemService {
     });
   }
 
-  reloadItem(itemId: string): void {
-    const projectId = this.resolveProjectIdForItem(itemId);
-    if (!projectId) return;
-    this.api.get<WorkItem>(`/projects/${projectId}/items/${itemId}`).subscribe({
-      next: (item) => {
-        this.items.update((list) => list.map((it) => (it.id === itemId ? item : it)));
-      },
-      error: () => {},
+  /** Re-fetches a single work item from the server and merges it into the cache. */
+  reloadItem(itemId: string, projectId?: string): void {
+    void this.fetchItem(projectId || this.resolveProjectIdForItem(itemId), itemId);
+  }
+
+  /**
+   * Fetches a single work item (by internal ID or human key) from the server and
+   * upserts it into the local cache. Resolves with the fetched item, or null when
+   * it could not be loaded. Responses that arrive after a local optimistic edit
+   * of the same item are discarded so in-flight edits are never clobbered.
+   */
+  fetchItem(projectId: string, itemIdOrKey: string): Promise<WorkItem | null> {
+    if (!projectId || !itemIdOrKey || this.authService.isSignedOut()) {
+      return Promise.resolve(null);
+    }
+    const known = this.items().find((i) => i.id === itemIdOrKey || i.key === itemIdOrKey);
+    const seqAtRequest = known ? this.updateSeqByItem.get(known.id) ?? 0 : 0;
+    return new Promise<WorkItem | null>((resolve) => {
+      this.api
+        .get<WorkItem>(`/projects/${projectId}/items/${encodeURIComponent(itemIdOrKey)}`)
+        .subscribe({
+          next: (item) => {
+            if (!item) {
+              resolve(null);
+              return;
+            }
+            if ((this.updateSeqByItem.get(item.id) ?? 0) === seqAtRequest) {
+              this.upsertItem(item);
+            }
+            resolve(item);
+          },
+          error: () => resolve(null),
+        });
+    });
+  }
+
+  private upsertItem(item: WorkItem): void {
+    this.items.update((list) => {
+      const exists = list.some((it) => it.id === item.id);
+      return exists ? list.map((it) => (it.id === item.id ? item : it)) : [item, ...list];
     });
   }
 

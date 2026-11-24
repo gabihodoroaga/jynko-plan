@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -253,6 +253,18 @@ export class MyWorkComponent {
   readonly projectService = inject(ProjectService);
   readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+
+  constructor() {
+    // PLAN-12: work items are no longer preloaded for every project on startup;
+    // this cross-project view fetches the latest items of each project when opened.
+    effect(
+      () => {
+        if (!this.projectService.hasProjects()) return;
+        untracked(() => void this.workItemService.loadItemsForAllProjects());
+      },
+      { allowSignalWrites: true }
+    );
+  }
 
   readonly groupBy = signal<'PROJECT' | 'STATUS'>('PROJECT');
   readonly statusFilter = signal<string>('');

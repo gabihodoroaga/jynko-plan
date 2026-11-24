@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { WorkItemService } from '../../../core/services/work-item.service';
@@ -19,6 +19,7 @@ import { WorkItemSpreadsheetComponent } from '../work-item-spreadsheet/work-item
 import { WorkItemDetailDrawerComponent } from '../work-item-detail-drawer/work-item-detail-drawer.component';
 import { DropdownComponent, DropdownOption } from '../../../shared/components/dropdown.component';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge.component';
+import { RefreshButtonComponent } from '../../../shared/components/refresh-button.component';
 import { ProjectBreadcrumbComponent } from '../../../shared/components/project-breadcrumb.component';
 
 @Component({
@@ -36,6 +37,7 @@ import { ProjectBreadcrumbComponent } from '../../../shared/components/project-b
     DropdownComponent,
     StatusBadgeComponent,
     ProjectBreadcrumbComponent,
+    RefreshButtonComponent,
   ],
   template: `
     <div class="flex flex-col w-full h-full">
@@ -48,17 +50,23 @@ import { ProjectBreadcrumbComponent } from '../../../shared/components/project-b
           sectionLabel="Work items"
           [sectionRoute]="['/projects', projectService.activeProjectId(), 'work-items']"
         ></app-project-breadcrumb>
-
-        @if (projectService.canEdit()) {
-          <button
-            type="button"
-            data-testid="page-primary-action-btn"
-            (click)="workItemService.isQuickCreateOpen.set(true)"
-            class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
-          >
-            + Add work item
-          </button>
-        }
+        <div class="flex items-center gap-2 shrink-0">
+          <app-refresh-button
+            label="Refresh work items"
+            [refreshing]="refreshing()"
+            (refresh)="refresh()"
+          ></app-refresh-button>
+          @if (projectService.canEdit()) {
+            <button
+              type="button"
+              data-testid="page-primary-action-btn"
+              (click)="workItemService.isQuickCreateOpen.set(true)"
+              class="bg-sky-600 hover:bg-sky-700 text-white rounded-md px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+            >
+              + Add work item
+            </button>
+          }
+        </div>
       </div>
 
       <!-- View Toolbar & Filter Bar (h-11 / 44px) — white like the rest of the page; only the top bar is tinted (PLAN-7) -->
@@ -279,6 +287,44 @@ export class WorkItemsShellComponent {
   readonly workItemService = inject(WorkItemService);
   readonly projectService = inject(ProjectService);
   readonly settingsService = inject(SettingsService);
+
+  /** Number of in-flight page loads; drives the refresh button spinner (PLAN-12). */
+  private readonly pendingLoads = signal<number>(0);
+  readonly refreshing = computed<boolean>(() => this.pendingLoads() > 0);
+
+  constructor() {
+    // PLAN-12: fetch the latest work items from the server whenever this page is
+    // opened or the active project changes, instead of relying on a one-off
+    // project-wide preload.
+    effect(
+      () => {
+        const projectId = this.projectService.activeProjectId();
+        // Wait until the project list is known so route slugs resolve to IDs first.
+        if (!this.projectService.hasProjects()) return;
+        untracked(() => void this.loadPageData(projectId));
+      },
+      { allowSignalWrites: true }
+    );
+  }
+
+  /** Re-fetches the current page's items without navigating away. */
+  refresh(): void {
+    void this.loadPageData(this.projectService.activeProjectId());
+  }
+
+  private async loadPageData(projectId: string): Promise<void> {
+    if (!projectId) return;
+    this.pendingLoads.update((n) => n + 1);
+    try {
+      await Promise.all([
+        this.workItemService.loadItems(projectId),
+        // Filter pickers only need the options once; the owning pages refresh them.
+        this.projectService.ensurePlanningCollections(projectId),
+      ]);
+    } finally {
+      this.pendingLoads.update((n) => Math.max(0, n - 1));
+    }
+  }
 
   readonly isColumnsPopoverOpen = signal<boolean>(false);
   readonly isMobileFiltersOpen = signal<boolean>(false);
