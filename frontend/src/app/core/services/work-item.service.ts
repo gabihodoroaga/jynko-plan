@@ -460,7 +460,9 @@ export class WorkItemService {
     if (!projectId || !itemIdOrKey || this.authService.isSignedOut()) {
       return Promise.resolve(null);
     }
-    const known = this.items().find((i) => i.id === itemIdOrKey || i.key === itemIdOrKey);
+    const known = this.items().find(
+      (i) => i.project_id === projectId && (i.id === itemIdOrKey || i.key === itemIdOrKey)
+    );
     const seqAtRequest = known ? this.updateSeqByItem.get(known.id) ?? 0 : 0;
     return new Promise<WorkItem | null>((resolve) => {
       this.api

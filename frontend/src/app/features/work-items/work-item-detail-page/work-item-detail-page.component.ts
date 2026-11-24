@@ -889,7 +889,13 @@ export class WorkItemDetailPageComponent implements OnInit {
   readonly currentItem = computed<WorkItem | null>(() => {
     const id = this.routeItemId();
     if (!id) return null;
-    return this.workItemService.items().find((i) => i.id === id || i.key === id) ?? null;
+    // Scope to the active project so a key shared by two projects can't resolve to the wrong item.
+    const projectId = this.projectService.activeProjectId();
+    return (
+      this.workItemService
+        .items()
+        .find((i) => i.project_id === projectId && (i.id === id || i.key === id)) ?? null
+    );
   });
 
   readonly currentSubItems = computed<SubWorkItem[]>(() => {

@@ -50,6 +50,10 @@ func (h *ItemHandler) GetItem(c *gin.Context) {
 	// the latest server version of an item opened from a deep link (PLAN-12).
 	item, err := h.svc.GetByIDOrKey(c.Request.Context(), projectID, itemID)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidInput) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "work item id or key is required"})
+			return
+		}
 		if errors.Is(err, repository.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "work item not found"})
 			return

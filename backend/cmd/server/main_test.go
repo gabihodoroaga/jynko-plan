@@ -362,14 +362,20 @@ func TestPWA_TopBarAndDragRefresh(t *testing.T) {
 
 	waitForText("Initial Item")
 
-	// 1. Add item on server and click top-bar refresh button
+	// 1. PLAN-12: the global top-bar refresh button is gone; the per-page refresh button next to
+	// "+ Add work item" re-fetches the current page's items in place (no full page reload).
+	if has, _, _ := page.Has(`header button[data-testid="app-refresh-btn"]`); has {
+		t.Fatalf("top-bar refresh button header button[data-testid=app-refresh-btn] should have been removed")
+	}
+	page.MustNavigate(srv.URL + "/projects/proj-1/work-items").MustWaitLoad()
+	waitForText("Initial Item")
 	mu.Lock()
 	items = append(items, map[string]any{
 		"id":          "item-2",
 		"project_id":  "proj-1",
 		"key":         "COR-2",
 		"sequence_id": 2,
-		"title":       "Fresh Item After Top Click",
+		"title":       "Fresh Item After Page Refresh",
 		"description": "",
 		"status":      "TODO",
 		"priority":    "HIGH",
@@ -381,11 +387,15 @@ func TestPWA_TopBarAndDragRefresh(t *testing.T) {
 	})
 	mu.Unlock()
 
-	page.MustEval(`() => { window.__beforeTopRefresh = true; }`)
-	page.MustElement(`header button[data-testid="app-refresh-btn"]`).MustClick()
+	page.MustEval(`() => { window.__beforePageRefresh = true; }`)
+	page.MustElement(`[data-testid="project-top-bar"] button[data-testid="page-refresh-btn"]`).MustClick()
+	waitForText("Fresh Item After Page Refresh")
+	if stillSame := page.MustEval(`() => window.__beforePageRefresh === true`).Bool(); !stillSame {
+		t.Fatalf("per-page refresh button reloaded the whole app instead of re-fetching items in place")
+	}
 
-	waitForReload(`() => typeof window.__beforeTopRefresh === 'undefined'`, "top-bar refresh button did not reload the page")
-	waitForText("Fresh Item After Top Click")
+	page.MustNavigate(srv.URL + "/home").MustWaitLoad()
+	waitForText("Fresh Item After Page Refresh")
 
 	// 2. Add item on server and perform mouse click-and-drag down gesture
 	mu.Lock()
