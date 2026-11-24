@@ -135,4 +135,5 @@ Use this reference when writing or extending `github.com/go-rod/rod` checks in `
 4. **Two-Section Shell Separation**:
    - In `Work` mode (`/home`, `/my-work`, `/work-items`, `/projects`, etc.), the secondary panel shows `Work` navigation and the `Projects` tree.
    - In `Wiki` mode (`/wiki`), the secondary panel switches to `Wiki` (`+ New page`, `Collections`, nested `Pages` tree) and the right pane displays only the Page View & Editor.
-\n    - Per-Project RBAC Members inline display name edit (PLAN-10, ADMIN only, saves on blur/Enter, email stays read-only): `input[aria-label="Edit member display name"][data-member-email="<email>"]`
+
+    - Per-Project RBAC Members inline display name edit (PLAN-10, ADMIN only, saves on blur/Enter, email stays read-only): `input[aria-label="Edit member display name"][data-member-email="<email>"]`

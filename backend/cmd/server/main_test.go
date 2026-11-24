@@ -58,6 +58,10 @@ func (s *stubProjectRepo) ListMembers(ctx context.Context, projectID string) ([]
 	return []model.ProjectMember{}, nil
 }
 func (s *stubProjectRepo) UpsertMember(ctx context.Context, projectID string, member *model.ProjectMember) error {
+	if s.members != nil {
+		cp := *member
+		s.members[projectID+":"+member.UserID] = &cp
+	}
 	return nil
 }
 func (s *stubProjectRepo) RemoveMember(ctx context.Context, projectID, userID string) error {
@@ -524,4 +528,71 @@ func TestPWA_TopBarAndDragRefresh(t *testing.T) {
 
 	waitForReload(`() => typeof window.__beforeTouchRefresh === 'undefined'`, "touch pull-down did not reload the page")
 	waitForText("Fresh Item After Touch Pull")
+}
+
+func TestRouter_PatchMemberDisplayNameRBAC(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	joined := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	projRepo := &stubProjectRepo{members: map[string]*model.ProjectMember{
+		"proj-1:admin-1":  {UserID: "admin-1", Email: "admin@jynko.local", Name: "Admin", Role: model.RoleAdmin},
+		"proj-1:member-1": {UserID: "member-1", Email: "member@jynko.local", Name: "Member", Role: model.RoleMember, JoinedAt: joined},
+	}}
+	cfg := &config.Config{
+		Env:          config.EnvDev,
+		RawEnv:       config.EnvDev,
+		DevUserID:    "admin-1",
+		DevUserEmail: "admin@jynko.local",
+		DevUserName:  "Admin",
+	}
+	router := SetupRouterWithMCP(
+		cfg,
+		projRepo,
+		handler.NewAuthHandler(),
+		handler.NewProjectHandler(service.NewProjectService(projRepo)),
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	patch := func(userHeader, email, target, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/projects/proj-1/members/"+target, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Dev-User-Id", userHeader)
+		req.Header.Set("X-Dev-User-Email", email)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	// Non-admin members cannot rename other members.
+	if w := patch("member-1", "member@jynko.local", "admin-1", `{"name":"Hacked"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for MEMBER PATCH, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := projRepo.members["proj-1:admin-1"].Name; got != "Admin" {
+		t.Fatalf("name must not change after forbidden PATCH, got %q", got)
+	}
+
+	// Admin can rename; email cannot be changed via the payload.
+	w := patch("admin-1", "admin@jynko.local", "member-1", `{"name":"  Renamed Member ","email":"evil@x.com"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for ADMIN PATCH, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp model.ProjectMember
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON response: %v", err)
+	}
+	stored := projRepo.members["proj-1:member-1"]
+	if resp.Name != "Renamed Member" || stored.Name != "Renamed Member" {
+		t.Fatalf("expected trimmed name persisted, got resp=%q stored=%q", resp.Name, stored.Name)
+	}
+	if stored.Email != "member@jynko.local" || stored.Role != model.RoleMember || !stored.JoinedAt.Equal(joined) {
+		t.Fatalf("email/role/joined_at must be preserved, got %+v", stored)
+	}
+
+	// Validation and not-found handling.
+	if w := patch("admin-1", "admin@jynko.local", "member-1", `{"name":"   "}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for blank name, got %d", w.Code)
+	}
+	if w := patch("admin-1", "admin@jynko.local", "nobody", `{"name":"X"}`); w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown member, got %d", w.Code)
+	}
 }

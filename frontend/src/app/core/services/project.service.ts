@@ -298,8 +298,7 @@ export class ProjectService {
   updateMemberName(userId: string, name: string): void {
     const projectId = this.activeProjectId();
     if (!projectId || !userId) return;
-    const prevMembers = this.members();
-    const current = prevMembers.find((m) => m.user_id === userId);
+    const current = this.members().find((m) => m.user_id === userId);
     const cleanName = (name ?? '').trim();
     if (!current || !cleanName || cleanName === current.name) return;
     this.members.update((list) =>
@@ -314,7 +313,8 @@ export class ProjectService {
           this.members.update((list) => list.map((m) => (m.user_id === userId ? saved : m)));
         },
         error: () => {
-          this.members.set(prevMembers);
+          // Roll back only this member so concurrent edits to other members are preserved.
+          this.members.update((list) => list.map((m) => (m.user_id === userId ? current : m)));
         },
       });
   }
