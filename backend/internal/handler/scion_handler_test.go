@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -44,6 +45,12 @@ func (f *fakeProjectRepo) ListByUser(_ context.Context, _, _ string) ([]model.Pr
 func (f *fakeProjectRepo) Update(_ context.Context, p *model.Project) error {
 	f.projects[p.ID] = p
 	return nil
+}
+func (f *fakeProjectRepo) SetDeleted(_ context.Context, _ string, _ *time.Time, _ string) error {
+	return nil
+}
+func (f *fakeProjectRepo) ListDeletedBefore(_ context.Context, _ time.Time) ([]model.Project, error) {
+	return []model.Project{}, nil
 }
 func (f *fakeProjectRepo) Delete(_ context.Context, id string) error {
 	delete(f.projects, id)

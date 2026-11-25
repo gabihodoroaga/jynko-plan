@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gabihodoroaga/jynko-plan/internal/config"
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
@@ -32,6 +33,12 @@ func (r *scionTestProjectRepo) ListByUser(_ context.Context, _, _ string) ([]mod
 func (r *scionTestProjectRepo) Update(_ context.Context, p *model.Project) error {
 	r.projects[p.ID] = p
 	return nil
+}
+func (r *scionTestProjectRepo) SetDeleted(_ context.Context, _ string, _ *time.Time, _ string) error {
+	return nil
+}
+func (r *scionTestProjectRepo) ListDeletedBefore(_ context.Context, _ time.Time) ([]model.Project, error) {
+	return []model.Project{}, nil
 }
 func (r *scionTestProjectRepo) Delete(_ context.Context, id string) error {
 	delete(r.projects, id)

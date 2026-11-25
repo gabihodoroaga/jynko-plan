@@ -14,6 +14,15 @@ type Project struct {
 	CreatedBy   string           `firestore:"created_by" json:"created_by"`
 	CreatedAt   time.Time        `firestore:"created_at" json:"created_at"`
 	UpdatedAt   time.Time        `firestore:"updated_at" json:"updated_at"`
+	// DeletedAt marks a soft-deleted project (PLAN-13). Deleted projects are hidden from listings and
+	// project-scoped routes until restored, and are permanently purged by the cleanup API.
+	DeletedAt *time.Time `firestore:"deleted_at,omitempty" json:"deleted_at,omitempty"`
+	DeletedBy string     `firestore:"deleted_by,omitempty" json:"deleted_by,omitempty"`
+}
+
+// IsDeleted reports whether the project has been soft-deleted.
+func (p *Project) IsDeleted() bool {
+	return p != nil && p.DeletedAt != nil && !p.DeletedAt.IsZero()
 }
 
 // ProjectSettings stores configurable project-level workflows, board view defaults, and documentation policies.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
@@ -13,17 +14,29 @@ import (
 var (
 	ErrInvalidInput = errors.New("invalid input")
 	ErrForbidden    = errors.New("forbidden: insufficient permissions")
-	keyPrefixRegex  = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
+	// ErrProjectNotDeleted is returned when restoring a project that is not soft-deleted.
+	ErrProjectNotDeleted = errors.New("project is not deleted")
+	keyPrefixRegex       = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 )
 
 // ProjectService handles business logic for Projects and RBAC membership.
 type ProjectService struct {
 	repo repository.ProjectRepository
+	now  func() time.Time
 }
 
 // NewProjectService creates a new ProjectService.
 func NewProjectService(repo repository.ProjectRepository) *ProjectService {
-	return &ProjectService{repo: repo}
+	return &ProjectService{repo: repo, now: func() time.Time { return time.Now().UTC() }}
+}
+
+// PurgeDeletedResult summarizes a cleanup run of old soft-deleted projects (PLAN-13).
+type PurgeDeletedResult struct {
+	Cutoff     time.Time `json:"cutoff"`
+	DryRun     bool      `json:"dry_run"`
+	PurgedIDs  []string  `json:"purged_project_ids"`
+	FailedIDs  []string  `json:"failed_project_ids"`
+	Candidates int       `json:"candidates"`
 }
 
 // CreateProjectInput holds parameters for creating a project.
@@ -95,8 +108,28 @@ func (s *ProjectService) GetProject(ctx context.Context, projectID string) (*mod
 	return s.repo.GetByID(ctx, projectID)
 }
 
+// ListProjectsForUser returns the user's active (not soft-deleted) projects.
 func (s *ProjectService) ListProjectsForUser(ctx context.Context, user model.UserContext) ([]model.Project, error) {
-	return s.repo.ListByUser(ctx, user.UserID, user.Email)
+	return s.listForUser(ctx, user, false)
+}
+
+// ListDeletedProjectsForUser returns the user's soft-deleted projects so they can be restored (PLAN-13).
+func (s *ProjectService) ListDeletedProjectsForUser(ctx context.Context, user model.UserContext) ([]model.Project, error) {
+	return s.listForUser(ctx, user, true)
+}
+
+func (s *ProjectService) listForUser(ctx context.Context, user model.UserContext, deleted bool) ([]model.Project, error) {
+	all, err := s.repo.ListByUser(ctx, user.UserID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.Project, 0, len(all))
+	for i := range all {
+		if all[i].IsDeleted() == deleted {
+			out = append(out, all[i])
+		}
+	}
+	return out, nil
 }
 
 func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, input UpdateProjectInput) (*model.Project, error) {
@@ -136,8 +169,69 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, in
 	return proj, nil
 }
 
-func (s *ProjectService) DeleteProject(ctx context.Context, projectID string) error {
-	return s.repo.Delete(ctx, projectID)
+// DeleteProject soft-deletes a project (PLAN-13): it is marked as deleted and hidden from listings and
+// project-scoped routes, but its data is kept so it can be restored until it is purged.
+func (s *ProjectService) DeleteProject(ctx context.Context, projectID string, actor model.UserContext) error {
+	proj, err := s.repo.GetByID(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if proj.IsDeleted() {
+		return repository.ErrNotFound
+	}
+	deletedBy := actor.Email
+	if deletedBy == "" {
+		deletedBy = actor.UserID
+	}
+	at := s.now()
+	return s.repo.SetDeleted(ctx, projectID, &at, deletedBy)
+}
+
+// RestoreProject clears the soft-delete marker of a project and returns the restored project.
+func (s *ProjectService) RestoreProject(ctx context.Context, projectID string) (*model.Project, error) {
+	proj, err := s.repo.GetByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if !proj.IsDeleted() {
+		return nil, ErrProjectNotDeleted
+	}
+	if err := s.repo.SetDeleted(ctx, projectID, nil, ""); err != nil {
+		return nil, err
+	}
+	return s.repo.GetByID(ctx, projectID)
+}
+
+// PurgeDeletedProjects permanently removes projects soft-deleted at least olderThan ago, including all
+// their subcollections and attachment blobs. With dryRun it only reports the candidates.
+func (s *ProjectService) PurgeDeletedProjects(ctx context.Context, olderThan time.Duration, dryRun bool) (*PurgeDeletedResult, error) {
+	if olderThan < 0 {
+		return nil, ErrInvalidInput
+	}
+	cutoff := s.now().Add(-olderThan)
+	candidates, err := s.repo.ListDeletedBefore(ctx, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	res := &PurgeDeletedResult{Cutoff: cutoff, DryRun: dryRun, PurgedIDs: []string{}, FailedIDs: []string{}}
+	for i := range candidates {
+		p := &candidates[i]
+		// Re-check defensively: only ever purge projects that are deleted and old enough.
+		if !p.IsDeleted() || p.DeletedAt.After(cutoff) {
+			continue
+		}
+		res.Candidates++
+		if dryRun {
+			res.PurgedIDs = append(res.PurgedIDs, p.ID)
+			continue
+		}
+		if err := s.repo.Delete(ctx, p.ID); err != nil {
+			res.FailedIDs = append(res.FailedIDs, p.ID)
+			continue
+		}
+		res.PurgedIDs = append(res.PurgedIDs, p.ID)
+	}
+	return res, nil
 }
 
 func (s *ProjectService) ListMembers(ctx context.Context, projectID string) ([]model.ProjectMember, error) {

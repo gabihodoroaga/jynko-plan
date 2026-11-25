@@ -125,6 +125,7 @@ func main() {
 	// Handlers
 	authHandler := handler.NewAuthHandlerWithRepo(profileRepo)
 	projectHandler := handler.NewProjectHandler(projectSvc)
+	projectHandler.DefaultRetentionDays = cfg.DeletedProjectRetentionDays
 	moduleHandler := handler.NewModuleHandler(moduleSvc)
 	epicHandler := handler.NewEpicHandler(epicSvc)
 	cycleHandler := handler.NewCycleHandler(cycleSvc)
@@ -349,6 +350,9 @@ func SetupRouterWithOptions(
 	api.GET("/projects", projectHandler.ListProjects)
 	api.POST("/projects", projectHandler.CreateProject)
 
+	// Cross-project maintenance (PLAN-13): permanently purge projects soft-deleted long enough ago.
+	api.POST("/admin/projects/purge-deleted", middleware.RequirePlatformAdmin(cfg), projectHandler.PurgeDeletedProjects)
+
 	// Project-scoped routes with RBAC middleware
 	projGroup := api.Group("/projects/:projectId")
 	{
@@ -360,6 +364,8 @@ func SetupRouterWithOptions(
 		projGroup.GET("", viewer, projectHandler.GetProject)
 		projGroup.PATCH("", admin, projectHandler.UpdateProject)
 		projGroup.DELETE("", admin, projectHandler.DeleteProject)
+		// Restore a soft-deleted project (PLAN-13); the only project route that reaches deleted projects.
+		projGroup.POST("/restore", middleware.RequireProjectRoleIncludingDeleted(projectRepo, model.RoleAdmin), projectHandler.RestoreProject)
 
 		// RBAC Members
 		projGroup.GET("/members", viewer, projectHandler.ListMembers)

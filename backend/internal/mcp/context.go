@@ -87,6 +87,13 @@ func (r *Resolver) CheckRole(ctx context.Context, projectID string, minRole mode
 		return errors.New("unauthorized: missing agent/user context")
 	}
 
+	if err := middleware.CheckProjectNotDeleted(ctx, r.projectRepo, projectID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return fmt.Errorf("project %s not found", projectID)
+		}
+		return fmt.Errorf("failed to load project %s: %v", projectID, err)
+	}
+
 	member, err := r.projectRepo.GetMember(ctx, projectID, user.UserID)
 	if err != nil || member == nil {
 		member, err = r.projectRepo.GetMemberByEmail(ctx, projectID, user.Email)

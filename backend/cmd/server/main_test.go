@@ -25,6 +25,7 @@ import (
 	"github.com/gabihodoroaga/jynko-plan/internal/model"
 	"github.com/gabihodoroaga/jynko-plan/internal/repository"
 	"github.com/gabihodoroaga/jynko-plan/internal/service"
+	"github.com/gabihodoroaga/jynko-plan/internal/testutil"
 )
 
 type stubProjectRepo struct {
@@ -41,6 +42,12 @@ func (s *stubProjectRepo) ListByUser(ctx context.Context, userID, userEmail stri
 	return []model.Project{{ID: "proj-1", Name: "Core", KeyPrefix: "COR", MemberIDs: []string{"dev-user-1"}}}, nil
 }
 func (s *stubProjectRepo) Update(ctx context.Context, project *model.Project) error { return nil }
+func (s *stubProjectRepo) SetDeleted(_ context.Context, _ string, _ *time.Time, _ string) error {
+	return nil
+}
+func (s *stubProjectRepo) ListDeletedBefore(_ context.Context, _ time.Time) ([]model.Project, error) {
+	return []model.Project{}, nil
+}
 func (s *stubProjectRepo) Delete(ctx context.Context, projectID string) error       { return nil }
 func (s *stubProjectRepo) GetMember(ctx context.Context, projectID, userID string) (*model.ProjectMember, error) {
 	if mem, ok := s.members[projectID+":"+userID]; ok {
@@ -604,5 +611,136 @@ func TestRouter_PatchMemberDisplayNameRBAC(t *testing.T) {
 	}
 	if w := patch("admin-1", "admin@jynko.local", "nobody", `{"name":"X"}`); w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown member, got %d", w.Code)
+	}
+}
+
+// TestRouter_ProjectSoftDeleteRestorePurge covers PLAN-13 end-to-end through the real router and RBAC
+// middleware: DELETE soft-deletes (hidden from GET /projects and every project-scoped route), only
+// ADMINs may delete/restore, ?deleted=true lists restorable projects, and the purge API is limited to
+// platform admins, validates its query and permanently removes only old deleted projects.
+func TestRouter_ProjectSoftDeleteRestorePurge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	repo := testutil.NewProjectRepo()
+	admin := model.ProjectMember{UserID: "admin-1", Email: "admin@jynko.local", Name: "Admin", Role: model.RoleAdmin}
+	member := model.ProjectMember{UserID: "member-1", Email: "member@jynko.local", Name: "Member", Role: model.RoleMember}
+	repo.AddProject(model.Project{ID: "proj-1", Name: "Core", KeyPrefix: "COR"}, admin, member)
+	repo.AddProject(model.Project{ID: "proj-2", Name: "Other", KeyPrefix: "OTH"}, admin, member)
+
+	cfg := &config.Config{
+		Env:                 config.EnvDev,
+		RawEnv:              config.EnvDev,
+		DevUserID:           "admin-1",
+		DevUserEmail:        "admin@jynko.local",
+		DevUserName:         "Admin",
+		PlatformAdminEmails: []string{"ops@jynko.local"},
+	}
+	router := SetupRouterWithMCP(
+		cfg,
+		repo,
+		handler.NewAuthHandler(),
+		handler.NewProjectHandler(service.NewProjectService(repo)),
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	call := func(method, path, userID, email string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("X-Dev-User-Id", userID)
+		req.Header.Set("X-Dev-User-Email", email)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+	asAdmin := func(method, path string) *httptest.ResponseRecorder {
+		return call(method, path, "admin-1", "admin@jynko.local")
+	}
+	listIDs := func(path string) []string {
+		w := asAdmin(http.MethodGet, path)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d: %s", path, w.Code, w.Body.String())
+		}
+		var list []model.Project
+		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+			t.Fatalf("GET %s invalid JSON: %v", path, err)
+		}
+		ids := []string{}
+		for _, p := range list {
+			ids = append(ids, p.ID)
+		}
+		return ids
+	}
+
+	// Only ADMINs may delete.
+	if w := call(http.MethodDelete, "/api/v1/projects/proj-1", "member-1", "member@jynko.local"); w.Code != http.StatusForbidden {
+		t.Fatalf("MEMBER DELETE expected 403, got %d", w.Code)
+	}
+	if w := asAdmin(http.MethodDelete, "/api/v1/projects/proj-1"); w.Code != http.StatusOK {
+		t.Fatalf("ADMIN DELETE expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if p, err := repo.GetByID(context.Background(), "proj-1"); err != nil || !p.IsDeleted() || p.DeletedBy != "admin@jynko.local" {
+		t.Fatalf("project must be soft-deleted (kept with deleted_at), got %+v err=%v", p, err)
+	}
+
+	// Hidden from the list and every project-scoped route; listed under ?deleted=true.
+	if ids := listIDs("/api/v1/projects"); len(ids) != 1 || ids[0] != "proj-2" {
+		t.Fatalf("GET /projects = %v, want [proj-2]", ids)
+	}
+	if ids := listIDs("/api/v1/projects?deleted=true"); len(ids) != 1 || ids[0] != "proj-1" {
+		t.Fatalf("GET /projects?deleted=true = %v, want [proj-1]", ids)
+	}
+	for _, path := range []string{"/api/v1/projects/proj-1", "/api/v1/projects/proj-1/members"} {
+		if w := asAdmin(http.MethodGet, path); w.Code != http.StatusNotFound {
+			t.Fatalf("GET %s on deleted project expected 404, got %d", path, w.Code)
+		}
+	}
+	if w := asAdmin(http.MethodDelete, "/api/v1/projects/proj-1"); w.Code != http.StatusNotFound {
+		t.Fatalf("second DELETE expected 404, got %d", w.Code)
+	}
+
+	// Restore: ADMIN only; restoring an active project is a conflict.
+	if w := call(http.MethodPost, "/api/v1/projects/proj-1/restore", "member-1", "member@jynko.local"); w.Code != http.StatusForbidden {
+		t.Fatalf("MEMBER restore expected 403, got %d", w.Code)
+	}
+	if w := asAdmin(http.MethodPost, "/api/v1/projects/proj-1/restore"); w.Code != http.StatusOK {
+		t.Fatalf("ADMIN restore expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if w := asAdmin(http.MethodGet, "/api/v1/projects/proj-1"); w.Code != http.StatusOK {
+		t.Fatalf("restored project expected 200, got %d", w.Code)
+	}
+	if w := asAdmin(http.MethodPost, "/api/v1/projects/proj-1/restore"); w.Code != http.StatusConflict {
+		t.Fatalf("restoring an active project expected 409, got %d", w.Code)
+	}
+
+	// Purge: platform admins only, query validated, only old deleted projects removed.
+	old := time.Now().UTC().Add(-45 * 24 * time.Hour)
+	_ = repo.SetDeleted(context.Background(), "proj-2", &old, "admin@jynko.local")
+	if w := asAdmin(http.MethodPost, "/api/v1/admin/projects/purge-deleted"); w.Code != http.StatusForbidden {
+		t.Fatalf("project ADMIN (not platform admin) purge expected 403, got %d", w.Code)
+	}
+	ops := func(path string) *httptest.ResponseRecorder {
+		return call(http.MethodPost, path, "ops-1", "ops@jynko.local")
+	}
+	for _, bad := range []string{"?older_than_days=-1", "?older_than_days=abc", "?dry_run=maybe"} {
+		if w := ops("/api/v1/admin/projects/purge-deleted" + bad); w.Code != http.StatusBadRequest {
+			t.Fatalf("purge%s expected 400, got %d", bad, w.Code)
+		}
+	}
+	w := ops("/api/v1/admin/projects/purge-deleted?dry_run=true")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"proj-2"`) || len(repo.HardDeleted) != 0 {
+		t.Fatalf("dry-run purge expected 200 listing proj-2 without deleting, got %d %s (hard deleted %v)", w.Code, w.Body.String(), repo.HardDeleted)
+	}
+	w = ops("/api/v1/admin/projects/purge-deleted")
+	if w.Code != http.StatusOK {
+		t.Fatalf("purge expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var res service.PurgeDeletedResult
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("purge invalid JSON: %v", err)
+	}
+	if len(res.PurgedIDs) != 1 || res.PurgedIDs[0] != "proj-2" {
+		t.Fatalf("purged = %v, want [proj-2]", res.PurgedIDs)
+	}
+	if _, err := repo.GetByID(context.Background(), "proj-1"); err != nil {
+		t.Fatalf("active project proj-1 must survive the purge: %v", err)
 	}
 }

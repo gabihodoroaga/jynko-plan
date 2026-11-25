@@ -38,6 +38,10 @@ type ProjectRepository interface {
 	ListByUser(ctx context.Context, userID string, userEmail string) ([]model.Project, error)
 	Update(ctx context.Context, project *model.Project) error
 	Delete(ctx context.Context, projectID string) error
+	// SetDeleted soft-deletes (deletedAt != nil) or restores (deletedAt == nil) a project (PLAN-13).
+	SetDeleted(ctx context.Context, projectID string, deletedAt *time.Time, deletedBy string) error
+	// ListDeletedBefore returns soft-deleted projects whose deleted_at is at or before cutoff.
+	ListDeletedBefore(ctx context.Context, cutoff time.Time) ([]model.Project, error)
 
 	GetMember(ctx context.Context, projectID, userID string) (*model.ProjectMember, error)
 	GetMemberByEmail(ctx context.Context, projectID, email string) (*model.ProjectMember, error)
@@ -290,6 +294,67 @@ func (r *firestoreProjectRepository) Update(ctx context.Context, project *model.
 
 		return tx.Set(projRef, &live)
 	})
+}
+
+// SetDeleted marks a project as deleted (or clears the marker when deletedAt is nil) without touching
+// its data, so it can later be restored or permanently purged.
+func (r *firestoreProjectRepository) SetDeleted(ctx context.Context, projectID string, deletedAt *time.Time, deletedBy string) error {
+	if strings.TrimSpace(projectID) == "" || strings.Contains(projectID, "/") {
+		return ErrNotFound
+	}
+	projRef := r.fc.ProjectDoc(projectID)
+	now := time.Now().UTC()
+	return r.fc.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if _, err := tx.Get(projRef); err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrNotFound
+			}
+			return err
+		}
+		updates := []firestore.Update{{Path: "updated_at", Value: now}}
+		if deletedAt != nil {
+			at := deletedAt.UTC()
+			updates = append(updates,
+				firestore.Update{Path: "deleted_at", Value: at},
+				firestore.Update{Path: "deleted_by", Value: deletedBy},
+			)
+		} else {
+			updates = append(updates,
+				firestore.Update{Path: "deleted_at", Value: firestore.Delete},
+				firestore.Update{Path: "deleted_by", Value: firestore.Delete},
+			)
+		}
+		return tx.Update(projRef, updates)
+	})
+}
+
+// ListDeletedBefore returns all soft-deleted projects deleted at or before cutoff (single-field index on
+// deleted_at; projects without the field are never matched).
+func (r *firestoreProjectRepository) ListDeletedBefore(ctx context.Context, cutoff time.Time) ([]model.Project, error) {
+	projects := []model.Project{}
+	iter := r.fc.Projects().Where("deleted_at", "<=", cutoff.UTC()).Documents(ctx)
+	defer iter.Stop()
+	for {
+		doc, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		var p model.Project
+		if err := doc.DataTo(&p); err != nil {
+			return nil, err
+		}
+		if p.ID == "" {
+			p.ID = doc.Ref.ID
+		}
+		if p.MemberIDs == nil {
+			p.MemberIDs = []string{}
+		}
+		projects = append(projects, p)
+	}
+	return projects, nil
 }
 
 func (r *firestoreProjectRepository) Delete(ctx context.Context, projectID string) error {

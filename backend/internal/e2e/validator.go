@@ -1899,6 +1899,7 @@ func CheckSettings(browser *rod.Browser, baseURL, outDir string) ValidationCheck
 			assertProjectBackgroundColorPicker(page, &res, baseURL)
 			assertScionProjectSettingsCard(page, &res)
 			assertMemberDisplayNameInlineEdit(page, &res)
+			assertDeleteProjectDangerZone(page, &res)
 		} else {
 			res.Passed = false
 			res.Errors = append(res.Errors, "Per-Project Settings view did not render expected project sections for 'hodo'")
@@ -2262,5 +2263,56 @@ func assertMemberDisplayNameInlineEdit(page *rod.Page, res *ValidationCheckResul
 
 	if original != "" && original != newName {
 		setName(original)
+	}
+}
+
+// assertDeleteProjectDangerZone verifies PLAN-13 on Settings -> project scope: ADMINs see a red
+// "Delete project" button in a Danger Zone card; it opens a confirmation dialog whose confirm button stays
+// disabled until the exact project name is typed. The check cancels the dialog and never deletes the
+// shared seed project.
+func assertDeleteProjectDangerZone(page *rod.Page, res *ValidationCheckResult) {
+	hasBtn, btn, _ := page.Has(`[data-testid="project-danger-zone-card"] button[data-testid="delete-project-btn"][aria-label="Delete project"]`)
+	if !hasBtn || btn == nil {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Missing red Delete project button ([data-testid='project-danger-zone-card'] button[data-testid='delete-project-btn'])")
+		return
+	}
+	isRed := btn.MustEval(`() => {
+		const m = getComputedStyle(this).backgroundColor.match(/\d+/g);
+		if (!m) return false;
+		const [r, g, b] = m.map(Number);
+		return r > 150 && r > g + 60 && r > b + 40;
+	}`).Bool()
+	if isRed {
+		res.Assertions = append(res.Assertions, "Settings project scope shows a red 'Delete project' button in the Danger Zone card")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Delete project button is not rendered with a red background")
+	}
+
+	btn.MustScrollIntoView()
+	btn.MustClick()
+	time.Sleep(200 * time.Millisecond)
+	hasDialog, _, _ := page.Has(`dialog[open] [data-testid="delete-project-dialog"]`)
+	if !hasDialog {
+		res.Passed = false
+		res.Errors = append(res.Errors, "Clicking Delete project did not open the confirmation dialog (dialog[open] [data-testid='delete-project-dialog'])")
+		return
+	}
+	confirmSel := `dialog[open] button[data-testid="confirm-delete-project-btn"]`
+	disabledInitially := page.MustElement(confirmSel).MustEval(`() => this.disabled`).Bool()
+	inputEl := page.MustElement(`dialog[open] input[aria-label="Type project name to confirm deletion"]`)
+	inputEl.MustInput("not the project name")
+	time.Sleep(100 * time.Millisecond)
+	disabledOnMismatch := page.MustElement(confirmSel).MustEval(`() => this.disabled`).Bool()
+	if disabledInitially && disabledOnMismatch {
+		res.Assertions = append(res.Assertions, "Delete project confirmation stays disabled until the exact project name is typed")
+	} else {
+		res.Passed = false
+		res.Errors = append(res.Errors, fmt.Sprintf("Delete project confirm button should be disabled until the name matches (initial=%v, mismatch=%v)", disabledInitially, disabledOnMismatch))
+	}
+	if hasClose, closeBtn, _ := page.Has(`dialog[open] button[aria-label="Close modal"]`); hasClose && closeBtn != nil {
+		closeBtn.MustClick()
+		time.Sleep(150 * time.Millisecond)
 	}
 }

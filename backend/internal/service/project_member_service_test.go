@@ -25,7 +25,13 @@ func (m *mockMemberProjectRepo) ListByUser(_ context.Context, _, _ string) ([]mo
 	return []model.Project{}, nil
 }
 func (m *mockMemberProjectRepo) Update(_ context.Context, _ *model.Project) error { return nil }
-func (m *mockMemberProjectRepo) Delete(_ context.Context, _ string) error         { return nil }
+func (m *mockMemberProjectRepo) SetDeleted(_ context.Context, _ string, _ *time.Time, _ string) error {
+	return nil
+}
+func (m *mockMemberProjectRepo) ListDeletedBefore(_ context.Context, _ time.Time) ([]model.Project, error) {
+	return []model.Project{}, nil
+}
+func (m *mockMemberProjectRepo) Delete(_ context.Context, _ string) error { return nil }
 func (m *mockMemberProjectRepo) GetMember(_ context.Context, _, userID string) (*model.ProjectMember, error) {
 	mem, ok := m.members[userID]
 	if !ok {

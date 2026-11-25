@@ -161,6 +161,10 @@ DEV_USER_ID=dev-user-1
 DEV_USER_EMAIL=dev@jynko.local
 DEV_USER_NAME=Local Developer
 CORS_ALLOWED_ORIGINS=http://localhost:4202
+# Optional (PLAN-13): users allowed to call POST /api/v1/admin/projects/purge-deleted, and the
+# default minimum age of soft-deleted projects before they are purged.
+PLATFORM_ADMIN_EMAILS=
+DELETED_PROJECT_RETENTION_DAYS=30
 ```
 
 ---
