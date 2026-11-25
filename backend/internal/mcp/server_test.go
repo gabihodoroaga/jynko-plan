@@ -36,7 +36,13 @@ func (m *testProjectRepo) ListByUser(ctx context.Context, userID, userEmail stri
 	return []model.Project{{ID: "proj-1", Name: "P1"}}, nil
 }
 func (m *testProjectRepo) Update(ctx context.Context, project *model.Project) error { return nil }
-func (m *testProjectRepo) Delete(ctx context.Context, projectID string) error       { return nil }
+func (m *testProjectRepo) SetDeleted(_ context.Context, _ string, _ *time.Time, _ string) error {
+	return nil
+}
+func (m *testProjectRepo) ListDeletedBefore(_ context.Context, _ time.Time) ([]model.Project, error) {
+	return []model.Project{}, nil
+}
+func (m *testProjectRepo) Delete(ctx context.Context, projectID string) error { return nil }
 func (m *testProjectRepo) GetMember(ctx context.Context, projectID, userID string) (*model.ProjectMember, error) {
 	if mem, ok := m.members[projectID+":"+userID]; ok {
 		return mem, nil

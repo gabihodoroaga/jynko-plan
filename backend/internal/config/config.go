@@ -42,6 +42,12 @@ type Config struct {
 	ScionIapAudience        string
 	ScionDefaultProjectSlug string
 	ScionDefaultTemplate    string
+	// PlatformAdminEmails may call cross-project maintenance APIs such as purging old deleted
+	// projects (PLAN-13). Comma-separated PLATFORM_ADMIN_EMAILS, normalized to lower case.
+	PlatformAdminEmails []string
+	// DeletedProjectRetentionDays is the default age a soft-deleted project must reach before the
+	// purge API permanently removes it (DELETED_PROJECT_RETENTION_DAYS, default 30).
+	DeletedProjectRetentionDays int
 }
 
 // Valid aligned environment values: strictly prd, stg, dev.
@@ -132,39 +138,68 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port:                    getEnv("PORT", "8082"),
-		Env:                     envVal,
-		RawEnv:                  strings.TrimSpace(rawEnv),
-		BuildSHA:                getEnv("BUILD_SHA", ""),
-		BuildBranch:             getEnv("BUILD_BRANCH", ""),
-		DisableDevAuth:          !allowDevAuth,
-		ProjectPrefix:           projectPrefix,
-		ProjectsCollection:      projectsCol,
-		GoogleCloudProject:      getEnv("GOOGLE_CLOUD_PROJECT", defaultGCPProject),
-		FirestoreDatabaseID:     getEnv("FIRESTORE_DATABASE_ID", "(default)"),
-		IAPAudience:             iapAudience,
-		IAPRequireJWT:           getEnvBool("IAP_REQUIRE_JWT", iapAudience != ""),
-		SeedOnStartup:           getEnvBool("SEED_ON_STARTUP", isDev),
-		DevUserID:               getEnv("DEV_USER_ID", "dev-user-1"),
-		DevUserEmail:            getEnv("DEV_USER_EMAIL", "dev@jynko.local"),
-		DevUserName:             getEnv("DEV_USER_NAME", "Local Developer"),
-		CORSAllowedOrigins:      origins,
-		StaticDir:               getEnv("STATIC_DIR", ""),
-		AttachmentsGCSBucket:    getEnv("ATTACHMENTS_GCS_BUCKET", ""),
-		AttachmentsGCSPrefix:    gcsPrefix,
-		LocalStorageDir:         getEnv("LOCAL_STORAGE_DIR", "data/attachments"),
-		LogLevel:                getEnv("LOG_LEVEL", "info"),
-		LogFormat:               getEnv("LOG_FORMAT", defaultLogFormat),
-		EnableCloudTrace:        getEnvBool("ENABLE_CLOUD_TRACE", isPrd),
-		EnableCloudMetrics:      getEnvBool("ENABLE_CLOUD_METRICS", isPrd),
-		EnablePrometheusMetrics: getEnvBool("ENABLE_PROMETHEUS_METRICS", true),
-		OTelSampleRatio:         getEnvFloat("OTEL_SAMPLE_RATIO", 1.0),
-		ScionHubURL:             strings.TrimRight(getEnv("SCION_HUB_URL", ""), "/"),
-		ScionHubToken:           getEnv("SCION_HUB_TOKEN", ""),
-		ScionIapAudience:        getEnv("SCION_IAP_AUDIENCE", ""),
-		ScionDefaultProjectSlug: getEnv("SCION_DEFAULT_PROJECT_SLUG", "global"),
-		ScionDefaultTemplate:    getEnv("SCION_DEFAULT_TEMPLATE", "jynko-dev"),
+		Port:                        getEnv("PORT", "8082"),
+		Env:                         envVal,
+		RawEnv:                      strings.TrimSpace(rawEnv),
+		BuildSHA:                    getEnv("BUILD_SHA", ""),
+		BuildBranch:                 getEnv("BUILD_BRANCH", ""),
+		DisableDevAuth:              !allowDevAuth,
+		ProjectPrefix:               projectPrefix,
+		ProjectsCollection:          projectsCol,
+		GoogleCloudProject:          getEnv("GOOGLE_CLOUD_PROJECT", defaultGCPProject),
+		FirestoreDatabaseID:         getEnv("FIRESTORE_DATABASE_ID", "(default)"),
+		IAPAudience:                 iapAudience,
+		IAPRequireJWT:               getEnvBool("IAP_REQUIRE_JWT", iapAudience != ""),
+		SeedOnStartup:               getEnvBool("SEED_ON_STARTUP", isDev),
+		DevUserID:                   getEnv("DEV_USER_ID", "dev-user-1"),
+		DevUserEmail:                getEnv("DEV_USER_EMAIL", "dev@jynko.local"),
+		DevUserName:                 getEnv("DEV_USER_NAME", "Local Developer"),
+		CORSAllowedOrigins:          origins,
+		StaticDir:                   getEnv("STATIC_DIR", ""),
+		AttachmentsGCSBucket:        getEnv("ATTACHMENTS_GCS_BUCKET", ""),
+		AttachmentsGCSPrefix:        gcsPrefix,
+		LocalStorageDir:             getEnv("LOCAL_STORAGE_DIR", "data/attachments"),
+		LogLevel:                    getEnv("LOG_LEVEL", "info"),
+		LogFormat:                   getEnv("LOG_FORMAT", defaultLogFormat),
+		EnableCloudTrace:            getEnvBool("ENABLE_CLOUD_TRACE", isPrd),
+		EnableCloudMetrics:          getEnvBool("ENABLE_CLOUD_METRICS", isPrd),
+		EnablePrometheusMetrics:     getEnvBool("ENABLE_PROMETHEUS_METRICS", true),
+		OTelSampleRatio:             getEnvFloat("OTEL_SAMPLE_RATIO", 1.0),
+		ScionHubURL:                 strings.TrimRight(getEnv("SCION_HUB_URL", ""), "/"),
+		ScionHubToken:               getEnv("SCION_HUB_TOKEN", ""),
+		ScionIapAudience:            getEnv("SCION_IAP_AUDIENCE", ""),
+		ScionDefaultProjectSlug:     getEnv("SCION_DEFAULT_PROJECT_SLUG", "global"),
+		ScionDefaultTemplate:        getEnv("SCION_DEFAULT_TEMPLATE", "jynko-dev"),
+		PlatformAdminEmails:         parseEmailList(getEnv("PLATFORM_ADMIN_EMAILS", "")),
+		DeletedProjectRetentionDays: getEnvInt("DELETED_PROJECT_RETENTION_DAYS", 30),
 	}
+}
+
+// IsPlatformAdmin reports whether email is listed in PLATFORM_ADMIN_EMAILS (case-insensitive).
+func (c *Config) IsPlatformAdmin(email string) bool {
+	if c == nil {
+		return false
+	}
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if normalized == "" {
+		return false
+	}
+	for _, e := range c.PlatformAdminEmails {
+		if e == normalized {
+			return true
+		}
+	}
+	return false
+}
+
+func parseEmailList(raw string) []string {
+	out := []string{}
+	for _, part := range strings.Split(raw, ",") {
+		if e := strings.ToLower(strings.TrimSpace(part)); e != "" {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // IsScionConfigured reports whether Scion Hub URL and token are both configured.
@@ -229,6 +264,16 @@ func getEnvBool(key string, fallback bool) bool {
 		b, err := strconv.ParseBool(strings.TrimSpace(val))
 		if err == nil {
 			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if val, ok := os.LookupEnv(key); ok && strings.TrimSpace(val) != "" {
+		n, err := strconv.Atoi(strings.TrimSpace(val))
+		if err == nil && n >= 0 {
+			return n
 		}
 	}
 	return fallback

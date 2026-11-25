@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -27,7 +28,13 @@ func (m *mockProjectRepo) ListByUser(ctx context.Context, userID, userEmail stri
 	return nil, nil
 }
 func (m *mockProjectRepo) Update(ctx context.Context, project *model.Project) error { return nil }
-func (m *mockProjectRepo) Delete(ctx context.Context, projectID string) error       { return nil }
+func (m *mockProjectRepo) SetDeleted(_ context.Context, _ string, _ *time.Time, _ string) error {
+	return nil
+}
+func (m *mockProjectRepo) ListDeletedBefore(_ context.Context, _ time.Time) ([]model.Project, error) {
+	return []model.Project{}, nil
+}
+func (m *mockProjectRepo) Delete(ctx context.Context, projectID string) error { return nil }
 func (m *mockProjectRepo) GetMember(ctx context.Context, projectID, userID string) (*model.ProjectMember, error) {
 	if mem, ok := m.members[projectID+":"+userID]; ok {
 		return mem, nil

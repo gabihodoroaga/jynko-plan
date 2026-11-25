@@ -9,12 +9,13 @@ import { AuthService } from '../../core/services/auth.service';
 import { PwaService } from '../../core/services/pwa.service';
 import { DropdownComponent, DropdownOption } from '../../shared/components/dropdown.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
+import { ModalComponent } from '../../shared/components/modal.component';
 import { ALL_STATUSES, Project, ProjectMember, ProjectRole, ScionDefaults } from '../../core/models/project.model';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, DropdownComponent, StatusBadgeComponent],
+  imports: [CommonModule, FormsModule, DropdownComponent, StatusBadgeComponent, ModalComponent],
   template: `
     <div class="w-full p-4 sm:p-6 space-y-6 bg-slate-50 min-h-full">
       <!-- Top Settings Header -->
@@ -1141,6 +1142,83 @@ import { ALL_STATUSES, Project, ProjectMember, ProjectRole, ScionDefaults } from
                 </form>
               }
             </div>
+
+            <!-- Card 5: Danger Zone — delete project (PLAN-13, ADMIN only) -->
+            @if (projectService.isAdmin()) {
+              <div
+                data-testid="project-danger-zone-card"
+                class="bg-white border border-rose-200 rounded-lg shadow-card overflow-hidden"
+              >
+                <div class="px-5 py-3.5 bg-rose-50 border-b border-rose-200">
+                  <h2 class="text-xs font-semibold text-rose-800">Danger Zone</h2>
+                  <p class="text-[11px] text-rose-700/80">Irreversible and destructive project actions</p>
+                </div>
+                <div class="px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-xs font-medium text-slate-900">Delete this project</p>
+                    <p class="text-[11px] text-slate-500">
+                      Removes <strong>{{ proj.name }}</strong> and all its work items, cycles, epics, modules and pages for every member.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="delete-project-btn"
+                    aria-label="Delete project"
+                    (click)="openDeleteProjectDialog()"
+                    class="px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 text-white text-xs font-medium transition-colors shrink-0"
+                  >
+                    Delete project
+                  </button>
+                </div>
+              </div>
+
+              <app-modal
+                [isOpen]="isDeleteProjectOpen()"
+                title="Delete project"
+                maxWidth="max-w-md"
+                (closed)="closeDeleteProjectDialog()"
+              >
+                <form (ngSubmit)="confirmDeleteProject(proj)" class="space-y-3" data-testid="delete-project-dialog">
+                  <p class="text-xs text-slate-600">
+                    This will delete <strong class="text-slate-900">{{ proj.name }}</strong>
+                    (<span class="font-mono">{{ proj.key_prefix }}</span>) for all members. To confirm, type the
+                    project name below.
+                  </p>
+                  <input
+                    type="text"
+                    name="deleteProjectConfirm"
+                    [(ngModel)]="deleteConfirmText"
+                    aria-label="Type project name to confirm deletion"
+                    [placeholder]="proj.name"
+                    autocomplete="off"
+                    class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                  @if (deleteProjectError()) {
+                    <div role="alert" class="px-2.5 py-1.5 rounded-md bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                      {{ deleteProjectError() }}
+                    </div>
+                  }
+                  <div class="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      (click)="closeDeleteProjectDialog()"
+                      class="px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      data-testid="confirm-delete-project-btn"
+                      aria-label="Confirm delete project"
+                      [disabled]="deleteConfirmText.trim() !== proj.name || isDeletingProject()"
+                      class="px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 disabled:bg-rose-200 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
+                    >
+                      {{ isDeletingProject() ? 'Deleting…' : 'Delete project' }}
+                    </button>
+                  </div>
+                </form>
+              </app-modal>
+            }
           </div>
         }
       }
@@ -1160,6 +1238,44 @@ export class SettingsComponent {
   newMemberEmail = '';
   newMemberName = '';
   newMemberRole: ProjectRole = 'MEMBER';
+
+  // PLAN-13: delete-project confirmation dialog state
+  readonly isDeleteProjectOpen = signal<boolean>(false);
+  readonly isDeletingProject = signal<boolean>(false);
+  readonly deleteProjectError = signal<string>('');
+  deleteConfirmText = '';
+
+  openDeleteProjectDialog(): void {
+    if (!this.projectService.isAdmin()) return;
+    this.deleteConfirmText = '';
+    this.deleteProjectError.set('');
+    this.isDeleteProjectOpen.set(true);
+  }
+
+  closeDeleteProjectDialog(): void {
+    if (this.isDeletingProject()) return;
+    this.isDeleteProjectOpen.set(false);
+    this.deleteConfirmText = '';
+    this.deleteProjectError.set('');
+  }
+
+  async confirmDeleteProject(proj: Project): Promise<void> {
+    if (!this.projectService.isAdmin() || this.isDeletingProject()) return;
+    if (this.deleteConfirmText.trim() !== proj.name) return;
+    this.isDeletingProject.set(true);
+    this.deleteProjectError.set('');
+    try {
+      await this.projectService.deleteProject(proj.id);
+      this.isDeletingProject.set(false);
+      this.isDeleteProjectOpen.set(false);
+      this.deleteConfirmText = '';
+      this.settingsService.openGeneralSettings();
+      await this.router.navigate(['/home']);
+    } catch (err) {
+      this.isDeletingProject.set(false);
+      this.deleteProjectError.set(err instanceof Error ? err.message : 'Failed to delete project');
+    }
+  }
 
   readonly scionDefaults = signal<ScionDefaults | null>(null);
   activePromptField: 'implementPromptTemplate' | 'reviewPromptTemplate' | 'followupPromptTemplate' =

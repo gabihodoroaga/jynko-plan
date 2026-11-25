@@ -366,6 +366,45 @@ export class ProjectService {
     });
   }
 
+  /**
+   * Deletes a project (PLAN-13). The backend soft-deletes it (it can be restored via the API until the
+   * cleanup job purges it); locally it disappears from the project list right away. If it was the active
+   * project, the next remaining project becomes active. Rejects with the server error message on failure.
+   */
+  deleteProject(projectId: string): Promise<void> {
+    if (!projectId) return Promise.reject(new Error('Missing project ID'));
+    return new Promise<void>((resolve, reject) => {
+      this.api.delete<unknown>(`/projects/${encodeURIComponent(projectId)}`).subscribe({
+        next: () => {
+          const wasActive = this.activeProjectId() === projectId;
+          const remaining = this.projects().filter((p) => p.id !== projectId);
+          this.projects.set(remaining);
+          if (this.editingProject()?.id === projectId) {
+            this.closeProjectModal();
+          }
+          if (wasActive) {
+            if (remaining.length > 0) {
+              this.selectProject(remaining[0].id);
+            } else {
+              this.pendingRouteProject = null;
+              this.activeProjectId.set('');
+              this.members.set([]);
+              this.modules.set([]);
+              this.epics.set([]);
+              this.cycles.set([]);
+              this.labels.set([]);
+              this.loadedCollections.clear();
+            }
+          }
+          resolve();
+        },
+        error: (err) => {
+          reject(new Error(err?.error?.error || err?.message || 'Failed to delete project'));
+        },
+      });
+    });
+  }
+
   upsertMember(email: string, name: string, role: ProjectRole): void {
     const projectId = this.activeProjectId();
     if (!projectId) return;

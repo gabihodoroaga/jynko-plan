@@ -606,7 +606,10 @@ The Go backend exposes RESTful endpoints using the Gin framework. All routes are
 | **Projects** | `POST` | `/api/v1/projects` | Authenticated | Create a new project (creator becomes `ADMIN`) |
 | **Projects** | `GET` | `/api/v1/projects/:projectId` | Viewer | Get project details |
 | **Projects** | `PATCH` | `/api/v1/projects/:projectId` | Admin | Update project name, key prefix, or description |
-| **Projects** | `DELETE` | `/api/v1/projects/:projectId` | Admin | Delete a project |
+| **Projects** | `DELETE` | `/api/v1/projects/:projectId` | Admin | Soft-delete a project (sets `deleted_at` / `deleted_by`; hidden from listings and all project-scoped routes, which return `404`) (PLAN-13) |
+| **Projects** | `POST` | `/api/v1/projects/:projectId/restore` | Admin | Restore a soft-deleted project (`409` if it is not deleted) (PLAN-13) |
+| **Projects** | `GET` | `/api/v1/projects?deleted=true` | Authenticated | List the caller's soft-deleted (restorable) projects (PLAN-13) |
+| **Projects** | `POST` | `/api/v1/admin/projects/purge-deleted?older_than_days=30&dry_run=false` | Platform admin (`PLATFORM_ADMIN_EMAILS`) | Permanently remove projects soft-deleted at least `older_than_days` ago (default `DELETED_PROJECT_RETENTION_DAYS`, 30), including all subcollections and attachment blobs; returns purged / failed project IDs (PLAN-13) |
 | **RBAC Members** | `GET` | `/api/v1/projects/:projectId/members` | Viewer | List project members and their RBAC roles |
 | **RBAC Members** | `POST` | `/api/v1/projects/:projectId/members` | Admin | Add or update a user's role in the project |
 | **RBAC Members** | `DELETE` | `/api/v1/projects/:projectId/members/:userId` | Admin | Remove a member from the project |
