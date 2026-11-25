@@ -47,7 +47,7 @@ if [[ "${IS_LOCAL_TARGET}" -eq 1 ]]; then
 
   echo "==> Building and starting Go backend server at ${API_HEALTH_URL}..."
   go -C "${REPO_ROOT}/backend" build -o /tmp/jynko-server-e2e ./cmd/server/main.go
-  (cd "${REPO_ROOT}/backend" && ENV=dev SEED_ON_STARTUP=true exec /tmp/jynko-server-e2e) >"${BACKEND_LOG}" 2>&1 &
+  (cd "${REPO_ROOT}/backend" && ENV=dev SEED_ON_STARTUP="${SEED_ON_STARTUP:-false}" exec /tmp/jynko-server-e2e) >"${BACKEND_LOG}" 2>&1 &
   BACKEND_PID=$!
 
   echo "==> Waiting for Go backend server at ${API_HEALTH_URL}..."
@@ -97,7 +97,12 @@ else
   echo "==> Remote target detected (${BASE_URL}); skipping local server startup."
   if [[ -z "${JYNKO_E2E_BEARER_TOKEN:-}" ]] && [[ -n "${JYNKO_E2E_IAP_AUDIENCE:-}" ]]; then
     echo "==> Minting OIDC identity token via gcloud for audience '${JYNKO_E2E_IAP_AUDIENCE}'..."
-    JYNKO_E2E_BEARER_TOKEN="$(gcloud auth print-identity-token --audiences="${JYNKO_E2E_IAP_AUDIENCE}")"
+    GCLOUD_ARGS=(auth print-identity-token "--audiences=${JYNKO_E2E_IAP_AUDIENCE}")
+    if [[ -n "${JYNKO_E2E_IMPERSONATE_SA:-}" ]]; then
+      echo "==> Impersonating service account '${JYNKO_E2E_IMPERSONATE_SA}'..."
+      GCLOUD_ARGS+=("--impersonate-service-account=${JYNKO_E2E_IMPERSONATE_SA}" "--include-email")
+    fi
+    JYNKO_E2E_BEARER_TOKEN="$(gcloud "${GCLOUD_ARGS[@]}")"
     export JYNKO_E2E_BEARER_TOKEN
   fi
 fi

@@ -42,13 +42,16 @@ func TestJynkoUIEndToEnd(t *testing.T) {
 	}
 	defer browser.MustClose()
 
+	ctx := e2e.InitSuiteContext(baseURL)
+	defer e2e.CleanupSuiteContext(ctx)
+
 	report := e2e.ValidationReport{
 		Timestamp: time.Now().Format(time.RFC3339),
 		BaseURL:   baseURL,
 		AllPassed: true,
 	}
 
-	for _, spec := range e2e.DefaultChecks() {
+	for _, spec := range e2e.DefaultChecksWithContext(ctx) {
 		spec := spec
 		t.Run(spec.ID, func(t *testing.T) {
 			res := spec.Run(browser, baseURL, outDir)
